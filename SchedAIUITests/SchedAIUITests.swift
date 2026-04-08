@@ -6,7 +6,8 @@
 //
 
 import XCTest
-
+import SwiftUI
+import Foundation
 final class SchedAIUITests: XCTestCase {
 
     override func setUpWithError() throws {
