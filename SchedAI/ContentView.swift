@@ -1,24 +1,16 @@
-//
-//  ContentView.swift
-//  SchedAI
-//
-//  Created by Adeoluwa Adekoya on 12/18/25.
-//
-
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
-    }
-}
+        TabView {
+            TodayView()
+                .tabItem { Label("Today", systemImage: "calendar.badge.clock") }
 
-#Preview {
-    ContentView()
+            TasksView()
+                .tabItem { Label("Tasks", systemImage: "checkmark.circle") }
+
+            SettingsView()
+                .tabItem { Label("Settings", systemImage: "gearshape") }
+        }
+    }
 }
