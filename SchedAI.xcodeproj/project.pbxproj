@@ -23,13 +23,48 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		6AA3AC122F44BB5B003693DD /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		6A02603A2F34F0E300FDF50D /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6A4D68A82EFE4F110071CDD2 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6A90AE012F1D67570070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6A90AF642F1EDDA80070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6A90AFB32F218DC00070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6AA3ABCB2F44B9DC003693DD /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6AA3AC062F44BB5B003693DD /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
+		6AAB2DEE2EFFAD700065F401 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		CF2075E82EFB4263005862CC /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		CF2DEE2E2EF4EB1B00F2998C /* SchedAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SchedAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF2DEE3B2EF4EB1E00F2998C /* SchedAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SchedAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF2DEE452EF4EB1E00F2998C /* SchedAIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SchedAIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		CF495E3D2EF52C74005D448B /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		CF495E792EF62A8D005D448B /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		CF95BAC12EF654990031A149 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
+		6AA3AC082F44BB5B003693DD /* Sign in */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Sign in";
+			sourceTree = "<group>";
+		};
+		6AA3AC1D2F44BE00003693DD /* Sign in */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Sign in";
+			sourceTree = "<group>";
+		};
 		CF2DEE302EF4EB1B00F2998C /* SchedAI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = SchedAI;
@@ -72,12 +107,63 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		6A0260492F34F0E300FDF50D /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6A4D68B52EFE4F110071CDD2 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6A90AE0F2F1D67570070B3F0 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6A90AF722F1EDDA80070B3F0 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6A90AFC22F218DC00070B3F0 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6AA3ABDA2F44B9DC003693DD /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6AA3AC052F44BB5B003693DD /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				6AA3AC062F44BB5B003693DD /* AuthenticationServices.framework */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		6AAB2DFB2EFFAD700065F401 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CF2075F52EFB4263005862CC /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 		CF2DEE252EF4EB1B00F2998C = {
 			isa = PBXGroup;
 			children = (
 				CF2DEE302EF4EB1B00F2998C /* SchedAI */,
 				CF2DEE3E2EF4EB1E00F2998C /* SchedAITests */,
 				CF2DEE482EF4EB1E00F2998C /* SchedAIUITests */,
+				6AA3AC082F44BB5B003693DD /* Sign in */,
+				6AA3AC1D2F44BE00003693DD /* Sign in */,
+				6AA3AC052F44BB5B003693DD /* Frameworks */,
 				CF2DEE2F2EF4EB1B00F2998C /* Products */,
 			);
 			sourceTree = "<group>";
@@ -92,6 +178,21 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		CF495E4A2EF52C74005D448B /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CF495E862EF62A8D005D448B /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		CF95BACE2EF654990031A149 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -102,6 +203,7 @@
 				CF2DEE2A2EF4EB1B00F2998C /* Sources */,
 				CF2DEE2B2EF4EB1B00F2998C /* Frameworks */,
 				CF2DEE2C2EF4EB1B00F2998C /* Resources */,
+				6AA3AC122F44BB5B003693DD /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -198,6 +300,52 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CF2DEE2F2EF4EB1B00F2998C /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = 6A0260492F34F0E300FDF50D /* Products */;
+					ProjectRef = 6A02603A2F34F0E300FDF50D /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = CF495E4A2EF52C74005D448B /* Products */;
+					ProjectRef = CF495E3D2EF52C74005D448B /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = CF495E862EF62A8D005D448B /* Products */;
+					ProjectRef = CF495E792EF62A8D005D448B /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = CF2075F52EFB4263005862CC /* Products */;
+					ProjectRef = CF2075E82EFB4263005862CC /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = 6A90AE0F2F1D67570070B3F0 /* Products */;
+					ProjectRef = 6A90AE012F1D67570070B3F0 /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = 6AAB2DFB2EFFAD700065F401 /* Products */;
+					ProjectRef = 6AAB2DEE2EFFAD700065F401 /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = CF95BACE2EF654990031A149 /* Products */;
+					ProjectRef = CF95BAC12EF654990031A149 /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = 6A90AFC22F218DC00070B3F0 /* Products */;
+					ProjectRef = 6A90AFB32F218DC00070B3F0 /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = 6A90AF722F1EDDA80070B3F0 /* Products */;
+					ProjectRef = 6A90AF642F1EDDA80070B3F0 /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = 6A4D68B52EFE4F110071CDD2 /* Products */;
+					ProjectRef = 6A4D68A82EFE4F110071CDD2 /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = 6AA3ABDA2F44B9DC003693DD /* Products */;
+					ProjectRef = 6AA3ABCB2F44B9DC003693DD /* SchedAI.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				CF2DEE2D2EF4EB1B00F2998C /* SchedAI */,
@@ -322,6 +470,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI can add planned tasks to your calendar when you enable Calendar sync.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
@@ -380,6 +532,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI can add planned tasks to your calendar when you enable Calendar sync.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
@@ -400,6 +556,9 @@
 				DEVELOPMENT_TEAM = TPNSH32JP3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI can add planned tasks to your calendar when you enable Calendar sync.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -432,6 +591,9 @@
 				DEVELOPMENT_TEAM = TPNSH32JP3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI can add planned tasks to your calendar when you enable Calendar sync.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
