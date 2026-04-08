@@ -1,0 +1,102 @@
+import Foundation
+
+enum TaskPriority: String, CaseIterable, Codable, Hashable {
+    case high
+    case medium
+    case low
+
+    var displayName: String {
+        switch self {
+        case .high: return "High"
+        case .medium: return "Medium"
+        case .low: return "Low"
+        }
+    }
+
+    var sortRank: Int {
+        switch self {
+        case .high: return 0
+        case .medium: return 1
+        case .low: return 2
+        }
+    }
+}
+
+struct TaskItem: Identifiable, Codable, Hashable {
+    var id: UUID = UUID()
+    var title: String
+    var priority: TaskPriority = .medium
+    var estimatedMinutes: Int = 30
+
+    var isCompleted: Bool = false
+    var createdAt: Date = Date()
+
+    /// If true, the user (or NLP) explicitly chose the time and the scheduler should not move it.
+    /// If false, the scheduler is free to place this task anywhere in the work window.
+    var isPinned: Bool = false
+
+    var scheduledStart: Date? = nil
+    var scheduledEnd: Date? = nil
+
+    init(
+        id: UUID = UUID(),
+        title: String,
+        estimatedMinutes: Int = 30,
+        priority: TaskPriority = .medium,
+        isCompleted: Bool = false,
+        createdAt: Date = Date(),
+        isPinned: Bool = false,
+        scheduledStart: Date? = nil,
+        scheduledEnd: Date? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.estimatedMinutes = estimatedMinutes
+        self.priority = priority
+        self.isCompleted = isCompleted
+        self.createdAt = createdAt
+        self.isPinned = isPinned
+        self.scheduledStart = scheduledStart
+        self.scheduledEnd = scheduledEnd
+    }
+
+    // MARK: - Codable
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case priority
+        case estimatedMinutes
+        case isCompleted
+        case createdAt
+        case isPinned
+        case scheduledStart
+        case scheduledEnd
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        self.title = try container.decode(String.self, forKey: .title)
+        self.priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .medium
+        self.estimatedMinutes = try container.decodeIfPresent(Int.self, forKey: .estimatedMinutes) ?? 30
+        self.isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
+        self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        self.scheduledStart = try container.decodeIfPresent(Date.self, forKey: .scheduledStart)
+        self.scheduledEnd = try container.decodeIfPresent(Date.self, forKey: .scheduledEnd)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(title, forKey: .title)
+        try container.encode(priority, forKey: .priority)
+        try container.encode(estimatedMinutes, forKey: .estimatedMinutes)
+        try container.encode(isCompleted, forKey: .isCompleted)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(isPinned, forKey: .isPinned)
+        try container.encodeIfPresent(scheduledStart, forKey: .scheduledStart)
+        try container.encodeIfPresent(scheduledEnd, forKey: .scheduledEnd)
+    }
+}
