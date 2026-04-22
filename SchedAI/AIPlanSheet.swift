@@ -151,6 +151,10 @@ struct AIPlanSheet: View {
 
                                     if expandedPreviewTaskIDs.contains(task.id) {
                                         VStack(alignment: .leading, spacing: 8) {
+                                            TextField("Task", text: previewTitleBinding(at: idx))
+                                                .textFieldStyle(.roundedBorder)
+                                                .textInputAutocapitalization(.sentences)
+
                                             Picker("Priority", selection: previewPriorityBinding(at: idx)) {
                                                 ForEach(TaskPriority.allCases, id: \.self) { level in
                                                     Text(level.displayName).tag(level)
@@ -337,7 +341,12 @@ struct AIPlanSheet: View {
             await MainActor.run {
                 let targetDay = Calendar.current.startOfDay(for: previewDay)
                 let finalPreview = autoPlace(parsedPreview, on: targetDay)
-                finalPreview.forEach { app.addTask($0) }
+                let cleanedPreview = finalPreview.compactMap { task -> TaskItem? in
+                    var cleaned = task
+                    cleaned.title = cleaned.title.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return cleaned.title.isEmpty ? nil : cleaned
+                }
+                cleanedPreview.forEach { app.addTask($0) }
                 app.setPlanningDate(targetDay)
                 app.planToday(for: targetDay)
                 dismiss()
@@ -379,6 +388,16 @@ struct AIPlanSheet: View {
             get: { parsedPreview[index].priority },
             set: { newValue in
                 parsedPreview[index].priority = newValue
+                hasManualPreviewEdits = true
+            }
+        )
+    }
+
+    private func previewTitleBinding(at index: Int) -> Binding<String> {
+        Binding(
+            get: { parsedPreview[index].title },
+            set: { newValue in
+                parsedPreview[index].title = newValue
                 hasManualPreviewEdits = true
             }
         )
