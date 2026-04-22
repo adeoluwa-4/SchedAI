@@ -1,17 +1,18 @@
 {
   "images" : [
     {
-      "filename" : "sched.png",
       "idiom" : "universal",
       "scale" : "1x"
     },
     {
-      "filename" : "sched@2x.png",
+      "idiom" : "universal",
+      "scale" : "1x"
+    },
+    {
       "idiom" : "universal",
       "scale" : "2x"
     },
     {
-      "filename" : "sched@3x.png",
       "idiom" : "universal",
       "scale" : "3x"
     }
