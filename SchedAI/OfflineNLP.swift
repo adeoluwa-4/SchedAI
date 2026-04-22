@@ -54,7 +54,6 @@ struct OfflineNLP {
             "nap", "sleep",
             "watch",
             "shop", "snack",
-            "meeting",
             "unpack"
         ]
         static let fusedVerbRegex: NSRegularExpression = {
@@ -2328,6 +2327,8 @@ struct OfflineNLP {
         let leadingPatterns = [
             #"(?i)^\s*(please|can you|could you|would you|lets|let's)\s+"#,
             #"(?i)^\s*(i will|i'll|i am|i'm|i am going to|i'm going to|i plan to|plan to)\s+"#,
+            #"(?i)^\s*there\s*(?:is|'s)\s+(?:a|an|the)?\s*"#,
+            #"(?i)^\s*there\s+are\s+(?:some|the)?\s*"#,
             #"(?i)^\s*(to|for|and|then|next|after|after that|also|between|in|on)\s+"#
         ]
         for p in leadingPatterns {
