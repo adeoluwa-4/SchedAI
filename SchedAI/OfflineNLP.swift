@@ -775,6 +775,8 @@ struct OfflineNLP {
         s = s
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\t", with: " ")
+            .replacingOccurrences(of: "’", with: "'")
+            .replacingOccurrences(of: "‘", with: "'")
             .replacingOccurrences(of: "—", with: "-")
             .replacingOccurrences(of: "–", with: "-")
             .replacingOccurrences(of: "−", with: "-")
@@ -1065,6 +1067,17 @@ struct OfflineNLP {
             return tokens.last.map { String($0).lowercased() }
         }
 
+        func isDestinationPhraseBoundary(_ word: String, before location: Int) -> Bool {
+            let nounLikeActions = Set(["meeting", "practice", "workout", "snack", "shop"])
+            guard nounLikeActions.contains(word) else { return false }
+
+            let prefix = ns.substring(with: NSRange(location: 0, length: max(0, location)))
+            return prefix.range(
+                of: #"(?i)\b(?:go|drive|commute|walk|head|headed|going)\s+to\s+(?:[a-z0-9]+\s+){0,4}$"#,
+                options: .regularExpression
+            ) != nil
+        }
+
         // Collect verb starts that look like true action boundaries.
         var starts: [Int] = []
         for match in matches {
@@ -1073,6 +1086,8 @@ struct OfflineNLP {
                 starts.append(start)
                 continue
             }
+            let word = ns.substring(with: match.range).lowercased()
+            if isDestinationPhraseBoundary(word, before: start) { continue }
             if let prev = previousToken(before: start) {
                 if noBoundaryBefore.contains(prev) { continue }
                 if prev.unicodeScalars.allSatisfy({ CharacterSet.decimalDigits.contains($0) }) { continue }
@@ -2327,7 +2342,7 @@ struct OfflineNLP {
         let leadingPatterns = [
             #"(?i)^\s*(please|can you|could you|would you|lets|let's)\s+"#,
             #"(?i)^\s*(i will|i'll|i am|i'm|i am going to|i'm going to|i plan to|plan to)\s+"#,
-            #"(?i)^\s*there\s*(?:is|'s)\s+(?:a|an|the)?\s*"#,
+            #"(?i)^\s*there(?:\s+is|'s|s)\s+(?:a|an|the)?\s*"#,
             #"(?i)^\s*there\s+are\s+(?:some|the)?\s*"#,
             #"(?i)^\s*(to|for|and|then|next|after|after that|also|between|in|on)\s+"#
         ]
