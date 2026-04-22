@@ -148,6 +148,75 @@ struct SchedAITests {
         #expect(tasks.map(\.title) == ["Basketball game", "Club tryouts"])
     }
 
+    @Test func offlineNlpHandlesSpeechLeadInsAndFuzzyTimes() async throws {
+        let now = fixedDate(2026, 4, 22, 12, 0)
+        let input = "remind me to call mom around five plus schedule dentist appointment about three tomorrow also don't let me forget to pick up groceries near six"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+
+        #expect(tasks.map(\.title) == ["Call mom", "Dentist appointment", "Pick up groceries"])
+
+        let starts = tasks.compactMap(\.scheduledStart)
+        #expect(starts.count == 3)
+        guard starts.count == 3 else { return }
+
+        let cal = Calendar.current
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now))!
+        #expect(cal.component(.hour, from: starts[0]) == 17)
+        #expect(cal.isDate(starts[1], inSameDayAs: tomorrow))
+        #expect(cal.component(.hour, from: starts[1]) == 15)
+        #expect(cal.component(.hour, from: starts[2]) == 18)
+    }
+
+    @Test func offlineNlpSplitsLooseSpeechConnectors() async throws {
+        let now = fixedDate(2026, 4, 22, 12, 0)
+        let input = "email coach at four later meet with Jordan at five also go to club meeting at six"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+
+        #expect(tasks.map(\.title) == ["Email coach", "Meet with Jordan", "Go to club meeting"])
+
+        let starts = tasks.compactMap(\.scheduledStart)
+        #expect(starts.count == 3)
+        guard starts.count == 3 else { return }
+
+        let cal = Calendar.current
+        #expect(cal.component(.hour, from: starts[0]) == 16)
+        #expect(cal.component(.hour, from: starts[1]) == 17)
+        #expect(cal.component(.hour, from: starts[2]) == 18)
+    }
+
+    @Test func offlineNlpCleansPersonalSpeechWrappers() async throws {
+        let now = fixedDate(2026, 4, 22, 12, 0)
+        let input = "I've got a math exam at eight and I should submit essay by 11 pm"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        #expect(tasks.map(\.title) == ["Math exam", "Submit essay"])
+
+        let starts = tasks.compactMap(\.scheduledStart)
+        #expect(starts.count == 2)
+        guard starts.count == 2 else { return }
+
+        let cal = Calendar.current
+        #expect(cal.component(.hour, from: starts[0]) == 20)
+        #expect(cal.component(.hour, from: starts[1]) == 23)
+    }
+
+    @Test func offlineNlpParsesSpokenDurationsWithoutFor() async throws {
+        let now = fixedDate(2026, 4, 22, 12, 0)
+        let input = "work on project two hours at four plus review notes takes one hour at seven"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        #expect(tasks.map(\.title) == ["Work on project", "Review notes"])
+        #expect(tasks.map(\.estimatedMinutes) == [120, 60])
+    }
+
     @Test func offlineNlpDefaultsStudyTimeToPmAfterMorningContext() async throws {
         let input = "eat breakfast at 8 and study at 4"
         let tasks = OfflineNLP.parseSafely(input)
