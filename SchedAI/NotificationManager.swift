@@ -75,9 +75,13 @@ enum NotificationManager {
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
 
             let content = UNMutableNotificationContent()
-            content.title = "Upcoming: \(t.title)"
+            let priorityDot = reminderDot(for: t.priority)
+            let priorityText = "\(t.priority.displayName) Priority"
+            content.title = "\(priorityDot) \(priorityText): \(t.title)"
+            content.subtitle = "Starts at \(start.formatted(date: .omitted, time: .shortened))"
             content.body = "Starts in about \(minutesBefore) min (\(t.estimatedMinutes)m)"
             content.sound = .default
+            content.interruptionLevel = t.priority == .high ? .timeSensitive : .active
 
             let req = UNNotificationRequest(
                 identifier: t.id.uuidString,
@@ -86,6 +90,14 @@ enum NotificationManager {
             )
 
             center.add(req)
+        }
+    }
+
+    private static func reminderDot(for priority: TaskPriority) -> String {
+        switch priority {
+        case .high: return "🔴"
+        case .medium: return "🟡"
+        case .low: return "🟢"
         }
     }
 

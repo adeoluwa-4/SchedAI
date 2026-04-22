@@ -38,21 +38,22 @@ struct OfflineNLP {
 
         // Chunking
         static let primaryChunkDelimiterRegex = try! NSRegularExpression(
-            pattern: #"(?i)\s*(?:;|•|,|\s-\s|\band\s+then\b|\bthen\b|\bafter\s+that\b|\bafterwards\b|\blater\b)\s*"#
+            pattern: #"(?i)\s*(?:;|•|\s-\s|\band\s+then\b|\bthen\b|\bafter\s+that\b|\bafterwards\b|\blater\b)\s*"#
         )
         static let betweenAndRegex = try! NSRegularExpression(pattern: #"(?i)\bbetween\b.*\band\b"#)
         static let andDelimiterRegex = try! NSRegularExpression(pattern: #"(?i)\s+and\s+"#)
         static let timeMarkerSplitRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|by|around)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|noon|midnight)\b"#)
         static let leadingDurationRegex = try! NSRegularExpression(pattern: #"(?i)^\s*(?:for\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|mins?|minutes?)\b"#)
         static let fusedVerbs: [String] = [
-            "shower", "eat", "study", "walk", "run", "workout", "gym",
-            "clean", "laundry", "cook", "drive", "commute",
-            "call", "text", "email",
-            "practice", "review", "read", "write",
+            "take", "get", "submit", "upload", "call", "send", "email",
+            "make", "write", "review", "read", "record", "edit", "post",
+            "do", "play", "eat", "have", "go", "be", "finish", "start",
+            "study", "workout", "clean", "cook", "drive", "commute",
+            "practice",
             "pack", "prep",
             "nap", "sleep",
-            "play", "watch",
-            "shop", "grocery", "snack",
+            "watch",
+            "shop", "snack",
             "meeting",
             "unpack"
         ]
@@ -60,6 +61,7 @@ struct OfflineNLP {
             let pattern = "(?i)\\b(" + fusedVerbs.joined(separator: "|") + ")\\b"
             return try! NSRegularExpression(pattern: pattern)
         }()
+        static let repeatedWordRegex = try! NSRegularExpression(pattern: #"(?i)\b([a-z]+)\s+\1\b"#)
 
         // Base day extraction
         static let monthDayRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*|\s+)?(\d{4})?\b"#)
@@ -103,10 +105,6 @@ struct OfflineNLP {
         if shouldUseStepPipeline(rawText) {
             let planned = parseWithStepPipeline(rawText, now: now)
             if !planned.isEmpty {
-                if rawText.contains(","), planned.count <= 1 {
-                    let fallback = parseInternal(rawText, now: now, minConfidence: .medium)
-                    if fallback.count > planned.count { return fallback }
-                }
                 return planned
             }
         }
@@ -120,10 +118,6 @@ struct OfflineNLP {
             if !planned.isEmpty {
                 var safePlanned = planned
                 applySafeAmbiguityGuard(to: &safePlanned, rawText: rawText)
-                if rawText.contains(","), safePlanned.count <= 1 {
-                    let fallback = parseInternal(rawText, now: now, minConfidence: .high)
-                    if fallback.count > safePlanned.count { return fallback }
-                }
                 return safePlanned
             }
         }
@@ -135,12 +129,14 @@ struct OfflineNLP {
         let chunks = splitIntoChunks(text)
 
         var tasks: [TaskItem] = []
+        var dayContext: Date? = nil
 
         for rawChunk in chunks {
             let recResult = detectRecurrence(in: rawChunk)
             let chunk = recResult.cleaned
 
-            if let base = parseChunk(chunk, now: now, minConfidence: minConfidence) {
+            if let base = parseChunk(chunk, now: now, minConfidence: minConfidence, inheritedTargetDay: dayContext) {
+                dayContext = base.targetDay ?? dayContext
                 if let rec = recResult.recurrence {
                     let copies = duplicate(task: base, for: rec, reference: now)
                     tasks.append(contentsOf: copies)
@@ -189,41 +185,7 @@ struct OfflineNLP {
     }
 
     static func normalizeInput(_ text: String) -> String {
-        var s = text.lowercased()
-        s = s.replacingOccurrences(of: "\n", with: " ")
-        s = s.replacingOccurrences(of: "\t", with: " ")
-        s = s.replacingOccurrences(of: #"(?i)\ba\.?\s*m\.?\b"#, with: "am", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bp\.?\s*m\.?\b"#, with: "pm", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bturn\s+nike\b"#, with: "tonight", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\btonike\b"#, with: "tonight", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bto\s+night\b"#, with: "tonight", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bweday\b"#, with: "wednesday", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bmotnh\b"#, with: "month", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bnoe\b"#, with: "now", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\btommorow\b"#, with: "tomorrow", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\btomorow\b"#, with: "tomorrow", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\btommorrow\b"#, with: "tomorrow", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\btommporw\b"#, with: "tomorrow", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\band\s+after\s+that\b"#, with: " after that ", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bmidnight\b"#, with: "12 am", options: .regularExpression)
-        s = s.replacingOccurrences(of: #"(?i)\bnoon\b"#, with: "12 pm", options: .regularExpression)
-        s = s.replacingOccurrences(
-            of: #"(?i)\bbetween\s+(\d{1,2}(?::\d{2})?)\s+and\s+(\d{1,2}(?::\d{2})?)\b"#,
-            with: "between $1 to $2",
-            options: .regularExpression
-        )
-
-        let numberWords: [String: String] = [
-            "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
-            "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
-            "eleven": "11", "twelve": "12"
-        ]
-        for (word, digit) in numberWords {
-            s = s.replacingOccurrences(of: #"(?i)\b\#(word)\b"#, with: digit, options: .regularExpression)
-        }
-
-        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+        normalize(text)
     }
 
     static func splitTasks(_ text: String) -> [String] {
@@ -245,14 +207,20 @@ struct OfflineNLP {
         chunks = chunks.flatMap { splitDurationThenRangeChunk($0) }
         chunks = chunks.flatMap { splitOnMultipleTimeMarkers($0) }
         chunks = chunks.flatMap { splitOnPhrases($0) }
+        chunks = chunks.flatMap { splitFusedActions($0) }
 
         return chunks
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
 
+    static func hasExplicitDayReference(_ text: String, now: Date = Date()) -> Bool {
+        extractBaseDay(from: normalizeInput(text), now: now).hasExplicitDay
+    }
+
     static func extractTimes(from text: String) -> (start: Date?, end: Date?, duration: Int?) {
-        extractTimes(from: text, referenceDate: Date(), previousTaskStart: nil)
+        let result = extractTimes(from: text, referenceDate: Date(), previousTaskStart: nil, globalContext: text)
+        return (result.start, result.end, result.duration)
     }
 
     private static func shouldUseStepPipeline(_ rawText: String) -> Bool {
@@ -268,12 +236,19 @@ struct OfflineNLP {
 
         var tasks: [TaskItem] = []
         var previousTaskStart: Date? = nil
+        var dayContext: Date? = nil
+        let globalContext = normalizeInput(rawText)
 
         for chunk in chunks {
             let recResult = detectRecurrence(in: chunk)
             let parsedChunk = recResult.cleaned
 
-            let timing = extractTimes(from: parsedChunk, referenceDate: now, previousTaskStart: previousTaskStart)
+            let timing = extractTimes(
+                from: parsedChunk,
+                referenceDate: now,
+                previousTaskStart: previousTaskStart,
+                globalContext: globalContext
+            )
             let priorityResult = extractPriority(from: parsedChunk)
             let title = extractStepTitle(from: priorityResult.cleaned)
             guard !title.isEmpty else { continue }
@@ -281,6 +256,9 @@ struct OfflineNLP {
             let estimated = max(5, timing.duration ?? 30)
             let start = timing.start
             var end = timing.end
+            let targetDay = timing.targetDay
+                ?? start.map { Calendar.current.startOfDay(for: $0) }
+                ?? dayContext
 
             if let start, end == nil {
                 end = Calendar.current.date(byAdding: .minute, value: estimated, to: start)
@@ -289,12 +267,16 @@ struct OfflineNLP {
             if let start {
                 previousTaskStart = start
             }
+            if let targetDay {
+                dayContext = targetDay
+            }
 
             let task = TaskItem(
                 title: title,
                 estimatedMinutes: estimated,
                 priority: priorityResult.priority,
-                isPinned: start != nil,
+                isPinned: timing.isExplicitTime,
+                targetDay: targetDay,
                 scheduledStart: start,
                 scheduledEnd: end
             )
@@ -327,7 +309,12 @@ struct OfflineNLP {
         return [left, right]
     }
 
-    private static func extractTimes(from text: String, referenceDate: Date, previousTaskStart: Date?) -> (start: Date?, end: Date?, duration: Int?) {
+    private static func extractTimes(
+        from text: String,
+        referenceDate: Date,
+        previousTaskStart: Date?,
+        globalContext: String
+    ) -> (start: Date?, end: Date?, duration: Int?, isExplicitTime: Bool, targetDay: Date?) {
         let normalized = normalizeInput(text)
         let calendar = Calendar.current
         let dayResult = extractBaseDay(from: normalized, now: referenceDate)
@@ -349,6 +336,7 @@ struct OfflineNLP {
 
         let baseAnchor = dayResult.baseDay ?? previousTaskStart ?? referenceDate
         let baseDay = calendar.startOfDay(for: baseAnchor)
+        let extractedTargetDay = dayResult.baseDay.map { calendar.startOfDay(for: $0) }
 
         func buildDate(hour24: Int, minute: Int) -> Date? {
             var comps = calendar.dateComponents([.year, .month, .day], from: baseDay)
@@ -368,7 +356,7 @@ struct OfflineNLP {
                 : Int(value.rounded())
             let start = roundUp(referenceDate, toMinutes: 5, calendar: calendar)
             let end = calendar.date(byAdding: .minute, value: max(5, minutes), to: start)
-            return (start, end, max(5, minutes))
+            return (start, end, max(5, minutes), true, calendar.startOfDay(for: start))
         }
 
         if let relOffset = StepRegex.relativeOffsetRegex.firstMatch(in: working, range: fullRange),
@@ -380,7 +368,8 @@ struct OfflineNLP {
                 ? Int((value * 60).rounded())
                 : Int(value.rounded())
             let start = calendar.date(byAdding: .minute, value: max(1, minutes), to: referenceDate)
-            return (start, nil, durationMinutes)
+            let target = start.map { calendar.startOfDay(for: $0) } ?? extractedTargetDay
+            return (start, nil, durationMinutes, true, target)
         }
 
         if let rangeMatch = StepRegex.rangeRegex.firstMatch(in: working, range: fullRange) {
@@ -392,8 +381,20 @@ struct OfflineNLP {
             let em = (rangeMatch.range(at: 5).location != NSNotFound) ? (Int(ns.substring(with: rangeMatch.range(at: 5))) ?? 0) : 0
             let eap = (rangeMatch.range(at: 6).location != NSNotFound) ? ns.substring(with: rangeMatch.range(at: 6)).lowercased() : nil
 
-            let startHour = resolveHour(rawHour: sh, ampm: sap, context: working, previousTaskStart: previousTaskStart)
-            var endHour = resolveHour(rawHour: eh, ampm: eap ?? sap, context: working, previousTaskStart: previousTaskStart)
+            let startHour = resolveHour(
+                rawHour: sh,
+                ampm: sap,
+                context: working,
+                previousTaskStart: previousTaskStart,
+                globalContext: globalContext
+            )
+            var endHour = resolveHour(
+                rawHour: eh,
+                ampm: eap ?? sap,
+                context: working,
+                previousTaskStart: previousTaskStart,
+                globalContext: globalContext
+            )
             if eap == nil, sap == nil, startHour >= 12, eh <= 11 {
                 endHour = eh + 12
             }
@@ -419,23 +420,39 @@ struct OfflineNLP {
             } else {
                 computedDuration = nil
             }
-            return (start, end, durationMinutes ?? computedDuration)
+            let resolvedTarget = start.map { calendar.startOfDay(for: $0) } ?? extractedTargetDay
+            return (start, end, durationMinutes ?? computedDuration, true, resolvedTarget)
         }
 
         var start: Date? = nil
+        var explicitTime = false
 
         if let explicit = StepRegex.explicitTimeRegex.firstMatch(in: working, range: fullRange) {
             let h = Int(ns.substring(with: explicit.range(at: 1))) ?? 0
             let m = (explicit.range(at: 2).location != NSNotFound) ? (Int(ns.substring(with: explicit.range(at: 2))) ?? 0) : 0
             let ap = (explicit.range(at: 3).location != NSNotFound) ? ns.substring(with: explicit.range(at: 3)).lowercased() : nil
-            let hour24 = resolveHour(rawHour: h, ampm: ap, context: working, previousTaskStart: previousTaskStart)
+            let hour24 = resolveHour(
+                rawHour: h,
+                ampm: ap,
+                context: working,
+                previousTaskStart: previousTaskStart,
+                globalContext: globalContext
+            )
             start = buildDate(hour24: hour24, minute: m)
+            explicitTime = true
         } else if let bare = StepRegex.bareMeridiemRegex.firstMatch(in: working, range: fullRange) {
             let h = Int(ns.substring(with: bare.range(at: 1))) ?? 0
             let m = (bare.range(at: 2).location != NSNotFound) ? (Int(ns.substring(with: bare.range(at: 2))) ?? 0) : 0
             let ap = ns.substring(with: bare.range(at: 3)).lowercased()
-            let hour24 = resolveHour(rawHour: h, ampm: ap, context: working, previousTaskStart: previousTaskStart)
+            let hour24 = resolveHour(
+                rawHour: h,
+                ampm: ap,
+                context: working,
+                previousTaskStart: previousTaskStart,
+                globalContext: globalContext
+            )
             start = buildDate(hour24: hour24, minute: m)
+            explicitTime = true
         }
 
         let lower = working.lowercased()
@@ -464,40 +481,65 @@ struct OfflineNLP {
             end = nil
         }
 
-        return (start, end, durationMinutes)
+        let resolvedTarget = start.map { calendar.startOfDay(for: $0) } ?? extractedTargetDay
+        return (start, end, durationMinutes, explicitTime, resolvedTarget)
     }
 
-    private static func resolveHour(rawHour: Int, ampm: String?, context: String, previousTaskStart: Date?) -> Int {
-        let hour = max(1, min(12, rawHour))
+    private static func resolveHour(
+        rawHour: Int,
+        ampm: String?,
+        context: String,
+        previousTaskStart: Date?,
+        globalContext: String
+    ) -> Int {
+        guard (0...23).contains(rawHour) else { return 0 }
+        if rawHour == 0 { return 0 }
+        if rawHour > 12 { return rawHour }
+        let hour = rawHour
         if let ampm {
             if ampm == "am" { return (hour == 12) ? 0 : hour }
             return (hour == 12) ? 12 : hour + 12
         }
 
-        let lower = context.lowercased()
-        if lower.contains("breakfast") || lower.contains("morning") {
+        let local = context.lowercased()
+        let global = globalContext.lowercased()
+
+        if local.contains("breakfast") || local.contains("morning") {
             return (hour == 12) ? 8 : hour
         }
-        if lower.contains("lunch") || lower.contains("afternoon") {
+        if local.contains("lunch") || local.contains("afternoon") {
             return (hour == 12) ? 12 : ((hour <= 6) ? hour + 12 : hour)
         }
-        if lower.contains("dinner") || lower.contains("supper") {
+        if local.contains("dinner") || local.contains("supper") {
             return (hour == 12) ? 19 : ((hour <= 11) ? hour + 12 : hour)
         }
-        if lower.contains("evening") || lower.contains("tonight") || lower.contains("night") {
+        if local.contains("evening") || local.contains("tonight") || local.contains("night") {
             return (hour == 12) ? 12 : hour + 12
         }
-        if lower.contains("bed") || lower.contains("sleep") {
+        if local.contains("bed") || local.contains("sleep") {
             if hour == 12 { return 0 }
             if hour <= 5 { return hour }
             return hour + 12
         }
 
         let prevHour = previousTaskStart.map { Calendar.current.component(.hour, from: $0) }
-        if let prevHour, prevHour >= 12, hour <= 11 { return (hour == 12) ? 12 : hour + 12 }
+        if let prevHour, prevHour >= 12, hour <= 11 {
+            return (hour == 12) ? 12 : hour + 12
+        }
 
         // If a morning task was already parsed, later unspecified times are usually afternoon/evening.
         if let prevHour, prevHour < 12, hour <= prevHour, hour <= 11 {
+            return (hour == 12) ? 12 : hour + 12
+        }
+
+        let merged = local + " " + global
+        let hasPmSignal = merged.range(of: #"\b\d{1,2}(?::\d{2})?\s*pm\b"#, options: .regularExpression) != nil
+            || merged.contains("dinner")
+            || merged.contains("supper")
+            || merged.contains("tonight")
+            || merged.contains("evening")
+            || merged.contains("night")
+        if hasPmSignal, hour <= 11 {
             return (hour == 12) ? 12 : hour + 12
         }
 
@@ -507,7 +549,7 @@ struct OfflineNLP {
             "exercise", "practice", "review", "meeting", "class", "play", "game",
             "call", "dinner", "lunch", "eat"
         ]
-        if hour <= 8, likelyPmWords.contains(where: lower.contains) {
+        if hour <= 8, likelyPmWords.contains(where: local.contains) {
             return hour + 12
         }
 
@@ -560,6 +602,7 @@ struct OfflineNLP {
             guard let prevEnd else { continue }
 
             if currentStart < prevEnd {
+                if tasks[i].isPinned { continue }
                 tasks[i].scheduledStart = prevEnd
                 tasks[i].scheduledEnd = calendar.date(
                     byAdding: .minute,
@@ -602,6 +645,13 @@ struct OfflineNLP {
         case monthly(day: Int, count: Int)
     }
 
+    private enum RecurrenceDefaults {
+        // Keep recurrence expansion bounded for offline parsing performance.
+        static let dailyCount = 30
+        static let weeklyCount = 12
+        static let monthlyCount = 12
+    }
+
     private static func detectRecurrence(in text: String) -> (recurrence: Recurrence?, cleaned: String) {
         var working = text
         let ns = working as NSString
@@ -610,16 +660,16 @@ struct OfflineNLP {
         // Daily: "every day"
         if let match = Cache.everyDayRegex.firstMatch(in: working, range: fullRange) {
             if let r = Range(match.range, in: working) { working.removeSubrange(r) }
-            return (.daily(count: 30), working.trimmingCharacters(in: .whitespacesAndNewlines))
+            return (.daily(count: RecurrenceDefaults.dailyCount), working.trimmingCharacters(in: .whitespacesAndNewlines))
         }
 
         // Weekly: "every thursday"
         if let match = Cache.everyWeekdayRegex.firstMatch(in: working, range: fullRange) {
             let dayName = ns.substring(with: match.range(at: 1)).lowercased()
-            if let weekday = weekdayIndex(for: dayName) {
-                if let r = Range(match.range, in: working) { working.removeSubrange(r) }
-                return (.weekly(weekday: weekday, count: 12), working.trimmingCharacters(in: .whitespacesAndNewlines))
-            }
+                if let weekday = weekdayIndex(for: dayName) {
+                    if let r = Range(match.range, in: working) { working.removeSubrange(r) }
+                    return (.weekly(weekday: weekday, count: RecurrenceDefaults.weeklyCount), working.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
         }
 
         // Monthly: "on the 25th of every month" or "every month on the 25th" or "monthly on the 25th"
@@ -631,7 +681,7 @@ struct OfflineNLP {
                     if rg.location != NSNotFound, let d = Int(ns.substring(with: rg)) { day = d }
                 }
                 if let r = Range(match.range, in: working) { working.removeSubrange(r) }
-                return (.monthly(day: max(1, min(31, day)), count: 12), working.trimmingCharacters(in: .whitespacesAndNewlines))
+                return (.monthly(day: max(1, min(31, day)), count: RecurrenceDefaults.monthlyCount), working.trimmingCharacters(in: .whitespacesAndNewlines))
             }
         }
 
@@ -643,6 +693,7 @@ struct OfflineNLP {
 
         func withDate(_ day: Date, from base: TaskItem) -> TaskItem {
             var t = base
+            t.targetDay = cal.startOfDay(for: day)
             if let start = base.scheduledStart {
                 let comps = cal.dateComponents([.hour, .minute, .second], from: start)
                 var dayComps = cal.dateComponents([.year, .month, .day], from: day)
@@ -684,6 +735,16 @@ struct OfflineNLP {
             while cal.component(.weekday, from: day) != weekday {
                 day = cal.date(byAdding: .day, value: 1, to: day) ?? day
             }
+            if cal.isDate(day, inSameDayAs: now), let start = base.scheduledStart {
+                let timeComps = cal.dateComponents([.hour, .minute, .second], from: start)
+                var dayComps = cal.dateComponents([.year, .month, .day], from: day)
+                dayComps.hour = timeComps.hour
+                dayComps.minute = timeComps.minute
+                dayComps.second = timeComps.second
+                if let candidateToday = cal.date(from: dayComps), candidateToday <= now {
+                    day = cal.date(byAdding: .day, value: 7, to: day) ?? day
+                }
+            }
             for i in 0..<count {
                 if let d = cal.date(byAdding: .day, value: i * 7, to: cal.startOfDay(for: day)) {
                     out.append(withDate(d, from: base))
@@ -721,6 +782,11 @@ struct OfflineNLP {
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
 
+        s = s.replacingOccurrences(of: #"(?i)\bturn\s+nike\b"#, with: "tonight", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?i)\btonike\b"#, with: "tonight", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?i)\bto\s+night\b"#, with: "tonight", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?i)\band\s+after\s+that\b"#, with: " after that ", options: .regularExpression)
+
         // Fix common speech-to-text mistakes for "then"
         s = s.replacingOccurrences(of: #"(?i)\bthank\b"#, with: " then ", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?i)\bthan\b"#, with: " then ", options: .regularExpression)
@@ -742,15 +808,32 @@ struct OfflineNLP {
         // Normalize "a.m." / "p.m." to am/pm
         s = s.replacingOccurrences(of: #"(?i)\ba\.?\s*m\.?\b"#, with: "am", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?i)\bp\.?\s*m\.?\b"#, with: "pm", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?i)\bmidnight\b"#, with: "12 am", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?i)\bnoon\b"#, with: "12 pm", options: .regularExpression)
+        s = s.replacingOccurrences(
+            of: #"(?i)\bbetween\s+(\d{1,2}(?::\d{2})?)\s+and\s+(\d{1,2}(?::\d{2})?)\b"#,
+            with: "from $1 to $2",
+            options: .regularExpression
+        )
 
         // Convert "half past six" -> "6:30", etc
         s = normalizeSpokenClockPhrases(s)
+
+        let numberWords: [String: String] = [
+            "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+            "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+            "eleven": "11", "twelve": "12"
+        ]
+        for (word, digit) in numberWords {
+            s = s.replacingOccurrences(of: #"(?i)\b\#(word)\b"#, with: digit, options: .regularExpression)
+        }
 
         // Convert spelled-out hours in time contexts: "at six", "from three", etc
         s = replaceNumberWordsInTimeContexts(s)
 
         // Convert spelled-out duration numbers: "two hours", "three minutes"
         s = replaceNumberWordsInDurationContexts(s)
+        s = collapseRepeatedWords(in: s)
 
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -836,6 +919,21 @@ struct OfflineNLP {
         }
 
         return s
+    }
+
+    private static func collapseRepeatedWords(in input: String) -> String {
+        var current = input
+        for _ in 0..<3 {
+            let ns = current as NSString
+            let next = Cache.repeatedWordRegex.stringByReplacingMatches(
+                in: current,
+                range: NSRange(location: 0, length: ns.length),
+                withTemplate: "$1"
+            )
+            if next == current { break }
+            current = next
+        }
+        return current
     }
 
     // MARK: - Chunking
@@ -940,26 +1038,50 @@ struct OfflineNLP {
         let obviousSeps = [" and ", " then ", ",", ";", "\n", " - "]
         if obviousSeps.contains(where: { lower.contains($0) }) { return [s] }
 
-        // If there's an explicit time marker ("at 9", "by midnight", etc.), avoid splitting.
-        // Time markers usually provide the structure and we don't want to split phrases like "go for a 15 min walk at 5".
-        let ns = s as NSString
-        if Cache.timeMarkerSplitRegex.firstMatch(in: s, range: NSRange(location: 0, length: ns.length)) != nil {
+        // Don’t try to split chunks that still look like they contain a time range.
+        let hasFromToClockRange = lower.range(
+            of: #"\bfrom\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b"#,
+            options: .regularExpression
+        ) != nil
+        if hasFromToClockRange || lower.contains(" between ") || lower.contains(" until ") || lower.contains(" till ") {
             return [s]
         }
 
-        // Don’t try to split chunks that still look like they contain a time range.
-        if lower.contains(" from ") || lower.contains(" between ") || lower.contains(" until ") || lower.contains(" till ") {
-            return [s]
-        }
+        let ns = s as NSString
 
         // Find verb starts
         let regex = Cache.fusedVerbRegex
         let matches = regex.matches(in: s, range: NSRange(location: 0, length: ns.length))
         if matches.count < 2 { return [s] }
 
-        // Collect split points
-        let starts = matches.map { $0.range.location }.sorted()
-        guard starts.first == 0 || starts.first ?? 0 < ns.length else { return [s] }
+        let noBoundaryBefore = Set([
+            "a", "an", "the", "to", "for", "with", "in", "on", "of", "from",
+            "my", "your", "his", "her", "our", "their", "this", "that",
+            "min", "mins", "minute", "minutes", "hour", "hours", "hr", "hrs"
+        ])
+
+        func previousToken(before location: Int) -> String? {
+            let prefix = ns.substring(with: NSRange(location: 0, length: max(0, location)))
+            let tokens = prefix.split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            return tokens.last.map { String($0).lowercased() }
+        }
+
+        // Collect verb starts that look like true action boundaries.
+        var starts: [Int] = []
+        for match in matches {
+            let start = match.range.location
+            if start == 0 {
+                starts.append(start)
+                continue
+            }
+            if let prev = previousToken(before: start) {
+                if noBoundaryBefore.contains(prev) { continue }
+                if prev.unicodeScalars.allSatisfy({ CharacterSet.decimalDigits.contains($0) }) { continue }
+            }
+            starts.append(start)
+        }
+        starts = Array(Set(starts)).sorted()
+        if starts.count < 2 { return [s] }
 
         // Build slices
         var pieces: [String] = []
@@ -1077,7 +1199,12 @@ struct OfflineNLP {
 
     // MARK: - Chunk → Task
 
-    private static func parseChunk(_ chunk: String, now: Date, minConfidence: TimeConfidence) -> TaskItem? {
+    private static func parseChunk(
+        _ chunk: String,
+        now: Date,
+        minConfidence: TimeConfidence,
+        inheritedTargetDay: Date?
+    ) -> TaskItem? {
         var text = chunk
 
         let timeResult = extractTime(from: text, now: now)
@@ -1093,6 +1220,8 @@ struct OfflineNLP {
             minutes = override
         }
 
+        let estimatedMinutes = max(5, minutes ?? 30)
+
         let priorityResult = extractPriority(from: text)
         let priority = priorityResult.priority
         text = priorityResult.cleaned
@@ -1106,11 +1235,7 @@ struct OfflineNLP {
         let scheduledEnd: Date?
         if let start = (timeConfidence >= minConfidence) ? dueDate : nil {
             scheduledStart = start
-            if minutes > 0 {
-                scheduledEnd = Calendar.current.date(byAdding: .minute, value: minutes, to: start)
-            } else {
-                scheduledEnd = nil
-            }
+            scheduledEnd = Calendar.current.date(byAdding: .minute, value: estimatedMinutes, to: start)
         } else {
             scheduledStart = nil
             scheduledEnd = nil
@@ -1118,9 +1243,12 @@ struct OfflineNLP {
 
         return TaskItem(
             title: title,
-            estimatedMinutes: minutes,
+            estimatedMinutes: estimatedMinutes,
             priority: priority,
-            isPinned: scheduledStart != nil,
+            isPinned: scheduledStart != nil && timeResult.isExplicit,
+            targetDay: timeResult.targetDay
+                ?? scheduledStart.map { Calendar.current.startOfDay(for: $0) }
+                ?? inheritedTargetDay,
             scheduledStart: scheduledStart,
             scheduledEnd: scheduledEnd
         )
@@ -1133,6 +1261,8 @@ struct OfflineNLP {
         let cleaned: String
         let confidence: TimeConfidence
         let durationOverrideMinutes: Int?
+        let isExplicit: Bool
+        let targetDay: Date?
     }
 
     private enum TimeConfidence: Int, Comparable {
@@ -1153,6 +1283,7 @@ struct OfflineNLP {
         let baseDay = dayResult.baseDay
         let hasExplicitDay = dayResult.hasExplicitDay
         working = dayResult.cleaned
+        let explicitTargetDay = dayResult.baseDay.map { calendar.startOfDay(for: $0) }
 
         // "in the next 30 minutes" → start now (rounded) with duration override
         if let next = extractNextWindow(from: working) {
@@ -1162,7 +1293,9 @@ struct OfflineNLP {
             return TimeParseResult(date: start,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                    confidence: .high,
-                                   durationOverrideMinutes: max(5, next.minutes))
+                                   durationOverrideMinutes: max(5, next.minutes),
+                                   isExplicit: true,
+                                   targetDay: calendar.startOfDay(for: start))
         }
 
         if let rel = extractRelativeTime(from: working, now: now) {
@@ -1170,7 +1303,9 @@ struct OfflineNLP {
             return TimeParseResult(date: rel.date,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                    confidence: .high,
-                                   durationOverrideMinutes: nil)
+                                   durationOverrideMinutes: nil,
+                                   isExplicit: true,
+                                   targetDay: calendar.startOfDay(for: rel.date))
         }
 
         if let range = extractTimeRange(from: working, baseDay: baseDay ?? now, hasExplicitDay: hasExplicitDay, now: now) {
@@ -1178,7 +1313,9 @@ struct OfflineNLP {
             return TimeParseResult(date: range.start,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                    confidence: range.confidence,
-                                   durationOverrideMinutes: max(5, range.minutes))
+                                   durationOverrideMinutes: max(5, range.minutes),
+                                   isExplicit: true,
+                                   targetDay: calendar.startOfDay(for: range.start))
         }
 
         if let until = extractUntilTime(from: working, baseDay: baseDay ?? now, hasExplicitDay: hasExplicitDay, now: now) {
@@ -1188,7 +1325,9 @@ struct OfflineNLP {
             return TimeParseResult(date: start,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                    confidence: until.confidence,
-                                   durationOverrideMinutes: max(5, until.minutes))
+                                   durationOverrideMinutes: max(5, until.minutes),
+                                   isExplicit: true,
+                                   targetDay: calendar.startOfDay(for: start))
         }
 
         if let single = extractSingleClockTime(from: working, baseDay: baseDay ?? now, hasExplicitDay: hasExplicitDay, now: now) {
@@ -1196,7 +1335,9 @@ struct OfflineNLP {
             return TimeParseResult(date: single.date,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                    confidence: single.confidence,
-                                   durationOverrideMinutes: nil)
+                                   durationOverrideMinutes: nil,
+                                   isExplicit: true,
+                                   targetDay: calendar.startOfDay(for: single.date))
         }
 
         if let kw = extractKeywordTime(from: working, baseDay: baseDay ?? now, hasExplicitDay: hasExplicitDay, now: now) {
@@ -1204,7 +1345,9 @@ struct OfflineNLP {
             return TimeParseResult(date: kw.date,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                    confidence: .high,
-                                   durationOverrideMinutes: nil)
+                                   durationOverrideMinutes: nil,
+                                   isExplicit: false,
+                                   targetDay: calendar.startOfDay(for: kw.date))
         }
 
         if let pod = inferPartOfDayIfPresent(from: working, baseDay: baseDay ?? now) {
@@ -1212,13 +1355,17 @@ struct OfflineNLP {
             return TimeParseResult(date: pod.date,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                    confidence: .low,
-                                   durationOverrideMinutes: nil)
+                                   durationOverrideMinutes: nil,
+                                   isExplicit: false,
+                                   targetDay: calendar.startOfDay(for: pod.date))
         }
 
         return TimeParseResult(date: nil,
                                cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                confidence: .low,
-                               durationOverrideMinutes: nil)
+                               durationOverrideMinutes: nil,
+                               isExplicit: false,
+                               targetDay: explicitTargetDay)
     }
 
     // MARK: - Base day extraction
@@ -1340,9 +1487,11 @@ struct OfflineNLP {
                 let dayName = ns.substring(with: match.range(at: 2))
 
                 if let weekday = weekdayIndex(for: dayName) {
-                    baseDay = dateFor(qualifier: qualifier, weekday: weekday, reference: now)
-                    explicitDay = true
-                    removeMatch(match.range)
+                    if let resolved = dateFor(qualifier: qualifier, weekday: weekday, reference: now) {
+                        baseDay = resolved
+                        explicitDay = true
+                        removeMatch(match.range)
+                    }
                 }
             }
         }
@@ -1449,7 +1598,7 @@ struct OfflineNLP {
         }
     }
 
-    private static func dateFor(qualifier: String?, weekday: Int, reference: Date) -> Date {
+    private static func dateFor(qualifier: String?, weekday: Int, reference: Date) -> Date? {
         let cal = Calendar.current
         let refWeekday = cal.component(.weekday, from: reference)
         var delta = (weekday - refWeekday + 7) % 7
@@ -1459,7 +1608,7 @@ struct OfflineNLP {
             delta = (delta == 0) ? 7 : (delta + 7)
         }
         let start = cal.startOfDay(for: reference)
-        return cal.date(byAdding: .day, value: delta, to: start) ?? start
+        return cal.date(byAdding: .day, value: delta, to: start)
     }
 
     private static func dateFor(weekday: Int, dayOfMonth: Int, reference: Date) -> Date? {
@@ -1634,6 +1783,7 @@ struct OfflineNLP {
         }
 
         let mins = Int(end.timeIntervalSince(start) / 60.0)
+        // A range confidence should reflect its weakest endpoint.
         let confidence = min(startParts.confidence, endParts.confidence)
 
         if let r = Range(match.range, in: working) { working.removeSubrange(r) }
@@ -2003,7 +2153,7 @@ struct OfflineNLP {
     // MARK: - Duration parsing
 
     private struct DurationParseResult {
-        let minutes: Int
+        let minutes: Int?
         let cleaned: String
     }
 
@@ -2123,7 +2273,7 @@ struct OfflineNLP {
             }
         }
 
-        return DurationParseResult(minutes: 30,
+        return DurationParseResult(minutes: nil,
                                    cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 

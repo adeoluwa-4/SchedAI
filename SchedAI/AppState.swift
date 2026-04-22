@@ -1,9 +1,16 @@
 import Foundation
 import SwiftUI
 import Combine
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 #if os(iOS)
 import UIKit
 #endif
+
+enum AppNotifications {
+    static let widgetVoicePlannerRequested = Notification.Name("widget_voice_planner_requested")
+}
 
 @MainActor
 final class AppState: ObservableObject {
@@ -17,6 +24,22 @@ final class AppState: ObservableObject {
         static let lastResetDay = "lastResetDay"
         static let calendarSyncEnabled = "calendarSyncEnabled"
         static let userDisplayName = "userDisplayName"
+    }
+
+    private enum WidgetBridge {
+        static let appGroupID = "group.me.SchedAI.shared"
+        static let tasksKey = "widget_shared_tasks_v1"
+        static let voiceRequestKey = "widget_voice_request_v1"
+    }
+
+    private struct WidgetSharedTask: Codable {
+        let id: UUID
+        let title: String
+        let priorityRaw: String
+        let estimatedMinutes: Int
+        let isCompleted: Bool
+        let scheduledStart: Date?
+        let scheduledEnd: Date?
     }
 
     @Published var tasks: [TaskItem] = [] {
@@ -115,6 +138,7 @@ final class AppState: ObservableObject {
         self.userDisplayName = defaults.string(forKey: DefaultsKey.userDisplayName)
 
         _ = restore()
+        persistWidgetData()
 
         // Permissions are intentionally not requested on launch.
         hydratePermissionDependentFeatures()
@@ -261,7 +285,11 @@ final class AppState: ObservableObject {
     // MARK: - CRUD
 
     func addTask(_ t: TaskItem) {
-        tasks.insert(t, at: 0)
+        var task = t
+        if let start = task.scheduledStart {
+            task.targetDay = Calendar.current.startOfDay(for: start)
+        }
+        tasks.insert(task, at: 0)
         if remindersEnabled { rescheduleReminders() }
     }
 
@@ -273,7 +301,13 @@ final class AppState: ObservableObject {
 
     func updateTask(_ t: TaskItem) {
         guard let i = tasks.firstIndex(where: { $0.id == t.id }) else { return }
-        tasks[i] = t
+        var task = t
+        if let start = task.scheduledStart {
+            task.targetDay = Calendar.current.startOfDay(for: start)
+        } else if let target = task.targetDay {
+            task.targetDay = Calendar.current.startOfDay(for: target)
+        }
+        tasks[i] = task
         if remindersEnabled { rescheduleReminders() }
     }
 
@@ -299,11 +333,13 @@ final class AppState: ObservableObject {
 
     func planToday(for day: Date = Date()) {
         planningDate = Calendar.current.startOfDay(for: day)
+        let externalBusy = CalendarManager.shared.busyIntervals(on: planningDate) ?? []
         lastPlanOverflow = Scheduler.planToday(
             tasks: &tasks,
             workStart: workStart,
             workEnd: workEnd,
-            day: day
+            day: planningDate,
+            externalBusyIntervals: externalBusy
         )
 
         if remindersEnabled {
@@ -311,6 +347,41 @@ final class AppState: ObservableObject {
         }
 
         calendarSyncIfEnabled(day: day, showSuccessMessage: false)
+    }
+
+    /// Schedule only currently unscheduled tasks for the selected day.
+    /// Existing scheduled tasks are treated as fixed anchors for this planning pass.
+    func planUnscheduledOnly(for day: Date = Date()) {
+        planningDate = Calendar.current.startOfDay(for: day)
+        let externalBusy = CalendarManager.shared.busyIntervals(on: planningDate) ?? []
+
+        var tempPinned: [UUID] = []
+        for i in tasks.indices where !tasks[i].isCompleted {
+            if !tasks[i].isPinned, tasks[i].scheduledStart != nil {
+                tasks[i].isPinned = true
+                tempPinned.append(tasks[i].id)
+            }
+        }
+
+        lastPlanOverflow = Scheduler.planToday(
+            tasks: &tasks,
+            workStart: workStart,
+            workEnd: workEnd,
+            day: planningDate,
+            externalBusyIntervals: externalBusy
+        )
+
+        for id in tempPinned {
+            if let idx = tasks.firstIndex(where: { $0.id == id }) {
+                tasks[idx].isPinned = false
+            }
+        }
+
+        if remindersEnabled {
+            rescheduleReminders()
+        }
+
+        calendarSyncIfEnabled(day: planningDate, showSuccessMessage: false)
     }
 
     // MARK: - Multi-day Planning
@@ -323,12 +394,14 @@ final class AppState: ObservableObject {
 
         for dayOffset in 0..<count {
             guard let day = cal.date(byAdding: .day, value: dayOffset, to: cal.startOfDay(for: start)) else { continue }
+            let externalBusy = CalendarManager.shared.busyIntervals(on: day) ?? []
 
             let overflow = Scheduler.planToday(
                 tasks: &tasks,
                 workStart: workStart,
                 workEnd: workEnd,
-                day: day
+                day: day,
+                externalBusyIntervals: externalBusy
             )
             totalOverflow += overflow
         }
@@ -421,6 +494,7 @@ final class AppState: ObservableObject {
     private func persist() {
         guard let data = try? JSONEncoder().encode(tasks) else { return }
         try? data.write(to: saveURL, options: [.atomic])
+        persistWidgetData()
     }
 
     @discardableResult
@@ -534,5 +608,36 @@ final class AppState: ObservableObject {
     private func saveLastResetDay(_ dayStart: Date) {
         let defaults = UserDefaults.standard
         defaults.set(dayStart.timeIntervalSinceReferenceDate, forKey: DefaultsKey.lastResetDay)
+    }
+
+    func consumeWidgetVoiceRequest() -> Bool {
+        guard let defaults = UserDefaults(suiteName: WidgetBridge.appGroupID) else { return false }
+        let requested = defaults.bool(forKey: WidgetBridge.voiceRequestKey)
+        if requested {
+            defaults.set(false, forKey: WidgetBridge.voiceRequestKey)
+        }
+        return requested
+    }
+
+    private func persistWidgetData() {
+        guard let defaults = UserDefaults(suiteName: WidgetBridge.appGroupID) else { return }
+
+        let sharedTasks = tasks.map { task in
+            WidgetSharedTask(
+                id: task.id,
+                title: task.title,
+                priorityRaw: task.priority.rawValue,
+                estimatedMinutes: task.estimatedMinutes,
+                isCompleted: task.isCompleted,
+                scheduledStart: task.scheduledStart,
+                scheduledEnd: task.scheduledEnd
+            )
+        }
+
+        guard let data = try? JSONEncoder().encode(sharedTasks) else { return }
+        defaults.set(data, forKey: WidgetBridge.tasksKey)
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadTimelines(ofKind: "SchedAI_Widget")
+        #endif
     }
 }

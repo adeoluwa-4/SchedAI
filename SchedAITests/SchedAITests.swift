@@ -104,6 +104,7 @@ struct SchedAITests {
         let input = "eat breakfast at 8 and study at 4"
         let tasks = OfflineNLP.parseSafely(input)
         #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
 
         let cal = Calendar.current
         let breakfastHour = tasks[0].scheduledStart.map { cal.component(.hour, from: $0) }
@@ -151,6 +152,45 @@ struct SchedAITests {
         let target = cal.date(byAdding: .day, value: 2, to: cal.startOfDay(for: now))!
         #expect(cal.isDate(start, inSameDayAs: target))
         #expect(cal.component(.hour, from: start) == 17)
+    }
+
+    @Test func offlineNlpRespectsTodayThenTomorrowSequenceWithoutTimes() async throws {
+        let now = fixedDate(2026, 4, 17, 9, 0)
+        let tasks = OfflineNLP.parseSafely("today i am doing laundry then tomorrow i am doing study", now: now)
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!
+
+        let firstDay = tasks[0].targetDay.map { cal.startOfDay(for: $0) }
+        let secondDay = tasks[1].targetDay.map { cal.startOfDay(for: $0) }
+
+        #expect(firstDay == today)
+        #expect(secondDay == tomorrow)
+    }
+
+    @Test func offlineNlpCarriesTodayContextAcrossSiblingActionsBeforeTomorrow() async throws {
+        let now = fixedDate(2026, 4, 17, 9, 0)
+        let tasks = OfflineNLP.parseSafely(
+            "today take a headshot and get ai into the app store then tomorrow study",
+            now: now
+        )
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!
+
+        let firstDay = tasks[0].targetDay.map { cal.startOfDay(for: $0) }
+        let secondDay = tasks[1].targetDay.map { cal.startOfDay(for: $0) }
+        let thirdDay = tasks[2].targetDay.map { cal.startOfDay(for: $0) }
+
+        #expect(firstDay == today)
+        #expect(secondDay == today)
+        #expect(thirdDay == tomorrow)
     }
 
     @Test func offlineNlpParsesRelativeWeeksFromNowWithTypo() async throws {
@@ -235,11 +275,120 @@ struct SchedAITests {
         #expect(tasks[0].scheduledStart == nil)
     }
 
-    @Test func offlineNlpFallsBackWhenCommaInputWouldUndersplit() async throws {
+    @Test func offlineNlpDoesNotSplitOnCommaByDefault() async throws {
         let tasks = OfflineNLP.parseSafely("tomorrow morning lab report for 2 hours, lunch at noon")
-        #expect(tasks.count == 2)
-        #expect(tasks[0].title == "Lab report")
-        #expect(tasks[1].title == "Lunch")
+        #expect(tasks.count == 1)
+        guard tasks.count == 1 else { return }
+        #expect(tasks[0].title.contains("Lab report"))
+    }
+
+    @Test func offlineNlpSplitsImperativeActionsIntoThreeTasks() async throws {
+        let tasks = OfflineNLP.parseSafely("take a headshot and get ai into the app store and have dinner with friends at eight")
+        #expect(tasks.count == 3)
+        #expect(tasks[0].title == "Take a headshot")
+        #expect(tasks[1].title == "Get ai into the app store")
+        #expect(tasks[2].title == "Have dinner with friends")
+        let hour = tasks[2].scheduledStart.map { Calendar.current.component(.hour, from: $0) }
+        #expect(hour == 20)
+    }
+
+    @Test func offlineNlpSplitsSpeechNoiseVariant() async throws {
+        let tasks = OfflineNLP.parseSafely("take text from headshot get get ai to the app store and have dinner at eight")
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+        #expect(tasks[0].title.contains("Take"))
+        #expect(tasks[1].title.lowercased().contains("app store"))
+        #expect(tasks[2].title == "Have dinner")
+    }
+
+    @Test func offlineNlpCarriesPmAcrossEveningSequence() async throws {
+        let now = fixedDate(2026, 4, 10, 16, 11)
+        let input = "i'll be back in my hotel at 4:45 then i'll be ready at 5:30 for dinner and i have my met gala at 6 pm play fifa and go to bed at midnight"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count >= 4)
+        guard tasks.count >= 2 else { return }
+
+        let cal = Calendar.current
+        let backHour = tasks[0].scheduledStart.map { cal.component(.hour, from: $0) }
+        let readyHour = tasks[1].scheduledStart.map { cal.component(.hour, from: $0) }
+        #expect(backHour == 16)
+        #expect(readyHour == 17)
+    }
+
+    @Test func offlineNlpWeeklyRecurrenceSkipsPastTimeToday() async throws {
+        let now = fixedDate(2026, 4, 23, 22, 0) // Thursday 10 PM
+        let tasks = OfflineNLP.parseSafely("every thursday workout at 7", now: now)
+        #expect(tasks.count == 12)
+        guard let first = tasks.first?.scheduledStart else {
+            #expect(false)
+            return
+        }
+
+        let cal = Calendar.current
+        let dayDelta = cal.dateComponents([.day], from: cal.startOfDay(for: now), to: cal.startOfDay(for: first)).day
+        #expect(dayDelta == 7)
+        #expect(cal.component(.hour, from: first) == 19)
+    }
+
+    @Test func schedulerPlacesUntimedTasksAroundExternalBusyIntervals() async throws {
+        var tasks: [TaskItem] = [
+            TaskItem(title: "Untimed A", estimatedMinutes: 30, priority: .medium, isPinned: false),
+            TaskItem(title: "Fixed", estimatedMinutes: 30, priority: .medium, isPinned: true, scheduledStart: fixedDate(2026, 4, 10, 13, 0), scheduledEnd: fixedDate(2026, 4, 10, 13, 30)),
+            TaskItem(title: "Untimed B", estimatedMinutes: 30, priority: .medium, isPinned: false)
+        ]
+
+        let workStart = fixedDate(2026, 4, 10, 9, 0)
+        let workEnd = fixedDate(2026, 4, 10, 17, 0)
+        let busy = [DateInterval(start: fixedDate(2026, 4, 10, 9, 0), end: fixedDate(2026, 4, 10, 10, 0))]
+
+        _ = Scheduler.planToday(
+            tasks: &tasks,
+            workStart: workStart,
+            workEnd: workEnd,
+            day: fixedDate(2026, 4, 10, 0, 0),
+            bufferMinutes: 0,
+            externalBusyIntervals: busy
+        )
+
+        let fixed = tasks.first(where: { $0.title == "Fixed" })
+        let fixedHour = fixed?.scheduledStart.map { Calendar.current.component(.hour, from: $0) }
+        let fixedMinute = fixed?.scheduledStart.map { Calendar.current.component(.minute, from: $0) }
+        #expect(fixedHour == 13)
+        #expect(fixedMinute == 0)
+
+        let untimedStarts = tasks
+            .filter { $0.title.hasPrefix("Untimed") }
+            .compactMap(\.scheduledStart)
+            .sorted()
+
+        #expect(untimedStarts.count == 2)
+        guard untimedStarts.count == 2 else { return }
+        #expect(untimedStarts[0] >= fixedDate(2026, 4, 10, 10, 0))
+    }
+
+    @Test func schedulerRespectsTargetDayAssignments() async throws {
+        let cal = Calendar.current
+        let today = fixedDate(2026, 4, 17, 0, 0)
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!
+
+        var tasks: [TaskItem] = [
+            TaskItem(title: "Today task", estimatedMinutes: 30, priority: .medium, targetDay: today),
+            TaskItem(title: "Tomorrow task", estimatedMinutes: 30, priority: .medium, targetDay: tomorrow)
+        ]
+
+        _ = Scheduler.planToday(
+            tasks: &tasks,
+            workStart: fixedDate(2026, 4, 17, 9, 0),
+            workEnd: fixedDate(2026, 4, 17, 17, 0),
+            day: today,
+            bufferMinutes: 0
+        )
+
+        let scheduledToday = tasks.first(where: { $0.title == "Today task" })?.scheduledStart
+        let scheduledTomorrow = tasks.first(where: { $0.title == "Tomorrow task" })?.scheduledStart
+
+        #expect(scheduledToday != nil)
+        #expect(scheduledTomorrow == nil)
     }
 
 }

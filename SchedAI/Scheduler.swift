@@ -6,10 +6,27 @@ struct Scheduler {
         workStart: Date,
         workEnd: Date,
         day: Date = Date(),
-        bufferMinutes: Int = 6
+        bufferMinutes: Int = 6,
+        externalBusyIntervals: [DateInterval] = []
     ) -> Int {
 
         let cal = Calendar.current
+        let planningDay = cal.startOfDay(for: day)
+
+        func taskDay(_ task: TaskItem) -> Date? {
+            if let target = task.targetDay {
+                return cal.startOfDay(for: target)
+            }
+            if task.isPinned, let start = task.scheduledStart {
+                return cal.startOfDay(for: start)
+            }
+            return nil
+        }
+
+        func appliesToPlanningDay(_ task: TaskItem) -> Bool {
+            guard let d = taskDay(task) else { return true }
+            return cal.isDate(d, inSameDayAs: planningDay)
+        }
 
         func combine(_ time: Date) -> Date {
             let dayComps = cal.dateComponents([.year, .month, .day], from: day)
@@ -30,9 +47,13 @@ struct Scheduler {
         // Keep pinned tasks. Clear any previously auto-scheduled tasks so re-planning can reshuffle.
         for i in tasks.indices {
             guard !tasks[i].isCompleted else { continue }
+            guard appliesToPlanningDay(tasks[i]) else { continue }
             if tasks[i].isPinned {
-                if let s = tasks[i].scheduledStart, tasks[i].scheduledEnd == nil {
-                    tasks[i].scheduledEnd = s.addingTimeInterval(TimeInterval(max(5, tasks[i].estimatedMinutes) * 60))
+                if let s = tasks[i].scheduledStart {
+                    tasks[i].targetDay = cal.startOfDay(for: s)
+                    if tasks[i].scheduledEnd == nil {
+                        tasks[i].scheduledEnd = s.addingTimeInterval(TimeInterval(max(5, tasks[i].estimatedMinutes) * 60))
+                    }
                 }
             } else {
                 tasks[i].scheduledStart = nil
@@ -43,7 +64,7 @@ struct Scheduler {
         var pinned: [(id: UUID, start: Date, end: Date)] = []
         var flexible: [TaskItem] = []
 
-        for t in tasks where !t.isCompleted {
+        for t in tasks where !t.isCompleted && appliesToPlanningDay(t) {
             if t.isPinned, let s = t.scheduledStart {
                 let e = t.scheduledEnd ?? s.addingTimeInterval(TimeInterval(max(5, t.estimatedMinutes) * 60))
                 pinned.append((t.id, s, e))
@@ -60,11 +81,34 @@ struct Scheduler {
             let e = min(p.end, endOfWindow)
             if s < e { busy.append((s, e)) }
         }
-        busy.sort { $0.start < $1.start }
+
+        for interval in externalBusyIntervals {
+            let s = max(interval.start, startOfWindow)
+            let e = min(interval.end, endOfWindow)
+            if s < e { busy.append((s, e)) }
+        }
+
+        func normalizeBusy(_ intervals: [(start: Date, end: Date)]) -> [(start: Date, end: Date)] {
+            let sorted = intervals.sorted { $0.start < $1.start }
+            guard !sorted.isEmpty else { return [] }
+
+            var merged: [(start: Date, end: Date)] = [sorted[0]]
+            for interval in sorted.dropFirst() {
+                let last = merged[merged.count - 1]
+                if interval.start <= last.end {
+                    merged[merged.count - 1] = (start: last.start, end: max(last.end, interval.end))
+                } else {
+                    merged.append(interval)
+                }
+            }
+            return merged
+        }
+
+        busy = normalizeBusy(busy)
 
         func addBusy(_ interval: (start: Date, end: Date)) {
             busy.append(interval)
-            busy.sort { $0.start < $1.start }
+            busy = normalizeBusy(busy)
         }
 
         func findSlot(startingAt candidateStart: Date, durationMinutes: Int) -> Date? {
@@ -102,6 +146,7 @@ struct Scheduler {
             if let idx = tasks.firstIndex(where: { $0.id == t.id }) {
                 tasks[idx].scheduledStart = slotStart
                 tasks[idx].scheduledEnd = slotEnd
+                tasks[idx].targetDay = planningDay
             }
         }
 

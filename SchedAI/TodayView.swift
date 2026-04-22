@@ -1,10 +1,14 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 /// Modern, polished "Today" screen with glassmorphic cards and smooth animations
 struct TodayView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.colorScheme) private var scheme
     @State private var showAI = false
+    @State private var autoStartOfflineNLPFromWidget = false
     @State private var showOverflowBanner = false
     @State private var overflowHideWorkItem: DispatchWorkItem? = nil
     @State private var showCalendar = false
@@ -118,7 +122,8 @@ struct TodayView: View {
             }
         }
         .sheet(isPresented: $showAI) {
-            AIPlanSheet().environmentObject(app)
+            AIPlanSheet(autoStartRecording: autoStartOfflineNLPFromWidget)
+                .environmentObject(app)
         }
         .sheet(isPresented: $showCalendar) {
             BigCalendarSheet().environmentObject(app)
@@ -137,7 +142,23 @@ struct TodayView: View {
                 app.planToday(for: planningDay)
             }
         }
-        .onAppear { updateOverflowBanner() }
+        .onAppear {
+            updateOverflowBanner()
+            handleWidgetVoiceRequestIfNeeded()
+        }
+        #if os(iOS)
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            handleWidgetVoiceRequestIfNeeded()
+        }
+        #endif
+        .onChange(of: showAI) { _, newValue in
+            if !newValue {
+                autoStartOfflineNLPFromWidget = false
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: AppNotifications.widgetVoicePlannerRequested)) { _ in
+            openOfflineNLPSheet(autoStartRecording: true)
+        }
         .onChange(of: app.lastPlanOverflow) { _ in updateOverflowBanner() }
         .alert("Calendar", isPresented: Binding(
             get: { app.calendarSyncMessage != nil },
@@ -175,7 +196,7 @@ struct TodayView: View {
                     
                     ModernPrimaryButton(title: "Plan", icon: "sparkles", action: {
                         Haptics.medium()
-                        showAI.toggle()
+                        openOfflineNLPSheet(autoStartRecording: false)
                     })
                 }
             }
@@ -289,7 +310,7 @@ struct TodayView: View {
                         HStack(spacing: 12) {
                             Button {
                                 Haptics.medium()
-                                showAI.toggle()
+                                openOfflineNLPSheet(autoStartRecording: true)
                             } label: {
                                 Label("Plan my Day", systemImage: "mic.fill")
                                     .font(.subheadline)
@@ -351,7 +372,7 @@ struct TodayView: View {
                         HStack(spacing: 12) {
                             Button {
                                 Haptics.medium()
-                                showAI.toggle()
+                                openOfflineNLPSheet(autoStartRecording: false)
                             } label: {
                                 Label("Auto-Schedule", systemImage: "wand.and.stars")
                                     .font(.subheadline)
@@ -517,6 +538,16 @@ struct TodayView: View {
         }
         overflowHideWorkItem = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: work)
+    }
+
+    private func openOfflineNLPSheet(autoStartRecording: Bool) {
+        autoStartOfflineNLPFromWidget = autoStartRecording
+        showAI = true
+    }
+
+    private func handleWidgetVoiceRequestIfNeeded() {
+        guard app.consumeWidgetVoiceRequest() else { return }
+        openOfflineNLPSheet(autoStartRecording: true)
     }
     
     private func formattedDate() -> String {
@@ -746,9 +777,11 @@ private struct NowTaskCard: View {
     }
     
     private func timeRange(_ start: Date, _ end: Date) -> String {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        return "\(f.string(from: start)) - \(f.string(from: end))"
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEE, MMM d"
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))-\(timeFormatter.string(from: end))"
     }
 }
 
@@ -812,7 +845,7 @@ private struct UpcomingTasksCard: View {
                                     .lineLimit(1)
                                 
                                 if let start = task.scheduledStart {
-                                    Text(start.formatted(date: .omitted, time: .shortened))
+                                    Text(start.formatted(date: .abbreviated, time: .shortened))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
@@ -871,9 +904,11 @@ private struct ModernTaskCard: View {
     }
     
     private func timeRange(_ start: Date, _ end: Date) -> String {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        return "\(f.string(from: start))–\(f.string(from: end))"
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEE, MMM d"
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))–\(timeFormatter.string(from: end))"
     }
     
     @ViewBuilder
