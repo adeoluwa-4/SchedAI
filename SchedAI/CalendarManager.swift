@@ -280,6 +280,42 @@ final class CalendarManager: ObservableObject {
         #endif
     }
 
+    /// Read busy intervals for a specific day from all readable calendars.
+    /// Returns nil when calendar access is unavailable/denied so callers can fall back gracefully.
+    func busyIntervals(on day: Date) -> [DateInterval]? {
+        #if canImport(EventKit)
+        guard connectionStatus() == .connected else { return nil }
+
+        let (start, end) = dayBounds(day)
+        let calendars = store.calendars(for: .event)
+        guard !calendars.isEmpty else { return [] }
+
+        let predicate = store.predicateForEvents(withStart: start, end: end, calendars: calendars)
+        let events = store.events(matching: predicate)
+
+        let clipped: [DateInterval] = events.compactMap { event in
+            let intervalStart = max(start, event.startDate)
+            let intervalEnd = min(end, event.endDate)
+            guard intervalStart < intervalEnd else { return nil }
+            return DateInterval(start: intervalStart, end: intervalEnd)
+        }.sorted { $0.start < $1.start }
+
+        guard !clipped.isEmpty else { return [] }
+
+        var merged: [DateInterval] = []
+        for interval in clipped {
+            if let last = merged.last, interval.start <= last.end {
+                merged[merged.count - 1] = DateInterval(start: last.start, end: max(last.end, interval.end))
+            } else {
+                merged.append(interval)
+            }
+        }
+        return merged
+        #else
+        return nil
+        #endif
+    }
+
     // MARK: - Helpers
     #if canImport(EventKit)
 

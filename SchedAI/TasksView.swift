@@ -32,6 +32,9 @@ struct TasksView: View {
     
     private var activeTasks: [TaskItem] { app.tasks.filter { !$0.isCompleted } }
     private var completedTasks: [TaskItem] { app.tasks.filter { $0.isCompleted } }
+    private var unscheduledActiveCount: Int {
+        activeTasks.filter { $0.scheduledStart == nil || $0.scheduledEnd == nil }.count
+    }
     
     private var displayedActiveTasks: [TaskItem] {
         switch filter {
@@ -335,14 +338,18 @@ struct TasksView: View {
     private var planButton: some View {
         Button {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                app.planToday()
+                if unscheduledActiveCount > 0 {
+                    app.planUnscheduledOnly(for: app.planningDate)
+                } else {
+                    app.planToday(for: app.planningDate)
+                }
             }
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
                     .font(.subheadline)
                     .fontWeight(.semibold)
-                Text("Plan Today (\(activeTasks.count))")
+                Text(buttonTitle)
                     .font(.subheadline)
                     .fontWeight(.semibold)
             }
@@ -359,6 +366,13 @@ struct TasksView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .shadow(color: Color.blue.opacity(0.3), radius: 12, x: 0, y: 6)
         }
+    }
+
+    private var buttonTitle: String {
+        if unscheduledActiveCount > 0 {
+            return "Schedule Today (\(unscheduledActiveCount))"
+        }
+        return "Replan Today (\(activeTasks.count))"
     }
     
     // MARK: - Helpers
@@ -551,9 +565,11 @@ private struct ModernTaskRow: View {
     }
     
     private func timeRange(_ start: Date, _ end: Date) -> String {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        return "\(f.string(from: start))–\(f.string(from: end))"
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEE, MMM d"
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))–\(timeFormatter.string(from: end))"
     }
 }
 
@@ -651,9 +667,11 @@ private struct CompletedTaskRow: View {
     }
     
     private func timeRange(_ start: Date, _ end: Date) -> String {
-        let f = DateFormatter()
-        f.timeStyle = .short
-        return "\(f.string(from: start))–\(f.string(from: end))"
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEE, MMM d"
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))–\(timeFormatter.string(from: end))"
     }
 }
 

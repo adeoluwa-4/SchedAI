@@ -35,6 +35,10 @@ struct TaskItem: Identifiable, Codable, Hashable {
     /// If false, the scheduler is free to place this task anywhere in the work window.
     var isPinned: Bool = false
 
+    /// Optional day assignment for tasks that should be planned on a specific date,
+    /// even when no explicit clock time is provided.
+    var targetDay: Date? = nil
+
     var scheduledStart: Date? = nil
     var scheduledEnd: Date? = nil
 
@@ -46,6 +50,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         isCompleted: Bool = false,
         createdAt: Date = Date(),
         isPinned: Bool = false,
+        targetDay: Date? = nil,
         scheduledStart: Date? = nil,
         scheduledEnd: Date? = nil
     ) {
@@ -56,6 +61,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.isCompleted = isCompleted
         self.createdAt = createdAt
         self.isPinned = isPinned
+        self.targetDay = targetDay
         self.scheduledStart = scheduledStart
         self.scheduledEnd = scheduledEnd
     }
@@ -70,6 +76,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case isCompleted
         case createdAt
         case isPinned
+        case targetDay
         case scheduledStart
         case scheduledEnd
     }
@@ -83,6 +90,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        self.targetDay = try container.decodeIfPresent(Date.self, forKey: .targetDay)
         self.scheduledStart = try container.decodeIfPresent(Date.self, forKey: .scheduledStart)
         self.scheduledEnd = try container.decodeIfPresent(Date.self, forKey: .scheduledEnd)
     }
@@ -96,6 +104,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         try container.encode(isCompleted, forKey: .isCompleted)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(isPinned, forKey: .isPinned)
+        try container.encodeIfPresent(targetDay, forKey: .targetDay)
         try container.encodeIfPresent(scheduledStart, forKey: .scheduledStart)
         try container.encodeIfPresent(scheduledEnd, forKey: .scheduledEnd)
     }

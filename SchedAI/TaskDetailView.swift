@@ -44,6 +44,7 @@ struct TaskDetailView: View {
                             if draft.scheduledStart == nil {
                                 let start = suggestedPinnedStart()
                                 draft.scheduledStart = start
+                                draft.targetDay = Calendar.current.startOfDay(for: start)
                                 draft.scheduledEnd = start.addingTimeInterval(TimeInterval(max(5, draft.estimatedMinutes) * 60))
                             }
                         } else {
@@ -61,6 +62,7 @@ struct TaskDetailView: View {
                             set: { newStart in
                                 draft.isPinned = true
                                 draft.scheduledStart = newStart
+                                draft.targetDay = Calendar.current.startOfDay(for: newStart)
                                 draft.scheduledEnd = newStart.addingTimeInterval(TimeInterval(max(5, draft.estimatedMinutes) * 60))
                             }
                         ),
