@@ -33,16 +33,16 @@ struct OfflineNLP {
         static let quarterToRegex = try! NSRegularExpression(pattern: #"(?i)\bquarter\s+to\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"#)
 
         // Number words in time/duration contexts
-        static let timeContextRegex = try! NSRegularExpression(pattern: #"(?i)\b(at|around|by|from|to|until|till|between)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"#)
-        static let durationWordRegex = try! NSRegularExpression(pattern: #"(?i)\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(hours?|hrs?|h|minutes?|mins?|m)\b"#)
+        static let timeContextRegex = try! NSRegularExpression(pattern: #"(?i)\b(at|around|about|near|by|from|to|until|till|between)\s+(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"#)
+        static let durationWordRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(hours?|hrs?|h|minutes?|mins?|m)\b"#)
 
         // Chunking
         static let primaryChunkDelimiterRegex = try! NSRegularExpression(
-            pattern: #"(?i)\s*(?:;|•|\s-\s|\band\s+then\b|\bthen\b|\bafter\s+that\b|\bafterwards\b|\blater\b)\s*"#
+            pattern: #"(?i)\s*(?:;|•|\s-\s|\band\s+then\b|\band\s+after\s+that\b|\bafter\s+that\b|\bafterwards?\b|\blater\b|\bthen\b|\balso\b|\bplus\b)\s*"#
         )
         static let betweenAndRegex = try! NSRegularExpression(pattern: #"(?i)\bbetween\b.*\band\b"#)
         static let andDelimiterRegex = try! NSRegularExpression(pattern: #"(?i)\s+and\s+"#)
-        static let timeMarkerSplitRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|by|around)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|noon|midnight)\b"#)
+        static let timeMarkerSplitRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|by|around|about|near)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|noon|midnight)\b"#)
         static let leadingDurationRegex = try! NSRegularExpression(pattern: #"(?i)^\s*(?:for\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|mins?|minutes?)\b"#)
         static let fusedVerbs: [String] = [
             "take", "get", "submit", "upload", "call", "send", "email",
@@ -83,11 +83,11 @@ struct OfflineNLP {
         static let time24Regex = try! NSRegularExpression(pattern: #"(?i)\b([01]?\d|2[0-3])\s*:\s*([0-5]\d)\b"#)
         static let time12Regex = try! NSRegularExpression(pattern: #"(?i)\b(1[0-2]|0?[1-9])(?::\s*([0-5]\d))?\s*(am|pm)\b"#)
         static let timeColonNoMeridiemRegex = try! NSRegularExpression(pattern: #"(?i)\b(1[0-2]|0?[1-9])\s*:\s*([0-5]\d)\b"#)
-        static let timeCompactRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|around|by|from|starting|start)\s*(\d{3,4})\b"#)
-        static let timeBareHourRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|around|by)\s*(\d{1,2})\b(?!\s*(?:h|hr|hrs|hour|hours|min|mins|minute|minutes))"#
+        static let timeCompactRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|around|about|near|by|from|starting|start)\s*(\d{3,4})\b"#)
+        static let timeBareHourRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|around|about|near|by)\s*(\d{1,2})\b(?!\s*(?:h|hr|hrs|hour|hours|min|mins|minute|minutes))"#
         )
-        static let midnightRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at\s+|by\s+|around\s+)?midnight\b"#)
-        static let noonRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at\s+|by\s+|around\s+)?noon\b"#)
+        static let midnightRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at\s+|by\s+|around\s+|about\s+|near\s+)?midnight\b"#)
+        static let noonRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at\s+|by\s+|around\s+|about\s+|near\s+)?noon\b"#)
         static let eodRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:by\s+)?(?:eod|end\s+of\s+day)\b"#)
 
         // Duration parsing
@@ -152,16 +152,16 @@ struct OfflineNLP {
 
     private enum StepRegex {
         static let connectorRegex = try! NSRegularExpression(
-            pattern: #"(?i)\s*(?:\band\s+then\b|\bafter\s+that\b|\bthen\b|\bnext\b(?!\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|day|days|week|month|year|\d+\s*(?:m|min|mins?|minutes?|h|hr|hrs?|hours?)))|\band\b)\s*"#
+            pattern: #"(?i)\s*(?:\band\s+then\b|\band\s+after\s+that\b|\bafter\s+that\b|\bafterwards?\b|\blater\b|\bthen\b|\balso\b|\bplus\b|\bnext\b(?!\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|day|days|week|month|year|\d+\s*(?:m|min|mins?|minutes?|h|hr|hrs?|hours?)))|\band\b)\s*"#
         )
         static let durationRegex = try! NSRegularExpression(
-            pattern: #"(?i)\bfor\s+(?:a\s+)?(\d+(?:\.\d+)?)\s*(h|hr|hrs|hours?|m|min|mins|minutes?)\b"#
+            pattern: #"(?i)\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?(\d+(?:\.\d+)?)\s*(h|hr|hrs|hours?|m|min|mins|minutes?)\b"#
         )
         static let rangeRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:till|to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
         )
         static let explicitTimeRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b(?:at|by)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
+            pattern: #"(?i)\b(?:at|by|around|about|near)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
         )
         static let bareMeridiemRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(\d{1,2})(?::(\d{2}))\s*(am|pm)\b"#
@@ -170,7 +170,7 @@ struct OfflineNLP {
             pattern: #"(?i)^(.*?\bfor\s+\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b)\s+([a-z].*\b\d{1,2}\s*(?:till|to|-)\s*\d{1,2}\b.*)$"#
         )
         static let rangeAndDurationCleanupRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:midnight|noon)\b"#
+            pattern: #"(?i)\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by|around|about|near)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:(?:at|by|around|about|near)\s+)?(?:midnight|noon)\b"#
         )
         static let relativeWindowRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:in|within|over)\s+(?:the\s+)?next\s+(\d+(?:\.\d+)?)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)\b"#
@@ -224,7 +224,7 @@ struct OfflineNLP {
 
     private static func shouldUseStepPipeline(_ rawText: String) -> Bool {
         rawText.range(
-            of: #"(?i)\b(and|then|after\s+that|next)\b|\b\d{1,2}(?::\d{2})?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\b|\bmidnight\b|\bnoon\b|\b(?:breakfast|lunch|dinner|supper|bed|sleep|study|homework|laundry|gym|workout|play)\b.*\bat\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b"#,
+            of: #"(?i)\b(and|then|after\s+that|afterwards?|later|also|plus|next)\b|\b\d{1,2}(?::\d{2})?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\b|\bmidnight\b|\bnoon\b|\b(?:breakfast|lunch|dinner|supper|bed|sleep|study|homework|laundry|gym|workout|play|meeting|practice|appointment|class|game|call|email|text|pick\s+up|drop\s+off)\b.*\b(?:at|around|about|near|by)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b"#,
             options: .regularExpression
         ) != nil
     }
@@ -546,7 +546,9 @@ struct OfflineNLP {
         let likelyPmWords = [
             "study", "homework", "assignment", "work", "laundry", "gym", "workout",
             "exercise", "practice", "review", "meeting", "class", "play", "game",
-            "call", "dinner", "lunch", "eat"
+            "call", "text", "email", "meet", "appointment", "dentist", "doctor", "coach",
+            "club", "tryout", "movie", "event", "practice", "errand", "groceries",
+            "exam", "test", "quiz", "rehearsal", "pick up", "drop off", "dinner", "lunch", "eat"
         ]
         if hour <= 8, likelyPmWords.contains(where: local.contains) {
             return hour + 12
@@ -2341,7 +2343,12 @@ struct OfflineNLP {
         // Remove common lead-ins (polite or planning phrases)
         let leadingPatterns = [
             #"(?i)^\s*(please|can you|could you|would you|lets|let's)\s+"#,
+            #"(?i)^\s*(?:remind me|reminder)\s+(?:to|about|for)?\s*"#,
+            #"(?i)^\s*(?:don't|dont|do not)\s+let\s+me\s+forget\s+(?:to|about|for)?\s*"#,
+            #"(?i)^\s*make\s+sure\s+(?:that\s+)?(?:i\s+)?(?:to\s+)?"#,
+            #"(?i)^\s*(?:schedule|add|put|set up|set|create|book)\s+(?:a|an|the|my|this)?\s*"#,
             #"(?i)^\s*(i will|i'll|i am|i'm|i am going to|i'm going to|i plan to|plan to)\s+"#,
+            #"(?i)^\s*(?:i've\s+got|ive\s+got|i\s+ve\s+got|i\s+have\s+got|im|i m|ill|i ll|i'm|i'll|ive|i ve|i've|i\s+am|i\s+will|i\s+should|i\s+need|i\s+have|i\s+got|i\s+want|i\s+wanna|i\s+am\s+supposed\s+to|i'm\s+supposed\s+to|im\s+supposed\s+to)\s+(?:to|a|an|the|my)?\s*"#,
             #"(?i)^\s*there(?:\s+is|'s|s)\s+(?:a|an|the)?\s*"#,
             #"(?i)^\s*there\s+are\s+(?:some|the)?\s*"#,
             #"(?i)^\s*(to|for|and|then|next|after|after that|also|between|in|on)\s+"#
@@ -2364,6 +2371,9 @@ struct OfflineNLP {
             #"(?i)\bthen\b$"#,
             #"(?i)\bafter\s+that\b$"#,
             #"(?i)\bnext\b$"#,
+            #"(?i)\btakes?\b$"#,
+            #"(?i)\blasts?\b$"#,
+            #"(?i)\blasting\b$"#,
             #"(?i)\bthank\b$"#,
             #"(?i)\bthan\b$"#,
             #"(?i)\bthem\b$"#
