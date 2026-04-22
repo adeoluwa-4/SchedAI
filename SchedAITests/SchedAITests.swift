@@ -120,6 +120,34 @@ struct SchedAITests {
         #expect(cal.component(.hour, from: starts[2]) == 21)
     }
 
+    @Test func offlineNlpKeepsDestinationPracticeTogether() async throws {
+        let now = fixedDate(2026, 4, 22, 12, 0)
+        let input = "go to dance practice at five and get dinner at seven"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        #expect(tasks.map(\.title) == ["Go to dance practice", "Get dinner"])
+
+        let starts = tasks.compactMap(\.scheduledStart)
+        #expect(starts.count == 2)
+        guard starts.count == 2 else { return }
+
+        let cal = Calendar.current
+        #expect(cal.component(.hour, from: starts[0]) == 17)
+        #expect(cal.component(.hour, from: starts[1]) == 19)
+    }
+
+    @Test func offlineNlpCleansThereLeadInsGenerally() async throws {
+        let now = fixedDate(2026, 4, 22, 12, 0)
+        let input = "there is a basketball game at nine and there are some club tryouts at ten"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        #expect(tasks.map(\.title) == ["Basketball game", "Club tryouts"])
+    }
+
     @Test func offlineNlpDefaultsStudyTimeToPmAfterMorningContext() async throws {
         let input = "eat breakfast at 8 and study at 4"
         let tasks = OfflineNLP.parseSafely(input)
