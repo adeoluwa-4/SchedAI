@@ -6,7 +6,22 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		6A1FA3712F92FB7A00B1B49C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */; };
+		6A1FA3722F92FB7A00B1B49C /* SwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6A1FA3742F92FB7C00B1B49C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */; };
+		6A1FA3752F92FB7C00B1B49C /* WidgetKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6AEC17302F92C4F300FC61A5 /* SchedAI-WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		6AEC172E2F92C4F300FC61A5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CF2DEE262EF4EB1B00F2998C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6AEC171A2F92C4EF00FC61A5;
+			remoteInfo = "SchedAI-WidgetExtension";
+		};
 		CF2DEE3C2EF4EB1E00F2998C /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CF2DEE262EF4EB1B00F2998C /* Project object */;
@@ -24,12 +39,25 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		6A1FA3732F92FB7A00B1B49C /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				6A1FA3722F92FB7A00B1B49C /* SwiftUI.framework in Embed Frameworks */,
+				6A1FA3752F92FB7C00B1B49C /* WidgetKit.framework in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		6AA3AC122F44BB5B003693DD /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				6AEC17302F92C4F300FC61A5 /* SchedAI-WidgetExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -38,6 +66,8 @@
 
 /* Begin PBXFileReference section */
 		6A02603A2F34F0E300FDF50D /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6A1FA3262F92F81B00B1B49C /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6A1FA3982F92FE7600B1B49C /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		6A4D68A82EFE4F110071CDD2 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		6A90AE012F1D67570070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		6A90AF642F1EDDA80070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
@@ -45,6 +75,10 @@
 		6AA3ABCB2F44B9DC003693DD /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		6AA3AC062F44BB5B003693DD /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
 		6AAB2DEE2EFFAD700065F401 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6AEC16DA2F92BE9C00FC61A5 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
+		6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "SchedAI-WidgetExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		CF2075E82EFB4263005862CC /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		CF2DEE2E2EF4EB1B00F2998C /* SchedAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SchedAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF2DEE3B2EF4EB1E00F2998C /* SchedAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SchedAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -53,6 +87,16 @@
 		CF495E792EF62A8D005D448B /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		CF95BAC12EF654990031A149 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		6AEC17332F92C4F300FC61A5 /* Exceptions for "SchedAI-Widget" folder in "SchedAI-WidgetExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6AEC171A2F92C4EF00FC61A5 /* SchedAI-WidgetExtension */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6AA3AC082F44BB5B003693DD /* Sign in */ = {
@@ -63,6 +107,14 @@
 		6AA3AC1D2F44BE00003693DD /* Sign in */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Sign in";
+			sourceTree = "<group>";
+		};
+		6AEC17202F92C4F000FC61A5 /* SchedAI-Widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6AEC17332F92C4F300FC61A5 /* Exceptions for "SchedAI-Widget" folder in "SchedAI-WidgetExtension" target */,
+			);
+			path = "SchedAI-Widget";
 			sourceTree = "<group>";
 		};
 		CF2DEE302EF4EB1B00F2998C /* SchedAI */ = {
@@ -83,6 +135,15 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		6AEC17182F92C4EF00FC61A5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A1FA3712F92FB7A00B1B49C /* SwiftUI.framework in Frameworks */,
+				6A1FA3742F92FB7C00B1B49C /* WidgetKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CF2DEE2B2EF4EB1B00F2998C /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -108,6 +169,16 @@
 
 /* Begin PBXGroup section */
 		6A0260492F34F0E300FDF50D /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6A1FA3352F92F81B00B1B49C /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6A1FA3A72F92FE7600B1B49C /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -141,11 +212,18 @@
 			isa = PBXGroup;
 			children = (
 				6AA3AC062F44BB5B003693DD /* AuthenticationServices.framework */,
+				6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */,
+				6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
 		6AAB2DFB2EFFAD700065F401 /* Products */ = {
+			isa = PBXGroup;
+			name = Products;
+			sourceTree = "<group>";
+		};
+		6AEC16E92F92BE9C00FC61A5 /* Products */ = {
 			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
@@ -163,6 +241,7 @@
 				CF2DEE482EF4EB1E00F2998C /* SchedAIUITests */,
 				6AA3AC082F44BB5B003693DD /* Sign in */,
 				6AA3AC1D2F44BE00003693DD /* Sign in */,
+				6AEC17202F92C4F000FC61A5 /* SchedAI-Widget */,
 				6AA3AC052F44BB5B003693DD /* Frameworks */,
 				CF2DEE2F2EF4EB1B00F2998C /* Products */,
 			);
@@ -174,6 +253,7 @@
 				CF2DEE2E2EF4EB1B00F2998C /* SchedAI.app */,
 				CF2DEE3B2EF4EB1E00F2998C /* SchedAITests.xctest */,
 				CF2DEE452EF4EB1E00F2998C /* SchedAIUITests.xctest */,
+				6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -196,6 +276,29 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		6AEC171A2F92C4EF00FC61A5 /* SchedAI-WidgetExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6AEC17342F92C4F400FC61A5 /* Build configuration list for PBXNativeTarget "SchedAI-WidgetExtension" */;
+			buildPhases = (
+				6AEC17172F92C4EF00FC61A5 /* Sources */,
+				6AEC17182F92C4EF00FC61A5 /* Frameworks */,
+				6AEC17192F92C4EF00FC61A5 /* Resources */,
+				6A1FA3732F92FB7A00B1B49C /* Embed Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				6AEC17202F92C4F000FC61A5 /* SchedAI-Widget */,
+			);
+			name = "SchedAI-WidgetExtension";
+			packageProductDependencies = (
+			);
+			productName = "SchedAI-WidgetExtension";
+			productReference = 6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		CF2DEE2D2EF4EB1B00F2998C /* SchedAI */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = CF2DEE4F2EF4EB1E00F2998C /* Build configuration list for PBXNativeTarget "SchedAI" */;
@@ -208,6 +311,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				6AEC172F2F92C4F300FC61A5 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				CF2DEE302EF4EB1B00F2998C /* SchedAI */,
@@ -275,6 +379,9 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					6AEC171A2F92C4EF00FC61A5 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 					CF2DEE2D2EF4EB1B00F2998C = {
 						CreatedOnToolsVersion = 26.2;
 					};
@@ -306,8 +413,16 @@
 					ProjectRef = 6A02603A2F34F0E300FDF50D /* SchedAI.xcodeproj */;
 				},
 				{
+					ProductGroup = 6A1FA3352F92F81B00B1B49C /* Products */;
+					ProjectRef = 6A1FA3262F92F81B00B1B49C /* SchedAI.xcodeproj */;
+				},
+				{
 					ProductGroup = CF495E4A2EF52C74005D448B /* Products */;
 					ProjectRef = CF495E3D2EF52C74005D448B /* SchedAI.xcodeproj */;
+				},
+				{
+					ProductGroup = 6A1FA3A72F92FE7600B1B49C /* Products */;
+					ProjectRef = 6A1FA3982F92FE7600B1B49C /* SchedAI.xcodeproj */;
 				},
 				{
 					ProductGroup = CF495E862EF62A8D005D448B /* Products */;
@@ -338,6 +453,10 @@
 					ProjectRef = 6A90AF642F1EDDA80070B3F0 /* SchedAI.xcodeproj */;
 				},
 				{
+					ProductGroup = 6AEC16E92F92BE9C00FC61A5 /* Products */;
+					ProjectRef = 6AEC16DA2F92BE9C00FC61A5 /* SchedAI.xcodeproj */;
+				},
+				{
 					ProductGroup = 6A4D68B52EFE4F110071CDD2 /* Products */;
 					ProjectRef = 6A4D68A82EFE4F110071CDD2 /* SchedAI.xcodeproj */;
 				},
@@ -351,11 +470,19 @@
 				CF2DEE2D2EF4EB1B00F2998C /* SchedAI */,
 				CF2DEE3A2EF4EB1E00F2998C /* SchedAITests */,
 				CF2DEE442EF4EB1E00F2998C /* SchedAIUITests */,
+				6AEC171A2F92C4EF00FC61A5 /* SchedAI-WidgetExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		6AEC17192F92C4EF00FC61A5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CF2DEE2C2EF4EB1B00F2998C /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -380,6 +507,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		6AEC17172F92C4EF00FC61A5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CF2DEE2A2EF4EB1B00F2998C /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -404,6 +538,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		6AEC172F2F92C4F300FC61A5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 6AEC171A2F92C4EF00FC61A5 /* SchedAI-WidgetExtension */;
+			targetProxy = 6AEC172E2F92C4F300FC61A5 /* PBXContainerItemProxy */;
+		};
 		CF2DEE3D2EF4EB1E00F2998C /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = CF2DEE2D2EF4EB1B00F2998C /* SchedAI */;
@@ -417,6 +556,68 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		6AEC17312F92C4F300FC61A5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "SchedAI-Widget/SchedAI-WidgetExtension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TPNSH32JP3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "SchedAI-Widget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "SchedAI-Widget";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.SchedAI.SchedAI-Widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		6AEC17322F92C4F300FC61A5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				ASSETCATALOG_COMPILER_WIDGET_BACKGROUND_COLOR_NAME = WidgetBackground;
+				CODE_SIGN_ENTITLEMENTS = "SchedAI-Widget/SchedAI-WidgetExtension.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = TPNSH32JP3;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "SchedAI-Widget/Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "SchedAI-Widget";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "me.SchedAI.SchedAI-Widget";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		CF2DEE4D2EF4EB1E00F2998C /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -551,6 +752,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SchedAI/SchedAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = TPNSH32JP3;
@@ -586,6 +788,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = SchedAI/SchedAI.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = TPNSH32JP3;
@@ -703,6 +906,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		6AEC17342F92C4F400FC61A5 /* Build configuration list for PBXNativeTarget "SchedAI-WidgetExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6AEC17312F92C4F300FC61A5 /* Debug */,
+				6AEC17322F92C4F300FC61A5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		CF2DEE292EF4EB1B00F2998C /* Build configuration list for PBXProject "SchedAI" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
