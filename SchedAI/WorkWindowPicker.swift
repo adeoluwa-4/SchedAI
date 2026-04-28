@@ -29,7 +29,9 @@ struct WorkWindowPicker: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                   
+                    Button("Cancel") {
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") {
@@ -46,7 +48,7 @@ struct WorkWindowPicker: View {
 }
 
 #Preview {
-    @State var start = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
-    @State var end = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date())!
+    @Previewable @State var start = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date())!
+    @Previewable @State var end = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date())!
     return WorkWindowPicker(start: $start, end: $end)
 }
