@@ -74,6 +74,11 @@ struct SchedAITests {
         #expect(parts[3].contains("go to bed"))
     }
 
+    @Test func offlineNlpSplitListEntriesSupportsCommasAndNewlines() async throws {
+        let parts = OfflineNLP.splitListEntries("study, gym\ncall mom")
+        #expect(parts == ["study", "gym", "call mom"])
+    }
+
     @Test func offlineNlpParsesVoicePlanWithAmPmCarry() async throws {
         let input = "I will wake up at 12 PM and do laundry at one for two hours play FIFA three till six then eat dinner at 7:30 and after that go to bed at midnight"
         let tasks = OfflineNLP.parseSafely(input)

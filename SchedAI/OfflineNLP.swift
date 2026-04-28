@@ -187,6 +187,14 @@ struct OfflineNLP {
         normalize(text)
     }
 
+    static func splitListEntries(_ text: String) -> [String] {
+        text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .split(whereSeparator: { $0 == "\n" || $0 == "," })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
     static func splitTasks(_ text: String) -> [String] {
         let normalized = normalizeInput(text)
         guard !normalized.isEmpty else { return [] }
@@ -575,6 +583,7 @@ struct OfflineNLP {
         stripped = stripped.replacingOccurrences(of: #"(?i)\bbetween\b"#, with: " ", options: .regularExpression)
         stripped = stripped.replacingOccurrences(of: #"(?i)\bin\s+the\s+next\b"#, with: " ", options: .regularExpression)
         stripped = stripped.replacingOccurrences(of: #"(?i)\bfor\s+walk\b"#, with: "for a walk", options: .regularExpression)
+        stripped = stripped.replacingOccurrences(of: #"(?i)\bgo\s+walk\b"#, with: "go for a walk", options: .regularExpression)
         return cleanedTitle(from: stripped)
     }
 
@@ -2351,6 +2360,7 @@ struct OfflineNLP {
             #"(?i)^\s*(?:i've\s+got|ive\s+got|i\s+ve\s+got|i\s+have\s+got|im|i m|ill|i ll|i'm|i'll|ive|i ve|i've|i\s+am|i\s+will|i\s+should|i\s+need|i\s+have|i\s+got|i\s+want|i\s+wanna|i\s+am\s+supposed\s+to|i'm\s+supposed\s+to|im\s+supposed\s+to)\s+(?:to|a|an|the|my)?\s*"#,
             #"(?i)^\s*there(?:\s+is|'s|s)\s+(?:a|an|the)?\s*"#,
             #"(?i)^\s*there\s+are\s+(?:some|the)?\s*"#,
+            #"(?i)^\s*(?:early\s+)?(?:morning|afternoon|evening|tonight|night)\s+"#,
             #"(?i)^\s*(to|for|and|then|next|after|after that|also|between|in|on)\s+"#
         ]
         for p in leadingPatterns {
@@ -2383,6 +2393,8 @@ struct OfflineNLP {
         }
 
         t = t.replacingOccurrences(of: #"[\(\)\[\]\{\}]"#, with: " ", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"(?i)\bgo\s+walk\b"#, with: "go for a walk", options: .regularExpression)
+        t = t.replacingOccurrences(of: #"\s*,\s*"#, with: ", ", options: .regularExpression)
         t = t.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -2393,8 +2405,9 @@ struct OfflineNLP {
         }
 
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        t = t.lowercased()
 
-        // Capitalize first letter for a clean task title.
+        // Keep titles in a predictable sentence case for UI consistency.
         if let first = t.first {
             let head = String(first).uppercased()
             let tail = String(t.dropFirst())

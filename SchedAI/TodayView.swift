@@ -136,9 +136,14 @@ struct TodayView: View {
             QuickAddSheet { text in
                 let trimmed = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
                 guard !trimmed.isEmpty else { return }
-                let parsed = OfflineNLP.parseSafely(trimmed)
-                if parsed.isEmpty { app.addTask(title: trimmed) }
-                else { parsed.forEach { app.addTask($0) } }
+                let entries = OfflineNLP.splitListEntries(trimmed)
+                let inputs = entries.isEmpty ? [trimmed] : entries
+
+                for input in inputs {
+                    let parsed = OfflineNLP.parseSafely(input)
+                    if parsed.isEmpty { app.addTask(title: input) }
+                    else { parsed.forEach { app.addTask($0) } }
+                }
                 app.planToday(for: planningDay)
             }
         }
