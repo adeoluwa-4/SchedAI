@@ -173,8 +173,40 @@ private struct WidgetSnapshot {
         "\(completedCount) of \(max(allCount, 1)) done"
     }
 
-    var primaryTask: WidgetBridge.SharedTask? {
-        nowTask ?? nextTask ?? planItems.first
+    var freeUntil: Date? {
+        guard nowTask == nil else { return nil }
+        return nextTask?.scheduledStart
+    }
+
+    var nowTitleText: String {
+        if let nowTask {
+            return nowTask.title
+        }
+        if freeUntil != nil {
+            return "You're free"
+        }
+        return remainingCount > 0 ? "You're free" : "All clear"
+    }
+
+    var nowDetailText: String {
+        if let nowTask {
+            return nowTask.timeRangeLine
+        }
+        if let freeUntil {
+            return "Until \(freeUntil.widgetTime)"
+        }
+        return remainingCount > 0 ? "Nothing scheduled right now" : "No tasks left today"
+    }
+
+    var nowDurationMinutes: Int? {
+        nowTask?.durationMinutes
+    }
+
+    var upNextItems: [WidgetBridge.SharedTask] {
+        planItems.filter { task in
+            guard let nowTask else { return true }
+            return task.id != nowTask.id
+        }
     }
 
     var planTitle: String {
@@ -398,7 +430,7 @@ private struct MediumSchedAIWidget: View {
                     .foregroundStyle(WidgetPalette.blue)
 
                 HStack(alignment: .top) {
-                    Text(snapshot.primaryTask?.title ?? "No tasks")
+                    Text(snapshot.nowTitleText)
                         .font(.system(size: 24, weight: .bold, design: .rounded))
                         .lineLimit(2)
                         .minimumScaleFactor(0.65)
@@ -411,12 +443,12 @@ private struct MediumSchedAIWidget: View {
                 }
 
                 HStack(spacing: 6) {
-                    Text(snapshot.primaryTask?.timeRangeLine ?? "No time set")
+                    Text(snapshot.nowDetailText)
                         .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(WidgetPalette.textSecondary)
                         .lineLimit(1)
-                    if let primary = snapshot.primaryTask {
-                        DurationPill(minutes: primary.durationMinutes)
+                    if let minutes = snapshot.nowDurationMinutes {
+                        DurationPill(minutes: minutes)
                     }
                 }
 
@@ -427,8 +459,8 @@ private struct MediumSchedAIWidget: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(WidgetPalette.blue)
 
-                if !snapshot.planItems.isEmpty {
-                    ForEach(Array(snapshot.planItems.prefix(2)), id: \.id) { task in
+                if !snapshot.upNextItems.isEmpty {
+                    ForEach(Array(snapshot.upNextItems.prefix(2)), id: \.id) { task in
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(bulletColor(for: task))
@@ -452,7 +484,7 @@ private struct MediumSchedAIWidget: View {
                         }
                     }
                 } else {
-                    Text("Add tasks in the app.")
+                    Text(snapshot.planItems.isEmpty ? "Add tasks in the app." : "You're clear after this.")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(WidgetPalette.textSecondary)
                         .lineLimit(1)
@@ -468,16 +500,8 @@ private struct MediumSchedAIWidget: View {
 private struct LargeSchedAIWidget: View {
     let snapshot: WidgetSnapshot
 
-    private var focusTask: WidgetBridge.SharedTask? {
-        snapshot.primaryTask
-    }
-
     private var comingUpItems: [WidgetBridge.SharedTask] {
-        let filtered = snapshot.planItems.filter { task in
-            guard let focusTask else { return true }
-            return task.id != focusTask.id
-        }
-        return Array(filtered.prefix(3))
+        Array(snapshot.upNextItems.prefix(3))
     }
 
     var body: some View {
@@ -523,21 +547,21 @@ private struct LargeSchedAIWidget: View {
                                     .foregroundStyle(WidgetPalette.blue)
                                     .lineLimit(1)
 
-                                Text(focusTask?.title ?? "No tasks")
+                                Text(snapshot.nowTitleText)
                                     .font(.system(size: 23, weight: .bold, design: .rounded))
                                     .foregroundStyle(WidgetPalette.textPrimary)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.62)
 
                                 HStack(spacing: 6) {
-                                    Text(focusTask?.timeRangeLine ?? "No time set")
+                                    Text(snapshot.nowDetailText)
                                         .font(.system(size: 12.5, weight: .semibold))
                                         .foregroundStyle(WidgetPalette.textSecondary)
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.72)
 
-                                    if let focusTask {
-                                        DurationPill(minutes: focusTask.durationMinutes, compact: true)
+                                    if let minutes = snapshot.nowDurationMinutes {
+                                        DurationPill(minutes: minutes, compact: true)
                                     }
                                 }
                             }
@@ -561,7 +585,7 @@ private struct LargeSchedAIWidget: View {
                                 .lineLimit(1)
 
                             if comingUpItems.isEmpty {
-                                Text(snapshot.planItems.isEmpty ? "Add tasks in SchedAI." : "You're clear after this.")
+                                Text(snapshot.planItems.isEmpty ? "Add tasks in SchedAI." : (snapshot.nowTask != nil ? "You're clear after this." : "Nothing else scheduled today."))
                                     .font(.system(size: 12, weight: .semibold))
                                     .foregroundStyle(WidgetPalette.textSecondary)
                                     .lineLimit(2)
