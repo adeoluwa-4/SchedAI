@@ -117,7 +117,7 @@ struct SettingsView: View {
     private var floatingHeader: some View {
         HStack {
             Text("Settings")
-                .font(.system(size: 42, weight: .bold, design: .rounded))
+                .font(.system(size: 34, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
 
             Spacer()
@@ -132,20 +132,20 @@ struct SettingsView: View {
                 ZStack {
                     Circle()
                         .fill(Color.brandBlue.opacity(scheme == .dark ? 0.16 : 0.12))
-                        .frame(width: 64, height: 64)
+                        .frame(width: 56, height: 56)
                     
                     Image(systemName: "person.fill")
-                        .font(.system(size: 26, weight: .semibold))
+                        .font(.system(size: 22, weight: .semibold))
                         .foregroundStyle(Color.brandBlue)
                 }
                 
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: 6) {
                     Text(welcomeTitle)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                     
                     Text("Ready to plan your day.")
-                        .font(.system(size: 17, weight: .medium, design: .rounded))
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                     
 #if canImport(AuthenticationServices)
@@ -155,12 +155,12 @@ struct SettingsView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "person.badge.key")
-                                    .font(.system(size: 14, weight: .semibold))
+                                    .font(.system(size: 12, weight: .semibold))
                                 Text("Sign in to personalize")
-                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    .font(.system(size: 14, weight: .semibold, design: .rounded))
                             }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
                             .background(
                                 Capsule().fill(Color.brandBlue.opacity(scheme == .dark ? 0.16 : 0.12))
                             )
@@ -174,22 +174,22 @@ struct SettingsView: View {
                 Spacer()
             }
             .padding(.horizontal, 20)
-            .padding(.vertical, 22)
+            .padding(.vertical, 20)
         }
     }
 
     // MARK: - App Identity
 
     private var appIdentity: some View {
-        VStack(spacing: 14) {
-            SettingsAppLogo(size: 84)
+        VStack(spacing: 12) {
+            SettingsAppLogo(size: 76)
 
             Text("SchedAI")
-                .font(.system(size: 38, weight: .bold, design: .rounded))
+                .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
 
             Text(shortVersionString)
-                .font(.system(size: 18, weight: .medium, design: .rounded))
+                .font(.system(size: 15, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
@@ -198,7 +198,7 @@ struct SettingsView: View {
     // MARK: - Groups
 
     private var settingsGroups: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: 16) {
             profileCard
             accountGroup
             notificationsGroup
@@ -468,23 +468,23 @@ private struct SettingsGroupCard<Content: View>: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
                     Image(systemName: icon)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(color)
-                        .frame(width: 24)
+                        .frame(width: 22)
 
                     Text(title)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
 
                     Spacer()
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
 
                 VStack(spacing: 0) {
                     content
                 }
-                .padding(.horizontal, 18)
+                .padding(.horizontal, 16)
                 .padding(.bottom, 10)
             }
         }
@@ -499,10 +499,10 @@ private struct SettingsIcon: View {
         ZStack {
             Circle()
                 .fill(color.opacity(0.16))
-                .frame(width: 48, height: 48)
+                .frame(width: 42, height: 42)
 
             Image(systemName: systemName)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(color)
         }
     }
@@ -515,7 +515,7 @@ private struct SettingsDivider: View {
         Rectangle()
             .fill(scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
             .frame(height: 1)
-            .padding(.leading, 60)
+            .padding(.leading, 54)
     }
 }
 
@@ -526,17 +526,17 @@ private struct SettingsInfoRow: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 11) {
             SettingsIcon(systemName: icon, color: color)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(subtitle)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -544,7 +544,7 @@ private struct SettingsInfoRow: View {
 
             Spacer(minLength: 8)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
     }
 }
@@ -556,17 +556,17 @@ private struct SettingsLinkRow: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 11) {
             SettingsIcon(systemName: icon, color: color)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(subtitle)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -575,10 +575,10 @@ private struct SettingsLinkRow: View {
             Spacer(minLength: 8)
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .contentShape(Rectangle())
     }
 }
@@ -607,17 +607,17 @@ private struct SettingsToggleRow: View {
 
     var body: some View {
         Toggle(isOn: $isOn) {
-            HStack(spacing: 12) {
+            HStack(spacing: 11) {
                 SettingsIcon(systemName: icon, color: color)
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.system(size: 18, weight: .semibold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .font(.system(size: 17, weight: .medium, design: .rounded))
+                        .font(.system(size: 14, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .minimumScaleFactor(0.82)
@@ -625,7 +625,7 @@ private struct SettingsToggleRow: View {
             }
         }
         .tint(color)
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
     }
 }
 
@@ -633,17 +633,17 @@ private struct SettingsThemeRow: View {
     @Binding var selected: AppTheme
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 11) {
             SettingsIcon(systemName: "paintbrush.pointed", color: .pink)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Theme")
-                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(selected.title)
-                    .font(.system(size: 17, weight: .medium, design: .rounded))
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
 
@@ -656,9 +656,10 @@ private struct SettingsThemeRow: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
             .tint(Color.brandBlue)
         }
-        .padding(.vertical, 14)
+        .padding(.vertical, 12)
         .onChange(of: selected) { _, _ in
             Haptics.light()
         }

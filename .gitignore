@@ -1,1 +1,13 @@
-.vercel
+.DS_Store
+.vercel/
+.env
+.env.*
+*.mobileprovision
+*.p8
+*.p12
+*.pem
+*.key
+*.cer
+*.zip
+GoogleService-Info.plist
+**/GoogleService-Info.plist
