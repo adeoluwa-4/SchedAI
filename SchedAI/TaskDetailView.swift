@@ -37,7 +37,7 @@ struct TaskDetailView: View {
 
             Section("Schedule") {
                 Toggle("Pin start time", isOn: $isPinned)
-                    .onChange(of: isPinned) { newValue in
+                    .onChange(of: isPinned) { _, newValue in
                         draft.isPinned = newValue
                         if newValue {
                             // If pinning and no start exists, pick a sensible slot inside the work window.
@@ -73,7 +73,7 @@ struct TaskDetailView: View {
 
             Section {
                 Toggle("Completed", isOn: $draft.isCompleted)
-                    .onChange(of: draft.isCompleted) { completed in
+                    .onChange(of: draft.isCompleted) { _, completed in
                         if completed {
                             // If completed, no need to keep reminders/schedule.
                             draft.isPinned = false

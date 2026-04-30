@@ -7,6 +7,8 @@ struct TasksView: View {
     @State private var editingTask: TaskItem?
     @State private var filter: TaskFilter = .all
     @State private var showCompleted: Bool = false
+    @State private var planMessage: String? = nil
+    @State private var planMessageHideWorkItem: DispatchWorkItem? = nil
     
     private enum TaskFilter: String, CaseIterable {
         case all, unscheduled, scheduled, high
@@ -117,6 +119,14 @@ struct TasksView: View {
             .sheet(item: $editingTask) { task in
                 TaskEditView(task: task)
                     .environmentObject(app)
+            }
+            .overlay(alignment: .top) {
+                if let planMessage {
+                    planToast(planMessage)
+                        .padding(.top, 10)
+                        .padding(.horizontal, 20)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
         }
     }
@@ -337,13 +347,7 @@ struct TasksView: View {
     
     private var planButton: some View {
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
-                if unscheduledActiveCount > 0 {
-                    app.planUnscheduledOnly(for: app.planningDate)
-                } else {
-                    app.planToday(for: app.planningDate)
-                }
-            }
+            planActiveTasks()
         } label: {
             HStack(spacing: 8) {
                 Image(systemName: "sparkles")
@@ -368,6 +372,23 @@ struct TasksView: View {
         }
     }
 
+    @ViewBuilder
+    private func planToast(_ message: String) -> some View {
+        Text(message)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
+            )
+    }
+
     private var buttonTitle: String {
         if unscheduledActiveCount > 0 {
             return "Schedule Today (\(unscheduledActiveCount))"
@@ -376,6 +397,48 @@ struct TasksView: View {
     }
     
     // MARK: - Helpers
+
+    private func planActiveTasks() {
+        guard !activeTasks.isEmpty else {
+            showPlanMessage("Add a task before planning.")
+            return
+        }
+
+        Haptics.medium()
+        let hadUnscheduledTasks = unscheduledActiveCount > 0
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+            if hadUnscheduledTasks {
+                app.planUnscheduledOnly(for: app.planningDate)
+            } else {
+                app.planToday(for: app.planningDate)
+            }
+        }
+
+        if app.lastPlanOverflow > 0 {
+            let suffix = app.lastPlanOverflow == 1 ? "" : "s"
+            showPlanMessage("\(app.lastPlanOverflow) task\(suffix) could not fit.")
+        } else if hadUnscheduledTasks {
+            showPlanMessage("Unscheduled tasks were placed.")
+        } else {
+            showPlanMessage("Today has been replanned.")
+        }
+    }
+
+    private func showPlanMessage(_ message: String) {
+        planMessageHideWorkItem?.cancel()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            planMessage = message
+        }
+
+        let work = DispatchWorkItem {
+            withAnimation(.easeOut(duration: 0.2)) {
+                planMessage = nil
+            }
+        }
+        planMessageHideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
+    }
     
     private func addTask() {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -549,7 +612,6 @@ private struct ModernTaskRow: View {
         )
         .shadow(color: Color.black.opacity(0.05), radius: 8, x: 0, y: 4)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
         
         return SwipeableRow(
             content: { rowContent },
@@ -651,7 +713,6 @@ private struct CompletedTaskRow: View {
         )
         .opacity(0.7)
         .contentShape(Rectangle())
-        .onTapGesture(perform: onToggle)
         
         return SwipeableRow(
             content: { rowContent },

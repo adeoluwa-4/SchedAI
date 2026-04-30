@@ -522,9 +522,10 @@ final class AppState: ObservableObject {
         let interval = max(1, startOfTomorrow.timeIntervalSince(now))
 
         midnightTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            guard let appState = self else { return }
             Task { @MainActor in
-                self?.performDailyRolloverIfNeeded(now: Date())
-                self?.scheduleMidnightReset()
+                appState.performDailyRolloverIfNeeded(now: Date())
+                appState.scheduleMidnightReset()
             }
         }
     }

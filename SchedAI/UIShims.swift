@@ -144,22 +144,14 @@ struct QuickAddSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal)
-                HStack {
-                    Button("Cancel") { dismiss() }
-                    Spacer()
-                    Button("Add & Plan") {
-                        onSubmit(text)
-                        dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-                .padding(.horizontal)
                 Spacer()
             }
             .padding(.top)
             .navigationTitle("Quick Plan")
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add & Plan") {
                         onSubmit(text)

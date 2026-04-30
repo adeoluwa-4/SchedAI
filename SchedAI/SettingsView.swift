@@ -10,7 +10,6 @@ struct SettingsView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var scheme
-    @Namespace private var animation
     @State private var calendarToastMessage: String? = nil
     @State private var signInMessage: String? = nil
 #if canImport(AuthenticationServices)
@@ -23,15 +22,17 @@ struct SettingsView: View {
                 settingsBackground
                 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 18) {
+                    VStack(alignment: .leading, spacing: 0) {
                         floatingHeader
-                            .padding(.top, 20)
+                            .padding(.top, 26)
+                            .padding(.bottom, 54)
 
-                        profileCard
                         appIdentity
+                            .padding(.bottom, 34)
+
                         settingsGroups
 
-                        Color.clear.frame(height: 32)
+                        Color.clear.frame(height: 40)
                     }
                     .padding(.horizontal, 20)
                 }
@@ -110,42 +111,41 @@ struct SettingsView: View {
         }
         .ignoresSafeArea()
     }
-    
+
     // MARK: - Header
-    
+
     private var floatingHeader: some View {
         HStack {
             Text("Settings")
-                .font(.system(size: 34, weight: .bold, design: .rounded))
+                .font(.system(size: 42, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
-            
+
             Spacer()
         }
-        .padding(.horizontal, 4)
     }
     
-    // MARK: - Profile Card
+    // MARK: - Welcome Card
     
     private var profileCard: some View {
         SettingsPanel {
             HStack(spacing: 16) {
                 ZStack {
                     Circle()
-                        .fill(Color.brandBlue.opacity(0.12))
-                        .frame(width: 54, height: 54)
+                        .fill(Color.brandBlue.opacity(scheme == .dark ? 0.16 : 0.12))
+                        .frame(width: 64, height: 64)
                     
                     Image(systemName: "person.fill")
-                        .font(.system(size: 22, weight: .semibold))
+                        .font(.system(size: 26, weight: .semibold))
                         .foregroundStyle(Color.brandBlue)
                 }
                 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 7) {
                     Text(welcomeTitle)
-                        .font(.title3.bold())
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                     
                     Text("Ready to plan your day.")
-                        .font(.subheadline)
+                        .font(.system(size: 17, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                     
 #if canImport(AuthenticationServices)
@@ -155,14 +155,14 @@ struct SettingsView: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Image(systemName: "person.badge.key")
-                                    .font(.system(size: 12, weight: .semibold))
+                                    .font(.system(size: 14, weight: .semibold))
                                 Text("Sign in to personalize")
-                                    .font(.caption.weight(.semibold))
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                             }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
                             .background(
-                                Capsule().fill(Color.brandBlue.opacity(0.12))
+                                Capsule().fill(Color.brandBlue.opacity(scheme == .dark ? 0.16 : 0.12))
                             )
                         }
                         .buttonStyle(.plain)
@@ -173,36 +173,36 @@ struct SettingsView: View {
                 
                 Spacer()
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 22)
         }
     }
 
     // MARK: - App Identity
 
     private var appIdentity: some View {
-        VStack(spacing: 8) {
-            SettingsAppLogo(size: 86)
+        VStack(spacing: 14) {
+            SettingsAppLogo(size: 84)
 
             Text("SchedAI")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 38, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
 
             Text(shortVersionString)
-                .font(.subheadline.weight(.semibold))
+                .font(.system(size: 18, weight: .medium, design: .rounded))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 8)
     }
 
     // MARK: - Groups
 
     private var settingsGroups: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 18) {
+            profileCard
             accountGroup
             notificationsGroup
             aboutGroup
-            helpGroup
         }
     }
 
@@ -310,20 +310,6 @@ struct SettingsView: View {
         }
     }
 
-    private var helpGroup: some View {
-        SettingsGroupCard(icon: "questionmark.circle", title: "Help", color: Color.brandBlue) {
-            SettingsActionRow(
-                icon: "sparkles",
-                title: "Re-plan Today",
-                subtitle: "Rebuild today's schedule",
-                color: Color.brandBlue
-            ) {
-                Haptics.medium()
-                app.planToday()
-            }
-        }
-    }
-    
     // MARK: - Helpers
     
     private var workWindowText: String {
@@ -418,14 +404,18 @@ private struct SettingsPanel<Content: View>: View {
     var body: some View {
         content
             .background(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(scheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.96))
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(
+                        scheme == .dark
+                        ? Color(red: 0.11, green: 0.12, blue: 0.14)
+                        : Color.white.opacity(0.97)
+                    )
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .strokeBorder(scheme == .dark ? Color.white.opacity(0.1) : Color.black.opacity(0.05), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .strokeBorder(scheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.05), lineWidth: 1)
                     )
             )
-            .shadow(color: scheme == .dark ? Color.black.opacity(0.35) : Color.black.opacity(0.05), radius: 14, x: 0, y: 7)
+            .shadow(color: scheme == .dark ? Color.black.opacity(0.28) : Color.black.opacity(0.05), radius: 18, x: 0, y: 10)
     }
 }
 
@@ -448,7 +438,7 @@ private struct SettingsAppLogo: View {
             #endif
         }
         .frame(width: size, height: size)
-        .shadow(color: Color.brandBlue.opacity(0.14), radius: 10, x: 0, y: 6)
+        .shadow(color: Color.brandBlue.opacity(0.16), radius: 14, x: 0, y: 8)
     }
 
     private var fallbackLogo: some View {
@@ -478,24 +468,24 @@ private struct SettingsGroupCard<Content: View>: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
                     Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(color)
-                        .frame(width: 22)
+                        .frame(width: 24)
 
                     Text(title)
-                        .font(.headline.weight(.semibold))
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
 
                     Spacer()
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 14)
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
 
                 VStack(spacing: 0) {
                     content
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 10)
             }
         }
     }
@@ -508,20 +498,24 @@ private struct SettingsIcon: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(color.opacity(0.11))
-                .frame(width: 34, height: 34)
+                .fill(color.opacity(0.16))
+                .frame(width: 48, height: 48)
 
             Image(systemName: systemName)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(color)
         }
     }
 }
 
 private struct SettingsDivider: View {
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
-        Divider()
-            .padding(.leading, 46)
+        Rectangle()
+            .fill(scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06))
+            .frame(height: 1)
+            .padding(.leading, 60)
     }
 }
 
@@ -535,14 +529,14 @@ private struct SettingsInfoRow: View {
         HStack(spacing: 12) {
             SettingsIcon(systemName: icon, color: color)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -550,7 +544,7 @@ private struct SettingsInfoRow: View {
 
             Spacer(minLength: 8)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .contentShape(Rectangle())
     }
 }
@@ -565,14 +559,14 @@ private struct SettingsLinkRow: View {
         HStack(spacing: 12) {
             SettingsIcon(systemName: icon, color: color)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title)
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(subtitle)
-                    .font(.subheadline)
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
@@ -581,10 +575,10 @@ private struct SettingsLinkRow: View {
             Spacer(minLength: 8)
 
             Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .contentShape(Rectangle())
     }
 }
@@ -616,14 +610,14 @@ private struct SettingsToggleRow: View {
             HStack(spacing: 12) {
                 SettingsIcon(systemName: icon, color: color)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.body.weight(.medium))
+                        .font(.system(size: 18, weight: .semibold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     Text(subtitle)
-                        .font(.subheadline)
+                        .font(.system(size: 17, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                         .minimumScaleFactor(0.82)
@@ -631,7 +625,7 @@ private struct SettingsToggleRow: View {
             }
         }
         .tint(color)
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
     }
 }
 
@@ -642,14 +636,14 @@ private struct SettingsThemeRow: View {
         HStack(spacing: 12) {
             SettingsIcon(systemName: "paintbrush.pointed", color: .pink)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Theme")
-                    .font(.body.weight(.medium))
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
                 Text(selected.title)
-                    .font(.subheadline)
+                    .font(.system(size: 17, weight: .medium, design: .rounded))
                     .foregroundStyle(.secondary)
             }
 
@@ -664,7 +658,7 @@ private struct SettingsThemeRow: View {
             .pickerStyle(.menu)
             .tint(Color.brandBlue)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 14)
         .onChange(of: selected) { _, _ in
             Haptics.light()
         }

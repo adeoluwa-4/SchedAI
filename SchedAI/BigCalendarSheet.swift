@@ -6,6 +6,10 @@ struct BigCalendarSheet: View {
 
     @State private var selectedDate: Date = Date()
 
+    private var hasActiveTasks: Bool {
+        app.tasks.contains { !$0.isCompleted }
+    }
+
     var body: some View {
         NavigationStack {
             VStack(spacing: 12) {
@@ -79,7 +83,7 @@ struct BigCalendarSheet: View {
             .onAppear {
                 selectedDate = app.planningDate
             }
-            .onChange(of: selectedDate) { newValue in
+            .onChange(of: selectedDate) { _, newValue in
                 app.setPlanningDate(newValue)
             }
             .toolbar {
@@ -93,6 +97,7 @@ struct BigCalendarSheet: View {
                     } label: {
                         Label("Plan Day", systemImage: "wand.and.stars")
                     }
+                    .disabled(!hasActiveTasks)
                 }
             }
         }

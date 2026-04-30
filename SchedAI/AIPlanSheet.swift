@@ -27,7 +27,7 @@ struct AIPlanSheet: View {
         NavigationStack {
             ZStack {
                 VStack(spacing: 16) {
-                    Text("Tap the microphone and speak your tasks. I’ll plan them.")
+                    Text("Speak or type your tasks, then preview the plan.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -41,12 +41,19 @@ struct AIPlanSheet: View {
                             )
 
                         VStack(spacing: 12) {
-                            ScrollView {
-                                Text(transcript.isEmpty ? "Say something like: ‘finish essay 60m urgent, then gym 1h’" : transcript)
+                            ZStack(alignment: .topLeading) {
+                                TextEditor(text: $transcript)
                                     .font(.body)
-                                    .foregroundStyle(transcript.isEmpty ? .secondary : .primary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(12)
+                                    .scrollContentBackground(.hidden)
+                                    .padding(8)
+
+                                if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text("Say or type: 'finish essay 60m urgent, then gym 1h'")
+                                        .font(.body)
+                                        .foregroundStyle(.secondary)
+                                        .padding(16)
+                                        .allowsHitTesting(false)
+                                }
                             }
                             .frame(minHeight: 140)
 
@@ -81,11 +88,7 @@ struct AIPlanSheet: View {
                     HStack(spacing: 12) {
                         Button {
                             transcript = ""
-                            previewBase = []
-                            parsedPreview = []
-                            needsInlineDaySelector = false
-                            expandedPreviewTaskIDs.removeAll()
-                            hasManualPreviewEdits = false
+                            resetPreviewState()
                         } label: {
                             Label("Clear", systemImage: "trash")
                                 .frame(maxWidth: .infinity)
@@ -252,11 +255,10 @@ struct AIPlanSheet: View {
             .task { await setupPermissions() }
             .onReceive(speech.$transcript) { text in
                 self.transcript = text
-                self.previewBase = []
-                self.parsedPreview = []
-                self.needsInlineDaySelector = false
-                self.expandedPreviewTaskIDs.removeAll()
-                self.hasManualPreviewEdits = false
+                resetPreviewState()
+            }
+            .onChange(of: transcript) { _, _ in
+                resetPreviewState()
             }
             .onChange(of: app.planningDate) { _, newValue in
                 if previewBase.isEmpty {
@@ -337,7 +339,6 @@ struct AIPlanSheet: View {
         animateLoader = true
 
         Task {
-            try? await Task.sleep(nanoseconds: 2_200_000_000)
             await MainActor.run {
                 let targetDay = Calendar.current.startOfDay(for: previewDay)
                 let finalPreview = autoPlace(parsedPreview, on: targetDay)
@@ -352,6 +353,14 @@ struct AIPlanSheet: View {
                 dismiss()
             }
         }
+    }
+
+    private func resetPreviewState() {
+        previewBase = []
+        parsedPreview = []
+        needsInlineDaySelector = false
+        expandedPreviewTaskIDs.removeAll()
+        hasManualPreviewEdits = false
     }
 
     private func autoPlace(_ tasks: [TaskItem], on day: Date) -> [TaskItem] {

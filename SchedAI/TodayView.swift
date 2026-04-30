@@ -14,9 +14,15 @@ struct TodayView: View {
     @State private var showCalendar = false
     @State private var showWorkWindowPicker = false
     @State private var showQuickAdd = false
+    @State private var planMessage: String? = nil
+    @State private var planMessageHideWorkItem: DispatchWorkItem? = nil
 
     private var planningDay: Date {
         Calendar.current.startOfDay(for: app.planningDate)
+    }
+
+    private var activeTaskCount: Int {
+        app.tasks.filter { !$0.isCompleted }.count
     }
 
     private var isPlanningToday: Bool {
@@ -164,7 +170,7 @@ struct TodayView: View {
         .onReceive(NotificationCenter.default.publisher(for: AppNotifications.widgetVoicePlannerRequested)) { _ in
             openOfflineNLPSheet(autoStartRecording: true)
         }
-        .onChange(of: app.lastPlanOverflow) { _ in updateOverflowBanner() }
+        .onChange(of: app.lastPlanOverflow) { _, _ in updateOverflowBanner() }
         .alert("Calendar", isPresented: Binding(
             get: { app.calendarSyncMessage != nil },
             set: { if !$0 { app.calendarSyncMessage = nil } }
@@ -172,6 +178,14 @@ struct TodayView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(app.calendarSyncMessage ?? "")
+        }
+        .overlay(alignment: .top) {
+            if let planMessage {
+                planToast(planMessage)
+                    .padding(.top, 10)
+                    .padding(.horizontal, 20)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
     }
 
@@ -276,7 +290,7 @@ struct TodayView: View {
     
     private var emptyStateView: some View {
         VStack(spacing: 24) {
-            if app.tasks.isEmpty {
+            if activeTaskCount == 0 {
                 ModernCard {
                     VStack(spacing: 20) {
                         ZStack {
@@ -377,7 +391,7 @@ struct TodayView: View {
                         HStack(spacing: 12) {
                             Button {
                                 Haptics.medium()
-                                openOfflineNLPSheet(autoStartRecording: false)
+                                planCurrentDay()
                             } label: {
                                 Label("Auto-Schedule", systemImage: "wand.and.stars")
                                     .font(.subheadline)
@@ -504,11 +518,11 @@ struct TodayView: View {
                 .buttonStyle(ModernSecondaryButtonStyle())
             }
             
-            if !app.tasks.isEmpty {
+            if activeTaskCount > 0 {
                 Button {
                     Haptics.medium()
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        app.planToday(for: planningDay)
+                        planCurrentDay()
                     }
                 } label: {
                     Label("Re-plan Day", systemImage: "arrow.clockwise")
@@ -520,8 +534,58 @@ struct TodayView: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func planToast(_ message: String) -> some View {
+        Text(message)
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.primary)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
+                    )
+            )
+    }
     
     // MARK: - Helpers
+
+    private func planCurrentDay() {
+        guard activeTaskCount > 0 else {
+            showPlanMessage("Add a task before planning.")
+            return
+        }
+
+        app.planToday(for: planningDay)
+        updateOverflowBanner()
+
+        if app.lastPlanOverflow > 0 {
+            let suffix = app.lastPlanOverflow == 1 ? "" : "s"
+            showPlanMessage("\(app.lastPlanOverflow) task\(suffix) could not fit.")
+        } else {
+            showPlanMessage(isPlanningToday ? "Today has been replanned." : "Plan updated.")
+        }
+    }
+
+    private func showPlanMessage(_ message: String) {
+        planMessageHideWorkItem?.cancel()
+
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            planMessage = message
+        }
+
+        let work = DispatchWorkItem {
+            withAnimation(.easeOut(duration: 0.2)) {
+                planMessage = nil
+            }
+        }
+        planMessageHideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
+    }
     
     private func updateOverflowBanner() {
         let overflow = app.lastPlanOverflow

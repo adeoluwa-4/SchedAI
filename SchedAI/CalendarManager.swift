@@ -66,9 +66,15 @@ final class CalendarManager: ObservableObject {
             }
         } else {
             switch status {
+            case .fullAccess:
+                isAuthorized = true
+                return .connected
             case .authorized:
                 isAuthorized = true
                 return .connected
+            case .writeOnly:
+                isAuthorized = false
+                return .denied
             case .notDetermined:
                 isAuthorized = false
                 return .notConnected
@@ -91,15 +97,17 @@ final class CalendarManager: ObservableObject {
         #if canImport(EventKit)
         if #available(iOS 17.0, *) {
             store.requestFullAccessToEvents { [weak self] granted, _ in
+                guard let manager = self else { return }
                 Task { @MainActor in
-                    self?.isAuthorized = granted
+                    manager.isAuthorized = granted
                     completion(granted)
                 }
             }
         } else {
             store.requestAccess(to: .event) { [weak self] granted, _ in
+                guard let manager = self else { return }
                 Task { @MainActor in
-                    self?.isAuthorized = granted
+                    manager.isAuthorized = granted
                     completion(granted)
                 }
             }
@@ -143,7 +151,7 @@ final class CalendarManager: ObservableObject {
         case .notConnected:
             return .notConnected
         case .denied:
-            return .denied //0.23  0.21 ,4.86   0.15, 6.61
+            return .denied
         case .unavailable:
             return .unavailable
         }
