@@ -105,6 +105,34 @@ struct SchedAITests {
         #expect(tasks[2].estimatedMinutes == 180)
     }
 
+    @Test func offlineNlpSplitsUntilPhraseBeforeNextSpokenTime() async throws {
+        let now = fixedDate(2026, 5, 1, 6, 0)
+        let input = "Get donuts at 7:15 AM had to work at 10 AM do homework do homework for two hours till 12 I have been Bible reading at three be back home by 4:30"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 5)
+        guard tasks.count == 5 else { return }
+
+        #expect(tasks.map(\.title) == [
+            "Get donuts",
+            "Head to work",
+            "Do homework",
+            "Bible reading",
+            "Be back home"
+        ])
+
+        let cal = Calendar.current
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 7)
+        #expect(tasks[0].scheduledStart.map { cal.component(.minute, from: $0) } == 15)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 10)
+        #expect(tasks[2].scheduledStart.map { cal.component(.hour, from: $0) } == 10)
+        #expect(tasks[2].scheduledEnd.map { cal.component(.hour, from: $0) } == 12)
+        #expect(tasks[2].estimatedMinutes == 120)
+        #expect(tasks[3].scheduledStart.map { cal.component(.hour, from: $0) } == 15)
+        #expect(tasks[4].scheduledStart.map { cal.component(.hour, from: $0) } == 16)
+        #expect(tasks[4].scheduledStart.map { cal.component(.minute, from: $0) } == 30)
+    }
+
     @Test func offlineNlpKeepsClubMeetingTogether() async throws {
         let now = fixedDate(2026, 4, 22, 12, 0)
         let input = "Go to club meeting at 4:30 and get a snack at six after that there's a soccer game at nine"

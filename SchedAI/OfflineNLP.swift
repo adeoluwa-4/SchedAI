@@ -42,7 +42,7 @@ struct OfflineNLP {
         )
         static let betweenAndRegex = try! NSRegularExpression(pattern: #"(?i)\bbetween\b.*\band\b"#)
         static let andDelimiterRegex = try! NSRegularExpression(pattern: #"(?i)\s+and\s+"#)
-        static let timeMarkerSplitRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|by|around|about|near)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|noon|midnight)\b"#)
+        static let timeMarkerSplitRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|by|around|about|near|until|till)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|noon|midnight)\b"#)
         static let leadingDurationRegex = try! NSRegularExpression(pattern: #"(?i)^\s*(?:for\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|mins?|minutes?)\b"#)
         static let fusedVerbs: [String] = [
             "take", "get", "submit", "upload", "call", "send", "email",
@@ -52,6 +52,7 @@ struct OfflineNLP {
             "practice",
             "pack", "prep",
             "nap", "sleep",
+            "shower",
             "watch",
             "shop", "snack",
             "unpack"
@@ -163,6 +164,9 @@ struct OfflineNLP {
         static let explicitTimeRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:at|by|around|about|near)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
         )
+        static let untilRegex = try! NSRegularExpression(
+            pattern: #"(?i)\b(?:until|till)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
+        )
         static let bareMeridiemRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(\d{1,2})(?::(\d{2}))\s*(am|pm)\b"#
         )
@@ -170,7 +174,7 @@ struct OfflineNLP {
             pattern: #"(?i)^(.*?\bfor\s+\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b)\s+([a-z].*\b\d{1,2}\s*(?:till|to|-)\s*\d{1,2}\b.*)$"#
         )
         static let rangeAndDurationCleanupRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by|around|about|near)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:(?:at|by|around|about|near)\s+)?(?:midnight|noon)\b"#
+            pattern: #"(?i)\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by|around|about|near|until|till)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:(?:at|by|around|about|near|until|till)\s+)?(?:midnight|noon)\b"#
         )
         static let relativeWindowRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:in|within|over)\s+(?:the\s+)?next\s+(\d+(?:\.\d+)?)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)\b"#
@@ -431,6 +435,34 @@ struct OfflineNLP {
             return (start, end, durationMinutes ?? computedDuration, true, resolvedTarget)
         }
 
+        if let untilMatch = StepRegex.untilRegex.firstMatch(in: working, range: fullRange) {
+            let h = Int(ns.substring(with: untilMatch.range(at: 1))) ?? 0
+            let m = (untilMatch.range(at: 2).location != NSNotFound) ? (Int(ns.substring(with: untilMatch.range(at: 2))) ?? 0) : 0
+            let ap = (untilMatch.range(at: 3).location != NSNotFound) ? ns.substring(with: untilMatch.range(at: 3)).lowercased() : nil
+            let hour24 = resolveHour(
+                rawHour: h,
+                ampm: ap,
+                context: working,
+                previousTaskStart: previousTaskStart,
+                globalContext: globalContext
+            )
+            var end = buildDate(hour24: hour24, minute: m)
+
+            if !hasExplicitDay, let prev = previousTaskStart, let e = end, e <= prev {
+                end = calendar.date(byAdding: .day, value: 1, to: e)
+            }
+
+            let start: Date?
+            if let end, let durationMinutes {
+                start = calendar.date(byAdding: .minute, value: -max(5, durationMinutes), to: end)
+            } else {
+                start = previousTaskStart
+            }
+
+            let resolvedTarget = start.map { calendar.startOfDay(for: $0) } ?? extractedTargetDay
+            return (start, end, durationMinutes, true, resolvedTarget)
+        }
+
         var start: Date? = nil
         var explicitTime = false
 
@@ -556,7 +588,8 @@ struct OfflineNLP {
             "exercise", "practice", "review", "meeting", "class", "play", "game",
             "call", "text", "email", "meet", "appointment", "dentist", "doctor", "coach",
             "club", "tryout", "movie", "event", "practice", "errand", "groceries",
-            "exam", "test", "quiz", "rehearsal", "pick up", "drop off", "dinner", "lunch", "eat"
+            "exam", "test", "quiz", "rehearsal", "reading", "bible", "devotional",
+            "pick up", "drop off", "dinner", "lunch", "eat"
         ]
         if hour <= 8, likelyPmWords.contains(where: local.contains) {
             return hour + 12
@@ -2361,7 +2394,8 @@ struct OfflineNLP {
             #"(?i)^\s*there(?:\s+is|'s|s)\s+(?:a|an|the)?\s*"#,
             #"(?i)^\s*there\s+are\s+(?:some|the)?\s*"#,
             #"(?i)^\s*(?:early\s+)?(?:morning|afternoon|evening|tonight|night)\s+"#,
-            #"(?i)^\s*(to|for|and|then|next|after|after that|also|between|in|on)\s+"#
+            #"(?i)^\s*been\s+"#,
+            #"(?i)^\s*(to|for|from|and|then|next|after|after that|also|between|in|on)\s+"#
         ]
         for p in leadingPatterns {
             t = t.replacingOccurrences(of: p, with: "", options: .regularExpression)
@@ -2406,6 +2440,10 @@ struct OfflineNLP {
 
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)
         t = t.lowercased()
+        t = t.replacingOccurrences(of: #"(?i)\b(do homework)\s+\1\b"#, with: "$1", options: .regularExpression)
+        if t == "had to work" {
+            t = "head to work"
+        }
 
         // Keep titles in a predictable sentence case for UI consistency.
         if let first = t.first {

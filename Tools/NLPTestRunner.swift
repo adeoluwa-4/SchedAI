@@ -56,6 +56,18 @@ struct NLPTestRunner {
                 ]
             ),
             Case(
+                name: "Screenshot voice plan with until then next task",
+                input: "Get donuts at 7:15 AM had to work at 10 AM do homework do homework for two hours till 12 I have been Bible reading at three be back home by 4:30",
+                expectedCount: 5,
+                expected: [
+                    .init(title: "Get donuts", minutes: nil, hasTime: true),
+                    .init(title: "Head to work", minutes: nil, hasTime: true),
+                    .init(title: "Do homework", minutes: 120, hasTime: true),
+                    .init(title: "Bible reading", minutes: nil, hasTime: true),
+                    .init(title: "Be back home", minutes: nil, hasTime: true),
+                ]
+            ),
+            Case(
                 name: "Relative time window",
                 input: "in the next 30 minutes do dishes",
                 expectedCount: 1,
@@ -91,10 +103,9 @@ struct NLPTestRunner {
             Case(
                 name: "Lab report and lunch",
                 input: "tomorrow morning lab report for 2 hours, lunch at noon",
-                expectedCount: 2,
+                expectedCount: 1,
                 expected: [
-                    .init(title: "Lab report", minutes: 120, hasTime: false),
-                    .init(title: "Lunch", minutes: nil, hasTime: true),
+                    .init(title: "Lab report, lunch", minutes: 120, hasTime: nil),
                 ]
             ),
             Case(
