@@ -410,43 +410,43 @@ private struct MediumSchedAIWidget: View {
     let snapshot: WidgetSnapshot
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(WidgetPalette.panel)
                 .overlay(
-                    VStack(spacing: 10) {
-                        AppGlyph(size: 62)
-                        MicCircleButton(size: 56)
+                    VStack(spacing: 8) {
+                        AppGlyph(size: 54)
+                        MicCircleButton(size: 48)
                     }
-                    .padding(.vertical, 10)
-                    .padding(.leading, 2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
                 )
-                .frame(width: 98)
+                .frame(width: 88)
 
-            VStack(alignment: .leading, spacing: 7) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("NOW")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(WidgetPalette.blue)
 
                 HStack(alignment: .top) {
                     Text(snapshot.nowTitleText)
-                        .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .lineLimit(2)
+                        .font(.system(size: 21, weight: .bold, design: .rounded))
+                        .lineLimit(1)
                         .minimumScaleFactor(0.65)
-                        .fixedSize(horizontal: false, vertical: true)
+                        .allowsTightening(true)
                         .foregroundStyle(WidgetPalette.textPrimary)
                     Spacer(minLength: 4)
                     Image(systemName: "figure.run")
-                        .font(.system(size: 20, weight: .semibold))
+                        .font(.system(size: 18, weight: .semibold))
                         .foregroundStyle(WidgetPalette.blue)
                 }
 
                 HStack(spacing: 6) {
                     Text(snapshot.nowDetailText)
-                        .font(.system(size: 13.5, weight: .semibold))
+                        .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(WidgetPalette.textSecondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                     if let minutes = snapshot.nowDurationMinutes {
                         DurationPill(minutes: minutes)
                     }
@@ -456,44 +456,57 @@ private struct MediumSchedAIWidget: View {
                     .overlay(Color.black.opacity(0.08))
 
                 Text("UP NEXT")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(WidgetPalette.blue)
 
                 if !snapshot.upNextItems.isEmpty {
                     ForEach(Array(snapshot.upNextItems.prefix(2)), id: \.id) { task in
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(bulletColor(for: task))
-                                .frame(width: 7, height: 7)
-                            Text(task.startLine)
-                                .font(.system(size: 11.5, weight: .bold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(WidgetPalette.textSecondary)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.65)
-                                .frame(width: 52, alignment: .leading)
-                            Text(task.title)
-                                .font(.system(size: 13.5, weight: .semibold))
-                                .foregroundStyle(WidgetPalette.textPrimary)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.7)
-                                .allowsTightening(true)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 1)
-                            DurationPill(minutes: task.durationMinutes, compact: true)
-                        }
+                        MediumUpcomingRow(task: task)
                     }
                 } else {
                     Text(snapshot.planItems.isEmpty ? "Add tasks in the app." : "You're clear after this.")
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(WidgetPalette.textSecondary)
                         .lineLimit(1)
                 }
             }
-            .padding(.vertical, 4)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(12)
+        .padding(10)
+    }
+}
+
+private struct MediumUpcomingRow: View {
+    let task: WidgetBridge.SharedTask
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 5) {
+            Circle()
+                .fill(bulletColor(for: task))
+                .frame(width: 7, height: 7)
+
+            Text(task.startLine)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(WidgetPalette.textSecondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: 54, alignment: .leading)
+
+            Text(task.title)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(WidgetPalette.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .allowsTightening(true)
+                .layoutPriority(1)
+
+            Spacer(minLength: 1)
+
+            DurationPill(minutes: task.durationMinutes, compact: true)
+        }
+        .frame(height: 21)
     }
 }
 
