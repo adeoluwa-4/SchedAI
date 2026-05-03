@@ -41,26 +41,11 @@ struct TodayView: View {
     }
 
     private var workWindowBounds: (start: Date, end: Date) {
-        let cal = Calendar.current
-        let day = planningDay
-
-        func combine(_ time: Date) -> Date {
-            let dayComps = cal.dateComponents([.year, .month, .day], from: day)
-            let t = cal.dateComponents([.hour, .minute, .second], from: time)
-            var merged = DateComponents()
-            merged.year = dayComps.year
-            merged.month = dayComps.month
-            merged.day = dayComps.day
-            merged.hour = t.hour
-            merged.minute = t.minute
-            merged.second = t.second
-            return cal.date(from: merged) ?? day
-        }
-
-        return (combine(app.workStart), combine(app.workEnd))
+        app.schedulingWindow(for: planningDay)
     }
 
     private var scheduledInWorkWindow: [TaskItem] {
+        guard app.workWindowEnabled else { return scheduledToday }
         let bounds = workWindowBounds
         return scheduledToday.filter { t in
             guard let s = t.scheduledStart else { return false }
@@ -69,6 +54,7 @@ struct TodayView: View {
     }
 
     private var scheduledOutsideWorkWindow: [TaskItem] {
+        guard app.workWindowEnabled else { return [] }
         let bounds = workWindowBounds
         return scheduledToday.filter { t in
             guard let s = t.scheduledStart else { return false }
@@ -77,7 +63,8 @@ struct TodayView: View {
     }
 
     private var primarySchedule: [TaskItem] {
-        scheduledInWorkWindow.isEmpty ? scheduledToday : scheduledInWorkWindow
+        guard app.workWindowEnabled else { return scheduledToday }
+        return scheduledInWorkWindow.isEmpty ? scheduledToday : scheduledInWorkWindow
     }
 
     var body: some View {
@@ -382,7 +369,7 @@ struct TodayView: View {
                                 .font(.title2)
                                 .fontWeight(.bold)
                             
-                            Text("Schedule them into your work window")
+                            Text(app.workWindowEnabled ? "Schedule them into your work window" : "Schedule them into your day")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
