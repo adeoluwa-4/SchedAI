@@ -93,22 +93,13 @@ struct SettingsView: View {
     // MARK: - Background
     
     private var settingsBackground: some View {
-        ZStack {
-            #if canImport(UIKit)
-            Color(uiColor: scheme == .dark ? .black : .systemGroupedBackground)
-            #else
-            Color(red: 0.96, green: 0.97, blue: 0.99)
-            #endif
-
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(scheme == .dark ? 0.03 : 0.5),
-                    Color.brandBlue.opacity(scheme == .dark ? 0.08 : 0.06)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        }
+        LinearGradient(
+            colors: scheme == .dark
+                ? [Color.black, Color(white: 0.05)]
+                : [Color(red: 0.96, green: 0.97, blue: 0.98), Color.white],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
         .ignoresSafeArea()
     }
 
@@ -425,17 +416,13 @@ private struct SettingsPanel<Content: View>: View {
         content
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(
-                        scheme == .dark
-                        ? Color(red: 0.11, green: 0.12, blue: 0.14)
-                        : Color.white.opacity(0.97)
-                    )
+                    .fill(.ultraThinMaterial)
                     .overlay(
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .strokeBorder(scheme == .dark ? Color.white.opacity(0.09) : Color.black.opacity(0.05), lineWidth: 1)
+                            .stroke(Color.white.opacity(scheme == .dark ? 0.16 : 0.22), lineWidth: 1)
                     )
             )
-            .shadow(color: scheme == .dark ? Color.black.opacity(0.28) : Color.black.opacity(0.05), radius: 18, x: 0, y: 10)
+            .shadow(color: Color.black.opacity(scheme == .dark ? 0.22 : 0.08), radius: 20, x: 0, y: 8)
     }
 }
 
@@ -487,10 +474,7 @@ private struct SettingsGroupCard<Content: View>: View {
         SettingsPanel {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 10) {
-                    Image(systemName: icon)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(color)
-                        .frame(width: 22)
+                    SettingsSectionIcon(systemName: icon, color: color)
 
                     Text(title)
                         .font(.system(size: 17, weight: .bold, design: .rounded))
@@ -507,6 +491,23 @@ private struct SettingsGroupCard<Content: View>: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 10)
             }
+        }
+    }
+}
+
+private struct SettingsSectionIcon: View {
+    let systemName: String
+    let color: Color
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(color.opacity(0.14))
+                .frame(width: 28, height: 28)
+
+            Image(systemName: systemName)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(color)
         }
     }
 }
