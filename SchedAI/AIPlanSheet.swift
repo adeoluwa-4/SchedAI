@@ -15,6 +15,8 @@ struct AIPlanSheet: View {
     @State private var needsInlineDaySelector = false
     @State private var expandedPreviewTaskIDs: Set<UUID> = []
     @State private var hasManualPreviewEdits = false
+    @State private var parseStatusMessage: String? = nil
+    @State private var previewUsedAI = false
     @State private var isPlanning = false
     @State private var animateLoader = false
     @State private var didAutoStartRecording = false
@@ -26,188 +28,223 @@ struct AIPlanSheet: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                VStack(spacing: 16) {
-                    Text("Speak or type your tasks, then preview the plan.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 16) {
+                        Text("Speak or type your tasks, then preview the plan.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
 
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.thinMaterial)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(.quaternary, lineWidth: 1)
-                            )
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(.thinMaterial)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .stroke(.quaternary, lineWidth: 1)
+                                )
 
-                        VStack(spacing: 12) {
-                            ZStack(alignment: .topLeading) {
-                                TextEditor(text: $transcript)
-                                    .font(.body)
-                                    .scrollContentBackground(.hidden)
-                                    .padding(8)
-
-                                if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    Text("Say or type: 'finish essay 60m urgent, then gym 1h'")
+                            VStack(spacing: 12) {
+                                ZStack(alignment: .topLeading) {
+                                    TextEditor(text: $transcript)
                                         .font(.body)
-                                        .foregroundStyle(.secondary)
-                                        .padding(16)
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                            .frame(minHeight: 140)
+                                        .scrollContentBackground(.hidden)
+                                        .padding(8)
 
-                            HStack(spacing: 16) {
-                                Button(action: toggleRecord) {
-                                    ZStack {
-                                        Circle().fill(speech.isRecording ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
-                                            .frame(width: 76, height: 76)
-                                        Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
-                                            .font(.system(size: 28, weight: .bold))
-                                            .foregroundStyle(speech.isRecording ? .red : .blue)
+                                    if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                        Text("Say or type: 'finish essay 60m urgent, then gym 1h'")
+                                            .font(.body)
+                                            .foregroundStyle(.secondary)
+                                            .padding(16)
+                                            .allowsHitTesting(false)
                                     }
                                 }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(speech.isRecording ? "Stop recording" : "Start recording")
-                                .disabled(isPlanning)
+                                .frame(height: parsedPreview.isEmpty ? 260 : 150)
 
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(speech.isRecording ? "Listening…" : (isAuthorized ? "Ready" : "Needs permission"))
-                                        .font(.headline)
-                                    Text(isAuthorized ? "" : "Allow Speech Recognition to use voice planning")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                            }
-                            .padding(.horizontal, 12)
-                        }
-                        .padding(12)
-                    }
+                                HStack(spacing: 16) {
+                                    Button(action: toggleRecord) {
+                                        ZStack {
+                                            Circle().fill(speech.isRecording ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
+                                                .frame(width: 76, height: 76)
+                                            Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                                                .font(.system(size: 28, weight: .bold))
+                                                .foregroundStyle(speech.isRecording ? .red : .blue)
+                                        }
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel(speech.isRecording ? "Stop recording" : "Start recording")
+                                    .disabled(isPlanning)
 
-                    HStack(spacing: 12) {
-                        Button {
-                            transcript = ""
-                            resetPreviewState()
-                        } label: {
-                            Label("Clear", systemImage: "trash")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlanning)
-
-                        Button(action: buildPreview) {
-                            Label("Preview", systemImage: "wand.and.stars")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlanning)
-                    }
-
-                    if !parsedPreview.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("SchedAI detected \(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s"):")
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.secondary)
-
-                            if needsInlineDaySelector {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text("Schedule untimed tasks for:")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(.secondary)
-                                    DatePicker(
-                                        "Plan date",
-                                        selection: $previewDay,
-                                        displayedComponents: [.date]
-                                    )
-                                    .labelsHidden()
-                                }
-                            }
-
-                            Text("Planning for \(day(previewDay))")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            ForEach(Array(parsedPreview.indices), id: \.self) { idx in
-                                let task = parsedPreview[idx]
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack(alignment: .top, spacing: 8) {
-                                        Text(task.title)
-                                            .font(.body)
-                                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                                        Text(scheduleSummary(task))
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        Text(speech.isRecording ? "Listening…" : (isAuthorized ? "Ready" : "Needs permission"))
+                                            .font(.headline)
+                                        Text(isAuthorized ? "" : "Allow Speech Recognition to use voice planning")
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
-                                            .multilineTextAlignment(.trailing)
-
-                                        Button(expandedPreviewTaskIDs.contains(task.id) ? "Done" : "Edit") {
-                                            if expandedPreviewTaskIDs.contains(task.id) {
-                                                expandedPreviewTaskIDs.remove(task.id)
-                                            } else {
-                                                expandedPreviewTaskIDs.insert(task.id)
-                                            }
-                                        }
-                                        .font(.caption.weight(.semibold))
-                                        .buttonStyle(.bordered)
                                     }
-
-                                    if expandedPreviewTaskIDs.contains(task.id) {
-                                        VStack(alignment: .leading, spacing: 8) {
-                                            TextField("Task", text: previewTitleBinding(at: idx))
-                                                .textFieldStyle(.roundedBorder)
-                                                .textInputAutocapitalization(.sentences)
-
-                                            Picker("Priority", selection: previewPriorityBinding(at: idx)) {
-                                                ForEach(TaskPriority.allCases, id: \.self) { level in
-                                                    Text(level.displayName).tag(level)
-                                                }
-                                            }
-                                            .pickerStyle(.segmented)
-
-                                            DatePicker(
-                                                "Day",
-                                                selection: previewDayBinding(at: idx),
-                                                displayedComponents: [.date]
-                                            )
-
-                                            Toggle("Set specific time", isOn: previewHasTimeBinding(at: idx))
-
-                                            if parsedPreview[idx].scheduledStart != nil {
-                                                DatePicker(
-                                                    "Time",
-                                                    selection: previewTimeBinding(at: idx),
-                                                    displayedComponents: [.hourAndMinute]
-                                                )
-                                            }
-                                        }
-                                        .padding(.top, 4)
-                                    }
+                                    Spacer()
                                 }
-                                .padding(.vertical, 4)
+                                .padding(.horizontal, 12)
                             }
+                            .padding(12)
+                        }
 
-                            Button(action: confirmPlan) {
-                                Text("Confirm Plan")
+                        HStack(spacing: 12) {
+                            Button {
+                                transcript = ""
+                                resetPreviewState()
+                            } label: {
+                                Label("Clear", systemImage: "trash")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlanning)
+
+                            Button {
+                                Task { await buildPreview() }
+                            } label: {
+                                Label("Preview", systemImage: "wand.and.stars")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.borderedProminent)
-                            .disabled(isPlanning)
+                            .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlanning)
                         }
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .fill(.thinMaterial)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .stroke(.quaternary, lineWidth: 1)
-                        )
-                    }
 
-                    Spacer(minLength: 0)
+                        if !parsedPreview.isEmpty {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("SchedAI detected \(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s"):")
+                                    .font(.subheadline.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+
+                                if let parseStatusMessage {
+                                    Text(parseStatusMessage)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if !previewUsedAI {
+                                    Button {
+                                        Task { await improvePreviewWithAI() }
+                                    } label: {
+                                        Label("Improve with AI", systemImage: "sparkles")
+                                            .frame(maxWidth: .infinity)
+                                    }
+                                    .font(.subheadline.weight(.semibold))
+                                    .buttonStyle(.bordered)
+                                    .disabled(isPlanning)
+
+                                    Text("Preview is free/offline. Use AI only if the result looks wrong.")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
+                                }
+
+                                if needsInlineDaySelector {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Schedule untimed tasks for:")
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(.secondary)
+                                        DatePicker(
+                                            "Plan date",
+                                            selection: $previewDay,
+                                            displayedComponents: [.date]
+                                        )
+                                        .labelsHidden()
+                                    }
+                                }
+
+                                Text("Planning for \(day(previewDay))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                ForEach(Array(parsedPreview.indices), id: \.self) { idx in
+                                    let task = parsedPreview[idx]
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        HStack(alignment: .top, spacing: 8) {
+                                            Text(task.title)
+                                                .font(.body)
+                                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                            Text(scheduleSummary(task))
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .multilineTextAlignment(.trailing)
+
+                                            Button(expandedPreviewTaskIDs.contains(task.id) ? "Done" : "Edit") {
+                                                if expandedPreviewTaskIDs.contains(task.id) {
+                                                    expandedPreviewTaskIDs.remove(task.id)
+                                                } else {
+                                                    expandedPreviewTaskIDs.insert(task.id)
+                                                }
+                                            }
+                                            .font(.caption.weight(.semibold))
+                                            .buttonStyle(.bordered)
+                                        }
+
+                                        if expandedPreviewTaskIDs.contains(task.id) {
+                                            VStack(alignment: .leading, spacing: 8) {
+                                                TextField("Task", text: previewTitleBinding(at: idx))
+                                                    .textFieldStyle(.roundedBorder)
+                                                    .textInputAutocapitalization(.sentences)
+
+                                                Picker("Priority", selection: previewPriorityBinding(at: idx)) {
+                                                    ForEach(TaskPriority.allCases, id: \.self) { level in
+                                                        Text(level.displayName).tag(level)
+                                                    }
+                                                }
+                                                .pickerStyle(.segmented)
+
+                                                DatePicker(
+                                                    "Day",
+                                                    selection: previewDayBinding(at: idx),
+                                                    displayedComponents: [.date]
+                                                )
+
+                                                Toggle("Set specific time", isOn: previewHasTimeBinding(at: idx))
+
+                                                if parsedPreview[idx].scheduledStart != nil {
+                                                    DatePicker(
+                                                        "Time",
+                                                        selection: previewTimeBinding(at: idx),
+                                                        displayedComponents: [.hourAndMinute]
+                                                    )
+                                                }
+                                            }
+                                            .padding(.top, 4)
+                                        }
+                                    }
+                                    .padding(.vertical, 4)
+                                }
+                            }
+
+                            .padding(12)
+                            .background(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(.thinMaterial)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(.quaternary, lineWidth: 1)
+                            )
+                        }
+
+                        Spacer(minLength: parsedPreview.isEmpty ? 0 : 92)
+                    }
+                    .padding(16)
                 }
-                .padding(16)
+                .scrollDismissesKeyboard(.interactively)
+                .safeAreaInset(edge: .bottom) {
+                    if !parsedPreview.isEmpty {
+                        Button(action: confirmPlan) {
+                            Text("Confirm Plan")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(isPlanning)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 10)
+                        .padding(.bottom, 8)
+                        .background(.bar)
+                    }
+                }
 
                 if isPlanning {
                     ZStack {
@@ -308,10 +345,30 @@ struct AIPlanSheet: View {
         }
     }
 
-    private func buildPreview() {
+    private func buildPreview() async {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
-        let items = OfflineNLP.parseSafely(text)
+
+        applyParseResult(AIService.parseTasksOffline(from: text, now: Date()), for: text)
+    }
+
+    private func improvePreviewWithAI() async {
+        let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+
+        isPlanning = true
+        animateLoader = true
+        defer {
+            isPlanning = false
+            animateLoader = false
+        }
+
+        let result = await AIService.improveTasksWithAI(from: text, now: Date(), planningDate: app.planningDate)
+        applyParseResult(result, for: text)
+    }
+
+    private func applyParseResult(_ result: TaskParseResult, for text: String) {
+        let items = result.tasks
 
         let base: [TaskItem]
         if items.isEmpty {
@@ -330,6 +387,8 @@ struct AIPlanSheet: View {
         previewBase = base
         expandedPreviewTaskIDs.removeAll()
         hasManualPreviewEdits = false
+        previewUsedAI = result.source == .ai
+        parseStatusMessage = result.message ?? (previewUsedAI ? "AI improved this preview." : "Offline preview. No credits used.")
         parsedPreview = autoPlace(base, on: previewDay)
     }
 
@@ -361,6 +420,8 @@ struct AIPlanSheet: View {
         needsInlineDaySelector = false
         expandedPreviewTaskIDs.removeAll()
         hasManualPreviewEdits = false
+        parseStatusMessage = nil
+        previewUsedAI = false
     }
 
     private func autoPlace(_ tasks: [TaskItem], on day: Date) -> [TaskItem] {
@@ -381,10 +442,11 @@ struct AIPlanSheet: View {
         let planningDays = Array(Set(working.compactMap(\.targetDay))).sorted()
         for planningDay in planningDays {
             let externalBusy = CalendarManager.shared.busyIntervals(on: planningDay) ?? []
+            let window = app.schedulingWindow(for: planningDay)
             _ = Scheduler.planToday(
                 tasks: &working,
-                workStart: app.workStart,
-                workEnd: app.workEnd,
+                workStart: window.start,
+                workEnd: window.end,
                 day: planningDay,
                 externalBusyIntervals: externalBusy
             )
