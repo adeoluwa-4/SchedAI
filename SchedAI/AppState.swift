@@ -24,6 +24,9 @@ final class AppState: ObservableObject {
         static let lastResetDay = "lastResetDay"
         static let calendarSyncEnabled = "calendarSyncEnabled"
         static let userDisplayName = "userDisplayName"
+        static let workWindowEnabled = "workWindowEnabled"
+        static let workStart = "workStart"
+        static let workEnd = "workEnd"
     }
 
     private enum WidgetBridge {
@@ -65,11 +68,23 @@ final class AppState: ObservableObject {
     }
 
     @Published var workStart: Date = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date())! {
-        didSet { validateWorkWindow() }
+        didSet {
+            validateWorkWindow()
+            UserDefaults.standard.set(workStart, forKey: DefaultsKey.workStart)
+        }
     }
 
     @Published var workEnd: Date = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date())! {
-        didSet { validateWorkWindow() }
+        didSet {
+            validateWorkWindow()
+            UserDefaults.standard.set(workEnd, forKey: DefaultsKey.workEnd)
+        }
+    }
+
+    @Published var workWindowEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(workWindowEnabled, forKey: DefaultsKey.workWindowEnabled)
+        }
     }
 
     @Published var theme: AppTheme {
@@ -136,6 +151,10 @@ final class AppState: ObservableObject {
         self.reminderLeadMinutes = (defaults.object(forKey: DefaultsKey.reminderLeadMinutes) as? Int) ?? 5
         self.calendarSyncEnabled = (defaults.object(forKey: DefaultsKey.calendarSyncEnabled) as? Bool) ?? false
         self.userDisplayName = defaults.string(forKey: DefaultsKey.userDisplayName)
+        self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? true
+        self.workStart = (defaults.object(forKey: DefaultsKey.workStart) as? Date) ?? workStart
+        self.workEnd = (defaults.object(forKey: DefaultsKey.workEnd) as? Date) ?? workEnd
+        validateWorkWindow()
 
         _ = restore()
         persistWidgetData()
@@ -177,6 +196,32 @@ final class AppState: ObservableObject {
                 workEnd = adjusted
             }
         }
+    }
+
+    func schedulingWindow(for day: Date) -> (start: Date, end: Date) {
+        let cal = Calendar.current
+        let baseDay = cal.startOfDay(for: day)
+
+        func combine(_ time: Date) -> Date {
+            let dayComps = cal.dateComponents([.year, .month, .day], from: baseDay)
+            let timeComps = cal.dateComponents([.hour, .minute, .second], from: time)
+            var merged = DateComponents()
+            merged.year = dayComps.year
+            merged.month = dayComps.month
+            merged.day = dayComps.day
+            merged.hour = timeComps.hour
+            merged.minute = timeComps.minute
+            merged.second = timeComps.second
+            return cal.date(from: merged) ?? baseDay
+        }
+
+        guard workWindowEnabled else {
+            let start = combine(cal.date(bySettingHour: 0, minute: 0, second: 0, of: baseDay) ?? baseDay)
+            let end = combine(cal.date(bySettingHour: 23, minute: 59, second: 0, of: baseDay) ?? baseDay)
+            return (start, end)
+        }
+
+        return (combine(workStart), combine(workEnd))
     }
 
     // MARK: - Permissions / feature hydration
@@ -334,10 +379,11 @@ final class AppState: ObservableObject {
     func planToday(for day: Date = Date()) {
         planningDate = Calendar.current.startOfDay(for: day)
         let externalBusy = CalendarManager.shared.busyIntervals(on: planningDate) ?? []
+        let window = schedulingWindow(for: planningDate)
         lastPlanOverflow = Scheduler.planToday(
             tasks: &tasks,
-            workStart: workStart,
-            workEnd: workEnd,
+            workStart: window.start,
+            workEnd: window.end,
             day: planningDate,
             externalBusyIntervals: externalBusy
         )
@@ -354,6 +400,7 @@ final class AppState: ObservableObject {
     func planUnscheduledOnly(for day: Date = Date()) {
         planningDate = Calendar.current.startOfDay(for: day)
         let externalBusy = CalendarManager.shared.busyIntervals(on: planningDate) ?? []
+        let window = schedulingWindow(for: planningDate)
 
         var tempPinned: [UUID] = []
         for i in tasks.indices where !tasks[i].isCompleted {
@@ -365,8 +412,8 @@ final class AppState: ObservableObject {
 
         lastPlanOverflow = Scheduler.planToday(
             tasks: &tasks,
-            workStart: workStart,
-            workEnd: workEnd,
+            workStart: window.start,
+            workEnd: window.end,
             day: planningDate,
             externalBusyIntervals: externalBusy
         )
@@ -395,11 +442,12 @@ final class AppState: ObservableObject {
         for dayOffset in 0..<count {
             guard let day = cal.date(byAdding: .day, value: dayOffset, to: cal.startOfDay(for: start)) else { continue }
             let externalBusy = CalendarManager.shared.busyIntervals(on: day) ?? []
+            let window = schedulingWindow(for: day)
 
             let overflow = Scheduler.planToday(
                 tasks: &tasks,
-                workStart: workStart,
-                workEnd: workEnd,
+                workStart: window.start,
+                workEnd: window.end,
                 day: day,
                 externalBusyIntervals: externalBusy
             )
