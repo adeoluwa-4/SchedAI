@@ -106,6 +106,7 @@ struct TaskDetailView: View {
     private func suggestedPinnedStart() -> Date {
         let cal = Calendar.current
         let now = roundedToNext15(Date())
+        guard app.workWindowEnabled else { return now }
 
         func combineToday(_ time: Date) -> Date {
             let dayComps = cal.dateComponents([.year, .month, .day], from: now)
