@@ -17,6 +17,18 @@ struct OfflineNLP {
             "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
             "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12
         ]
+        static let ordinalDayWordMap: [String: Int] = [
+            "first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5,
+            "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
+            "eleventh": 11, "twelfth": 12, "thirteenth": 13, "fourteenth": 14,
+            "fifteenth": 15, "sixteenth": 16, "seventeenth": 17, "eighteenth": 18,
+            "nineteenth": 19, "twentieth": 20, "twenty first": 21,
+            "twenty second": 22, "twenty third": 23, "twenty fourth": 24,
+            "twenty fifth": 25, "twenty sixth": 26, "twenty seventh": 27,
+            "twenty eighth": 28, "twenty ninth": 29, "thirtieth": 30,
+            "thirty first": 31
+        ]
+        static let ordinalDayWordPattern = #"first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|twenty(?:\s|-)?first|twenty(?:\s|-)?second|twenty(?:\s|-)?third|twenty(?:\s|-)?fourth|twenty(?:\s|-)?fifth|twenty(?:\s|-)?sixth|twenty(?:\s|-)?seventh|twenty(?:\s|-)?eighth|twenty(?:\s|-)?ninth|thirtieth|thirty(?:\s|-)?first"#
 
         // Recurrence
         static let everyDayRegex = try! NSRegularExpression(pattern: #"(?i)\bevery\s+day\b"#)
@@ -69,7 +81,8 @@ struct OfflineNLP {
         static let dayOfWeekRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?((?:next|this|coming)\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"#)
         static let relativeDayRegex = try! NSRegularExpression(pattern: #"(?i)\bin\s+(\d+)\s*(day|days|week|weeks)\b"#)
         static let relativeFromNowRegex = try! NSRegularExpression(pattern: #"(?i)\b(\d+)\s*(day|days|week|weeks)\s+from\s+now\b"#)
-        static let weekdayOrdinalRegex = try! NSRegularExpression(pattern: #"(?i)\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+(\d{1,2})(?:st|nd|rd|th)?\b"#)
+        static let weekdayOrdinalRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+(\d{1,2})(?:st|nd|rd|th)?\b"#)
+        static let weekdayOrdinalWordRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+("# + ordinalDayWordPattern + #")\b"#)
         static let tomorrowVariantsRegex = try! NSRegularExpression(pattern: #"(?i)\b(tomorrow|tommorow|tomorow|tmrw|tommorrow|tommporw)\b"#)
         static let nextMonthRegex = try! NSRegularExpression(pattern: #"(?i)\bnext\s+month\b"#)
 
@@ -159,7 +172,7 @@ struct OfflineNLP {
             pattern: #"(?i)\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?(\d+(?:\.\d+)?)\s*(h|hr|hrs|hours?|m|min|mins|minutes?)\b"#
         )
         static let rangeRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:till|to|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
+            pattern: #"(?i)\b(?:from\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:till|until|to|-)\s*(?:about|around|near)?\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
         )
         static let explicitTimeRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:at|by|around|about|near)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
@@ -174,7 +187,7 @@ struct OfflineNLP {
             pattern: #"(?i)^(.*?\bfor\s+\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b)\s+([a-z].*\b\d{1,2}\s*(?:till|to|-)\s*\d{1,2}\b.*)$"#
         )
         static let rangeAndDurationCleanupRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by|around|about|near|until|till)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:(?:at|by|around|about|near|until|till)\s+)?(?:midnight|noon)\b"#
+            pattern: #"(?i)\b(?:from\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|until|to|-)\s*(?:about|around|near)?\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by|around|about|near|until|till)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:(?:at|by|around|about|near|until|till)\s+)?(?:midnight|noon)\b"#
         )
         static let relativeWindowRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:in|within|over)\s+(?:the\s+)?next\s+(\d+(?:\.\d+)?)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)\b"#
@@ -184,6 +197,9 @@ struct OfflineNLP {
         )
         static let relativeDatePhraseRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:today|tomorrow|tommorow|tomorow|tommorrow|tmrw|tommporw|next\s+month|next\s+week|next\s+year|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|coming\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|\d+\s*(?:day|days|week|weeks)\s+from\s+now|in\s+\d+\s*(?:day|days|week|weeks)|(?:on\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|(?:on\s+)?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+\d{1,2}(?:st|nd|rd|th)?)\b"#
+        )
+        static let relativeWeekdayOrdinalWordPhraseRegex = try! NSRegularExpression(
+            pattern: #"(?i)\b(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+("# + Cache.ordinalDayWordPattern + #")\b"#
         )
     }
 
@@ -247,6 +263,7 @@ struct OfflineNLP {
 
         var tasks: [TaskItem] = []
         var previousTaskStart: Date? = nil
+        var previousTaskTitle: String? = nil
         var dayContext: Date? = nil
         let globalContext = normalizeInput(rawText)
 
@@ -261,7 +278,11 @@ struct OfflineNLP {
                 globalContext: globalContext
             )
             let priorityResult = extractPriority(from: parsedChunk)
-            let title = extractStepTitle(from: priorityResult.cleaned)
+            let title = carrySharedActionTitle(
+                extractStepTitle(from: priorityResult.cleaned),
+                from: priorityResult.cleaned,
+                previousTitle: previousTaskTitle
+            )
             guard !title.isEmpty else { continue }
 
             let estimated = max(5, timing.duration ?? 30)
@@ -275,12 +296,15 @@ struct OfflineNLP {
                 end = Calendar.current.date(byAdding: .minute, value: estimated, to: start)
             }
 
-            if let start {
+            if let end {
+                previousTaskStart = end
+            } else if let start {
                 previousTaskStart = start
             }
             if let targetDay {
                 dayContext = targetDay
             }
+            previousTaskTitle = title
 
             let task = TaskItem(
                 title: title,
@@ -394,6 +418,7 @@ struct OfflineNLP {
 
             let startHour = resolveHour(
                 rawHour: sh,
+                minute: sm,
                 ampm: sap,
                 context: working,
                 previousTaskStart: previousTaskStart,
@@ -401,6 +426,7 @@ struct OfflineNLP {
             )
             var endHour = resolveHour(
                 rawHour: eh,
+                minute: em,
                 ampm: eap ?? sap,
                 context: working,
                 previousTaskStart: previousTaskStart,
@@ -441,6 +467,7 @@ struct OfflineNLP {
             let ap = (untilMatch.range(at: 3).location != NSNotFound) ? ns.substring(with: untilMatch.range(at: 3)).lowercased() : nil
             let hour24 = resolveHour(
                 rawHour: h,
+                minute: m,
                 ampm: ap,
                 context: working,
                 previousTaskStart: previousTaskStart,
@@ -472,6 +499,7 @@ struct OfflineNLP {
             let ap = (explicit.range(at: 3).location != NSNotFound) ? ns.substring(with: explicit.range(at: 3)).lowercased() : nil
             let hour24 = resolveHour(
                 rawHour: h,
+                minute: m,
                 ampm: ap,
                 context: working,
                 previousTaskStart: previousTaskStart,
@@ -485,6 +513,7 @@ struct OfflineNLP {
             let ap = ns.substring(with: bare.range(at: 3)).lowercased()
             let hour24 = resolveHour(
                 rawHour: h,
+                minute: m,
                 ampm: ap,
                 context: working,
                 previousTaskStart: previousTaskStart,
@@ -526,6 +555,7 @@ struct OfflineNLP {
 
     private static func resolveHour(
         rawHour: Int,
+        minute: Int,
         ampm: String?,
         context: String,
         previousTaskStart: Date?,
@@ -561,14 +591,20 @@ struct OfflineNLP {
             return hour + 12
         }
 
-        let prevHour = previousTaskStart.map { Calendar.current.component(.hour, from: $0) }
-        if let prevHour, prevHour >= 12, hour <= 11 {
-            return (hour == 12) ? 12 : hour + 12
-        }
+        if let previousTaskStart {
+            let cal = Calendar.current
+            let prevHour = cal.component(.hour, from: previousTaskStart)
+            let prevMinute = cal.component(.minute, from: previousTaskStart)
+            let candidateMinuteOfDay = hour * 60 + minute
+            let previousMinuteOfDay = prevHour * 60 + prevMinute
 
-        // If a morning task was already parsed, later unspecified times are usually afternoon/evening.
-        if let prevHour, prevHour < 12, hour <= prevHour, hour <= 11 {
-            return (hour == 12) ? 12 : hour + 12
+            if prevHour >= 12, hour <= 11 {
+                return (hour == 12) ? 12 : hour + 12
+            }
+
+            if prevHour < 12, hour <= 11 {
+                return candidateMinuteOfDay >= previousMinuteOfDay ? hour : hour + 12
+            }
         }
 
         let merged = local + " " + global
@@ -612,12 +648,30 @@ struct OfflineNLP {
             range: NSRange(location: 0, length: strippedNS.length),
             withTemplate: " "
         )
+        stripped = StepRegex.relativeWeekdayOrdinalWordPhraseRegex.stringByReplacingMatches(
+            in: stripped,
+            range: NSRange(location: 0, length: (stripped as NSString).length),
+            withTemplate: " "
+        )
         stripped = stripped.replacingOccurrences(of: #"(?i)\bbefore\s+(?:bed|sleep)\b"#, with: " ", options: .regularExpression)
         stripped = stripped.replacingOccurrences(of: #"(?i)\bbetween\b"#, with: " ", options: .regularExpression)
         stripped = stripped.replacingOccurrences(of: #"(?i)\bin\s+the\s+next\b"#, with: " ", options: .regularExpression)
         stripped = stripped.replacingOccurrences(of: #"(?i)\bfor\s+walk\b"#, with: "for a walk", options: .regularExpression)
         stripped = stripped.replacingOccurrences(of: #"(?i)\bgo\s+walk\b"#, with: "go for a walk", options: .regularExpression)
         return cleanedTitle(from: stripped)
+    }
+
+    private static func carrySharedActionTitle(_ title: String, from rawChunk: String, previousTitle: String?) -> String {
+        let chunk = normalizeInput(rawChunk).lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        guard chunk.hasPrefix("for "), let previousTitle else { return title }
+
+        let previous = previousTitle.lowercased()
+        let reusablePrefixes = ["enroll for", "register for", "sign up for", "apply for"]
+        guard let prefix = reusablePrefixes.first(where: { previous.hasPrefix($0 + " ") }) else {
+            return title
+        }
+
+        return cleanedTitle(from: "\(prefix) \(title)")
     }
 
     private static func enforceNonOverlappingSchedule(_ tasks: inout [TaskItem]) {
@@ -878,6 +932,11 @@ struct OfflineNLP {
 
         // Convert spelled-out duration numbers: "two hours", "three minutes"
         s = replaceNumberWordsInDurationContexts(s)
+        s = s.replacingOccurrences(
+            of: #"(?i)\b(?:head|heading)\s+out\s+(?:the\s+)?house\s+by\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s+to\s+go\s+to\s+church\s+be\s+back\s+home\s+(?:around|about|near|by|at)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)"#,
+            with: "church from $1 to $2",
+            options: .regularExpression
+        )
         s = collapseRepeatedWords(in: s)
 
         s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -1536,6 +1595,24 @@ struct OfflineNLP {
         }
 
         if baseDay == nil {
+            let regex = Cache.weekdayOrdinalWordRegex
+            let ns = working as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            if let match = regex.firstMatch(in: working, range: range) {
+                let dayName = ns.substring(with: match.range(at: 1))
+                let ordinal = ns.substring(with: match.range(at: 2))
+
+                if let weekday = weekdayIndex(for: dayName),
+                   let dayNum = ordinalDayNumber(from: ordinal),
+                   let resolved = dateFor(weekday: weekday, dayOfMonth: dayNum, reference: now) {
+                    baseDay = resolved
+                    explicitDay = true
+                    removeMatch(match.range)
+                }
+            }
+        }
+
+        if baseDay == nil {
             let regex = Cache.dayOfWeekRegex
             let ns = working as NSString
             let range = NSRange(location: 0, length: ns.length)
@@ -1654,6 +1731,15 @@ struct OfflineNLP {
         case "saturday": return 7
         default: return nil
         }
+    }
+
+    private static func ordinalDayNumber(from phrase: String) -> Int? {
+        let key = phrase
+            .lowercased()
+            .replacingOccurrences(of: "-", with: " ")
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return Cache.ordinalDayWordMap[key]
     }
 
     private static func dateFor(qualifier: String?, weekday: Int, reference: Date) -> Date? {
@@ -2372,10 +2458,13 @@ struct OfflineNLP {
 
     private static func cleanedTitle(from text: String) -> String {
         var t = text
+        let originalTitleText = normalizeInput(text).lowercased()
 
         let fillers = [
             "i have to", "i need to", "i gotta", "gotta",
             "need to", "have to", "i have", "i need", "i wanna", "i want to",
+            "i'm gonna", "im gonna", "i am gonna", "i'm going to", "im going to", "i am going to",
+            "gonna", "going to",
             "then", "and then", "after that", "next", "thank", "than", "them"
         ]
         for filler in fillers {
@@ -2431,6 +2520,7 @@ struct OfflineNLP {
         t = t.replacingOccurrences(of: #"\s*,\s*"#, with: ", ", options: .regularExpression)
         t = t.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
         t = t.trimmingCharacters(in: .whitespacesAndNewlines)
+        let namesAfterWith = capitalizedNamesAfterWith(in: t)
 
         // Strip trailing glue words repeatedly (e.g., "study for", "call mom to")
         let trailingGlue = Set(["for", "to", "at", "by", "from", "in", "on", "of", "with", "and", "then"])
@@ -2445,13 +2535,83 @@ struct OfflineNLP {
             t = "head to work"
         }
 
+        if let structured = structuredCalendarTitle(original: originalTitleText, cleaned: t) {
+            return structured
+        }
+
         // Keep titles in a predictable sentence case for UI consistency.
         if let first = t.first {
             let head = String(first).uppercased()
             let tail = String(t.dropFirst())
             t = head + tail
         }
+        for name in namesAfterWith {
+            let escaped = NSRegularExpression.escapedPattern(for: name.lowercased())
+            let pattern = #"(?i)\bwith\s+"# + escaped + #"\b"#
+            t = t.replacingOccurrences(of: pattern, with: "with \(name)", options: .regularExpression)
+        }
 
         return t
+    }
+
+    private static func capitalizedNamesAfterWith(in text: String) -> [String] {
+        let pattern = #"\bwith\s+([A-Z][A-Za-z'-]{1,}(?:\s+[A-Z][A-Za-z'-]{1,})?)\b"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let ns = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
+        return matches.compactMap { match in
+            guard match.range(at: 1).location != NSNotFound else { return nil }
+            return ns.substring(with: match.range(at: 1))
+        }
+    }
+
+    private static func structuredCalendarTitle(original: String, cleaned: String) -> String? {
+        let title = cleaned
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if title.range(of: #"\bwake\s+up\b"#, options: .regularExpression) != nil {
+            return "Wake Up"
+        }
+
+        if title.contains("grocery shopping") || title.range(of: #"\bgo\s+grocery\b"#, options: .regularExpression) != nil {
+            return "Grocery Shopping"
+        }
+
+        if original.contains("gonna do homework")
+            || original.contains("i'm doing homework")
+            || original.contains("im doing homework")
+            || title == "do homework"
+            || title.hasPrefix("do homework ")
+            || title == "doing homework"
+            || title.hasPrefix("doing homework ")
+            || title == "homework"
+            || title.hasPrefix("homework from") {
+            return "Homework"
+        }
+
+        if title.contains("meal prep") {
+            return "Meal Prep"
+        }
+
+        if title.range(of: #"\b(?:head|heading|go)\s+out\s+(?:the\s+)?house\b"#, options: .regularExpression) != nil {
+            return "Leave Home"
+        }
+
+        if title.contains("go to church") || title == "church" {
+            return "Church"
+        }
+
+        if title.range(of: #"\bbe\s+back\s+home\b|\breturn\s+home\b"#, options: .regularExpression) != nil {
+            return "Return Home"
+        }
+
+        if title.range(of: #"\bbe\s+in\s+bed\b|\bgo\s+to\s+bed\b|\bgo\s+sleep\b|\bgo\s+to\s+sleep\b"#, options: .regularExpression) != nil
+            || title == "bed"
+            || title == "sleep" {
+            return "Bedtime"
+        }
+
+        return nil
     }
 }
