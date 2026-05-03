@@ -10,6 +10,7 @@ struct AIAddTasksSheet: View {
     @State private var input: String = ""
     @State private var isParsing: Bool = false
     @State private var parsedPreview: [TaskItem] = []
+    @State private var parseStatusMessage: String? = nil
 
     var body: some View {
         NavigationStack {
@@ -25,13 +26,22 @@ struct AIAddTasksSheet: View {
 
                 HStack(spacing: 12) {
                     Button {
-                        parsePreview()
+                        Task { await parsePreview() }
                     } label: {
-                        Label(isParsing ? "Parsing…" : "Preview", systemImage: "sparkles")
+                        Label("Preview", systemImage: "eye")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
                     .disabled(isParsing)
+
+                    Button {
+                        Task { await improvePreviewWithAI() }
+                    } label: {
+                        Label(isParsing ? "Using AI…" : "Improve", systemImage: "sparkles")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isParsing || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     Button {
                         addAllAndDismiss()
@@ -43,6 +53,18 @@ struct AIAddTasksSheet: View {
                     .disabled(parsedPreview.isEmpty)
                 }
                 .padding(.horizontal, 16)
+
+                if let parseStatusMessage {
+                    Text(parseStatusMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                } else {
+                    Text("Preview is free/offline. Use Improve only if you want AI to fix the result.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                }
 
                 if parsedPreview.isEmpty {
                     VStack(spacing: 6) {
@@ -88,6 +110,10 @@ struct AIAddTasksSheet: View {
             }
             .navigationTitle("Add Tasks")
             .navigationBarTitleDisplayMode(.inline)
+            .onChange(of: input) { _, _ in
+                parsedPreview = []
+                parseStatusMessage = nil
+            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
@@ -96,11 +122,25 @@ struct AIAddTasksSheet: View {
         }
     }
 
-    private func parsePreview() {
+    private func parsePreview() async {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        let result = AIService.parseTasksOffline(from: trimmed, now: Date())
+        parsedPreview = result.tasks
+        parseStatusMessage = "Offline preview. No credits used."
+    }
+
+    private func improvePreviewWithAI() async {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
         isParsing = true
-        let parsed = OfflineNLP.parseSafely(input)
-        parsedPreview = parsed
-        isParsing = false
+        defer { isParsing = false }
+
+        let result = await AIService.improveTasksWithAI(from: trimmed, now: Date(), planningDate: app.planningDate)
+        parsedPreview = result.tasks
+        parseStatusMessage = result.message ?? (result.source == .ai ? "AI improved this preview." : "Offline preview. No credits used.")
     }
 
     private func addAllAndDismiss() {
