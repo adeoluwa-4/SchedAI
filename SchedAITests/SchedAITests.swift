@@ -49,8 +49,8 @@ struct SchedAITests {
         #expect(tasks[1].title == "Study")
         #expect(tasks[2].title == "Play fifa")
         #expect(tasks[3].title == "Go for a walk")
-        #expect(tasks[4].title == "Do homework")
-        #expect(tasks[5].title == "Bed")
+        #expect(tasks[4].title == "Homework")
+        #expect(tasks[5].title == "Bedtime")
         #expect(tasks[1].estimatedMinutes == 180)
         #expect(tasks[3].estimatedMinutes == 15)
         #expect(tasks[4].estimatedMinutes == 120)
@@ -83,11 +83,11 @@ struct SchedAITests {
         let input = "I will wake up at 12 PM and do laundry at one for two hours play FIFA three till six then eat dinner at 7:30 and after that go to bed at midnight"
         let tasks = OfflineNLP.parseSafely(input)
         #expect(tasks.count == 5)
-        #expect(tasks[0].title == "Wake up")
+        #expect(tasks[0].title == "Wake Up")
         #expect(tasks[1].title == "Do laundry")
         #expect(tasks[2].title == "Play fifa")
         #expect(tasks[3].title == "Eat dinner")
-        #expect(tasks[4].title == "Go to bed")
+        #expect(tasks[4].title == "Bedtime")
 
         let cal = Calendar.current
         let h0 = tasks[0].scheduledStart.map { cal.component(.hour, from: $0) }
@@ -116,9 +116,9 @@ struct SchedAITests {
         #expect(tasks.map(\.title) == [
             "Get donuts",
             "Head to work",
-            "Do homework",
+            "Homework",
             "Bible reading",
-            "Be back home"
+            "Return Home"
         ])
 
         let cal = Calendar.current
@@ -131,6 +131,100 @@ struct SchedAITests {
         #expect(tasks[3].scheduledStart.map { cal.component(.hour, from: $0) } == 15)
         #expect(tasks[4].scheduledStart.map { cal.component(.hour, from: $0) } == 16)
         #expect(tasks[4].scheduledStart.map { cal.component(.minute, from: $0) } == 30)
+    }
+
+    @Test func offlineNlpStructuresCasualSpeechForCalendar() async throws {
+        let now = fixedDate(2026, 5, 2, 23, 54)
+        let input = "Tomorrow I'm gonna wake up at 6 AM then I'm gonna go grocery shopping at 7:30 then I'm gonna do homework from 8:15 till about 9:40 then head out the house by 10:15 to go to church be back home around one then I'm doing homework until four then meal prep until 8:30 then be in bed at nine"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 7)
+        guard tasks.count == 7 else { return }
+
+        #expect(tasks.map(\.title) == [
+            "Wake Up",
+            "Grocery Shopping",
+            "Homework",
+            "Church",
+            "Homework",
+            "Meal Prep",
+            "Bedtime"
+        ])
+
+        let cal = Calendar.current
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 6)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 7)
+        #expect(tasks[1].scheduledStart.map { cal.component(.minute, from: $0) } == 30)
+        #expect(tasks[2].scheduledStart.map { cal.component(.hour, from: $0) } == 8)
+        #expect(tasks[2].scheduledStart.map { cal.component(.minute, from: $0) } == 15)
+        #expect(tasks[2].scheduledEnd.map { cal.component(.hour, from: $0) } == 9)
+        #expect(tasks[2].scheduledEnd.map { cal.component(.minute, from: $0) } == 40)
+        #expect(tasks[3].scheduledStart.map { cal.component(.hour, from: $0) } == 10)
+        #expect(tasks[3].scheduledEnd.map { cal.component(.hour, from: $0) } == 13)
+        #expect(tasks[4].scheduledStart.map { cal.component(.hour, from: $0) } == 13)
+        #expect(tasks[4].scheduledEnd.map { cal.component(.hour, from: $0) } == 16)
+        #expect(tasks[5].scheduledEnd.map { cal.component(.hour, from: $0) } == 20)
+        #expect(tasks[5].scheduledEnd.map { cal.component(.minute, from: $0) } == 30)
+        #expect(tasks[6].scheduledStart.map { cal.component(.hour, from: $0) } == 21)
+    }
+
+    @Test func offlineNlpCarriesEnrollmentContextAcrossCourses() async throws {
+        let now = fixedDate(2026, 5, 2, 12, 0)
+        let input = "Remind me on Monday the fourth to enroll for Jen Ba 205 and for management 596"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        #expect(tasks.map(\.title) == [
+            "Enroll for jen ba 205",
+            "Enroll for management 596"
+        ])
+
+        let cal = Calendar.current
+        #expect(tasks[0].targetDay.map { cal.component(.day, from: $0) } == 4)
+        #expect(tasks[1].targetDay.map { cal.component(.day, from: $0) } == 4)
+        #expect(tasks[0].scheduledStart == nil)
+        #expect(tasks[1].scheduledStart == nil)
+    }
+
+    @Test func aiServiceMapsStructuredDraftsToTaskItems() async throws {
+        let drafts = [
+            TaskDraft(
+                title: "Enroll for management 596",
+                estimatedMinutes: 30,
+                priority: "high",
+                targetDayISO8601: "2026-05-04",
+                scheduledStartISO8601: nil,
+                scheduledEndISO8601: nil,
+                isPinned: false,
+                notes: nil
+            ),
+            TaskDraft(
+                title: "Bible reading",
+                estimatedMinutes: 45,
+                priority: "medium",
+                targetDayISO8601: nil,
+                scheduledStartISO8601: "2026-05-04T20:00:00.000Z",
+                scheduledEndISO8601: nil,
+                isPinned: true,
+                notes: nil
+            )
+        ]
+
+        let tasks = AIService.taskItems(from: drafts)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+        #expect(tasks[0].title == "Enroll for management 596")
+        #expect(tasks[0].priority == .high)
+        #expect(tasks[0].scheduledStart == nil)
+        #expect(tasks[0].targetDay != nil)
+        #expect(tasks[1].title == "Bible reading")
+        #expect(tasks[1].estimatedMinutes == 45)
+        #expect(tasks[1].scheduledStart != nil)
+        #expect(tasks[1].scheduledEnd != nil)
+        #expect(tasks[1].isPinned)
     }
 
     @Test func offlineNlpKeepsClubMeetingTogether() async throws {
