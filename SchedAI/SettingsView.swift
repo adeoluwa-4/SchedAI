@@ -221,17 +221,36 @@ struct SettingsView: View {
 
             SettingsDivider()
 
-            NavigationLink {
-                WorkWindowPicker(start: $app.workStart, end: $app.workEnd)
-            } label: {
-                SettingsLinkRow(
+            SettingsToggleRow(
+                icon: "clock.badge.checkmark",
+                title: "Use Work Window",
+                subtitle: app.workWindowEnabled ? "Auto-schedule inside selected hours" : "Auto-schedule across the full day",
+                isOn: $app.workWindowEnabled,
+                color: .indigo
+            )
+
+            SettingsDivider()
+
+            if app.workWindowEnabled {
+                NavigationLink {
+                    WorkWindowPicker(start: $app.workStart, end: $app.workEnd)
+                } label: {
+                    SettingsLinkRow(
+                        icon: "clock",
+                        title: "Work Window",
+                        subtitle: workWindowText,
+                        color: .indigo
+                    )
+                }
+                .buttonStyle(.plain)
+            } else {
+                SettingsInfoRow(
                     icon: "clock",
                     title: "Work Window",
                     subtitle: workWindowText,
                     color: .indigo
                 )
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -313,7 +332,8 @@ struct SettingsView: View {
     // MARK: - Helpers
     
     private var workWindowText: String {
-        "\(app.workStart.formatted(date: .omitted, time: .shortened)) – \(app.workEnd.formatted(date: .omitted, time: .shortened))"
+        guard app.workWindowEnabled else { return "Off - full-day scheduling" }
+        return "\(app.workStart.formatted(date: .omitted, time: .shortened)) – \(app.workEnd.formatted(date: .omitted, time: .shortened))"
     }
     
     private var calendarToggleBinding: Binding<Bool> {
