@@ -33,8 +33,8 @@ struct NLPTestRunner {
                     .init(title: "Study", minutes: 180, hasTime: true),
                     .init(title: "Play fifa", minutes: nil, hasTime: true),
                     .init(title: "Go for a walk", minutes: 15, hasTime: true),
-                    .init(title: "Do homework", minutes: 120, hasTime: true),
-                    .init(title: "Bed", minutes: nil, hasTime: true),
+                    .init(title: "Homework", minutes: 120, hasTime: true),
+                    .init(title: "Bedtime", minutes: nil, hasTime: true),
                 ]
             ),
             Case(
@@ -62,9 +62,32 @@ struct NLPTestRunner {
                 expected: [
                     .init(title: "Get donuts", minutes: nil, hasTime: true),
                     .init(title: "Head to work", minutes: nil, hasTime: true),
-                    .init(title: "Do homework", minutes: 120, hasTime: true),
+                    .init(title: "Homework", minutes: 120, hasTime: true),
                     .init(title: "Bible reading", minutes: nil, hasTime: true),
-                    .init(title: "Be back home", minutes: nil, hasTime: true),
+                    .init(title: "Return Home", minutes: nil, hasTime: true),
+                ]
+            ),
+            Case(
+                name: "Casual speech becomes calendar titles",
+                input: "Tomorrow I'm gonna wake up at 6 AM then I'm gonna go grocery shopping at 7:30 then I'm gonna do homework from 8:15 till about 9:40 then head out the house by 10:15 to go to church be back home around one then I'm doing homework until four then meal prep until 8:30 then be in bed at nine",
+                expectedCount: 7,
+                expected: [
+                    .init(title: "Wake Up", minutes: nil, hasTime: true),
+                    .init(title: "Grocery Shopping", minutes: nil, hasTime: true),
+                    .init(title: "Homework", minutes: 85, hasTime: true),
+                    .init(title: "Church", minutes: 165, hasTime: true),
+                    .init(title: "Homework", minutes: nil, hasTime: true),
+                    .init(title: "Meal Prep", minutes: nil, hasTime: true),
+                    .init(title: "Bedtime", minutes: nil, hasTime: true),
+                ]
+            ),
+            Case(
+                name: "Enrollment reminder shares date and action",
+                input: "Remind me on Monday the fourth to enroll for Jen Ba 205 and for management 596",
+                expectedCount: 2,
+                expected: [
+                    .init(title: "Enroll for jen ba 205", minutes: nil, hasTime: false),
+                    .init(title: "Enroll for management 596", minutes: nil, hasTime: false),
                 ]
             ),
             Case(
@@ -97,7 +120,7 @@ struct NLPTestRunner {
                 expectedCount: 2,
                 expected: [
                     .init(title: "Quiz review", minutes: 45, hasTime: true),
-                    .init(title: "Sleep", minutes: nil, hasTime: true),
+                    .init(title: "Bedtime", minutes: nil, hasTime: true),
                 ]
             ),
             Case(
@@ -286,7 +309,7 @@ struct NLPTestRunner {
                 input: "bed by midnight",
                 expectedCount: 1,
                 expected: [
-                    .init(title: "Bed", minutes: nil, hasTime: true),
+                    .init(title: "Bedtime", minutes: nil, hasTime: true),
                 ]
             ),
             Case(
@@ -436,7 +459,7 @@ struct NLPTestRunner {
                 expectedCount: 2,
                 expected: [
                     .init(title: "Brush teeth", minutes: nil, hasTime: false),
-                    .init(title: "Sleep", minutes: nil, hasTime: false),
+                    .init(title: "Bedtime", minutes: nil, hasTime: false),
                 ]
             ),
             Case(
