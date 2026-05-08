@@ -40,6 +40,18 @@ struct TodayView: View {
             .sorted { ($0.scheduledStart ?? .distantPast) < ($1.scheduledStart ?? .distantPast) }
     }
 
+    private var missedPreviousTasks: [TaskItem] {
+        guard isPlanningToday else { return [] }
+        let cal = Calendar.current
+        return app.tasks
+            .filter { !$0.isCompleted }
+            .filter { task in
+                guard let end = task.scheduledEnd else { return false }
+                return end < planningDay && !cal.isDate(end, inSameDayAs: planningDay)
+            }
+            .sorted { ($0.scheduledEnd ?? .distantPast) < ($1.scheduledEnd ?? .distantPast) }
+    }
+
     private var workWindowBounds: (start: Date, end: Date) {
         app.schedulingWindow(for: planningDay)
     }
@@ -88,7 +100,7 @@ struct TodayView: View {
                         .padding(.top, 8)
 
                     // MARK: - Main Content
-                    if scheduledToday.isEmpty {
+                    if scheduledToday.isEmpty && missedPreviousTasks.isEmpty {
                         emptyStateView
                             .padding(.horizontal, 20)
                             .padding(.top, 20)
@@ -409,6 +421,10 @@ struct TodayView: View {
     
     private var timelineContent: some View {
         VStack(spacing: 16) {
+            if !missedPreviousTasks.isEmpty {
+                missedReviewSection
+            }
+
             // Now/Next Cards
             if let current = currentTask() {
                 NowTaskCard(task: current, onComplete: {
@@ -438,6 +454,10 @@ struct TodayView: View {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                     app.toggleComplete(id: task.id)
                                 }
+                            }, onReschedule: {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    app.rescheduleTaskForLater(id: task.id)
+                                }
                             })
                         }
                     }
@@ -457,9 +477,44 @@ struct TodayView: View {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                                     app.toggleComplete(id: task.id)
                                 }
+                            }, onReschedule: {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                    app.rescheduleTaskForLater(id: task.id)
+                                }
                             })
                         }
                     }
+                }
+            }
+        }
+    }
+
+    private var missedReviewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Needs Review")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 12) {
+                ForEach(missedPreviousTasks) { task in
+                    MissedTaskCard(
+                        task: task,
+                        onDone: {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                app.toggleComplete(id: task.id)
+                            }
+                        },
+                        onReschedule: {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                app.rescheduleTaskForLater(id: task.id)
+                            }
+                        },
+                        onSkip: {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                app.deleteTask(id: task.id)
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -920,40 +975,68 @@ private struct UpcomingTasksCard: View {
 private struct ModernTaskCard: View {
     let task: TaskItem
     let onComplete: () -> Void
+    let onReschedule: () -> Void
+
+    private var isMissed: Bool {
+        task.isMissed()
+    }
     
     var body: some View {
         ModernCard {
-            HStack(spacing: 16) {
-                Button(action: onComplete) {
-                    Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.title2)
-                        .foregroundStyle(task.isCompleted ? .green : .secondary)
-                }
-                .buttonStyle(.plain)
-                
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(task.title)
-                        .font(.body)
-                        .fontWeight(.semibold)
-                        .strikethrough(task.isCompleted)
-                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 16) {
+                    Button(action: onComplete) {
+                        Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                            .font(.title2)
+                            .foregroundStyle(task.isCompleted ? .green : .secondary)
+                    }
+                    .buttonStyle(.plain)
                     
-                    HStack(spacing: 12) {
-                        if let start = task.scheduledStart, let end = task.scheduledEnd {
-                            Label(timeRange(start, end), systemImage: "clock")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Text(task.title)
+                                .font(.body)
+                                .fontWeight(.semibold)
+                                .strikethrough(task.isCompleted)
+                                .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                                .lineLimit(2)
+
+                            if isMissed {
+                                Text("Missed")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.orange)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Capsule().fill(Color.orange.opacity(0.16)))
+                            }
                         }
                         
-                        Label("\(task.estimatedMinutes)m", systemImage: "timer")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        priorityBadge(task.priority)
+                        HStack(spacing: 12) {
+                            if let start = task.scheduledStart, let end = task.scheduledEnd {
+                                Label(timeRange(start, end), systemImage: "clock")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Label("\(task.estimatedMinutes)m", systemImage: "timer")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            
+                            priorityBadge(task.priority)
+                        }
                     }
+                    
+                    Spacer()
                 }
-                
-                Spacer()
+
+                if isMissed {
+                    Button(action: onReschedule) {
+                        Label("Move Later Today", systemImage: "arrow.clockwise")
+                            .font(.caption.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ModernSecondaryButtonStyle())
+                }
             }
             .padding(16)
         }
@@ -986,6 +1069,77 @@ private struct ModernTaskCard: View {
             .background(
                 Capsule()
                     .fill(config.1.opacity(0.15))
+            )
+    }
+}
+
+private struct MissedTaskCard: View {
+    let task: TaskItem
+    let onDone: () -> Void
+    let onReschedule: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        ModernCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.title3)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 2)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(task.title)
+                            .font(.body)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.primary)
+
+                        if let start = task.scheduledStart, let end = task.scheduledEnd {
+                            Label(timeRange(start, end), systemImage: "clock")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer()
+                }
+
+                HStack(spacing: 10) {
+                    Button("Done", action: onDone)
+                        .buttonStyle(MissedActionButtonStyle(color: .green))
+
+                    Button("Reschedule", action: onReschedule)
+                        .buttonStyle(MissedActionButtonStyle(color: .blue))
+
+                    Button("Skip", action: onSkip)
+                        .buttonStyle(MissedActionButtonStyle(color: .secondary))
+                }
+            }
+            .padding(16)
+        }
+    }
+
+    private func timeRange(_ start: Date, _ end: Date) -> String {
+        let dayFormatter = DateFormatter()
+        dayFormatter.dateFormat = "EEE, MMM d"
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))–\(timeFormatter.string(from: end))"
+    }
+}
+
+private struct MissedActionButtonStyle: ButtonStyle {
+    let color: Color
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(color)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(color.opacity(configuration.isPressed ? 0.2 : 0.12))
             )
     }
 }
