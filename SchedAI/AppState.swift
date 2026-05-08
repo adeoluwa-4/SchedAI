@@ -27,6 +27,7 @@ final class AppState: ObservableObject {
         static let workWindowEnabled = "workWindowEnabled"
         static let workStart = "workStart"
         static let workEnd = "workEnd"
+        static let unfinishedTaskPolicy = "unfinishedTaskPolicy"
     }
 
     private enum WidgetBridge {
@@ -84,6 +85,12 @@ final class AppState: ObservableObject {
     @Published var workWindowEnabled: Bool {
         didSet {
             UserDefaults.standard.set(workWindowEnabled, forKey: DefaultsKey.workWindowEnabled)
+        }
+    }
+
+    @Published var unfinishedTaskPolicy: UnfinishedTaskPolicy {
+        didSet {
+            UserDefaults.standard.set(unfinishedTaskPolicy.rawValue, forKey: DefaultsKey.unfinishedTaskPolicy)
         }
     }
 
@@ -152,6 +159,8 @@ final class AppState: ObservableObject {
         self.calendarSyncEnabled = (defaults.object(forKey: DefaultsKey.calendarSyncEnabled) as? Bool) ?? false
         self.userDisplayName = defaults.string(forKey: DefaultsKey.userDisplayName)
         self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? true
+        let unfinishedRaw = defaults.string(forKey: DefaultsKey.unfinishedTaskPolicy) ?? UnfinishedTaskPolicy.askMe.rawValue
+        self.unfinishedTaskPolicy = UnfinishedTaskPolicy(rawValue: unfinishedRaw) ?? .askMe
         self.workStart = (defaults.object(forKey: DefaultsKey.workStart) as? Date) ?? workStart
         self.workEnd = (defaults.object(forKey: DefaultsKey.workEnd) as? Date) ?? workEnd
         validateWorkWindow()
@@ -370,6 +379,16 @@ final class AppState: ObservableObject {
         if remindersEnabled { rescheduleReminders() }
     }
 
+    func rescheduleTaskForLater(id: UUID, from now: Date = Date()) {
+        guard let i = tasks.firstIndex(where: { $0.id == id }) else { return }
+        let day = Calendar.current.startOfDay(for: now)
+        tasks[i].isPinned = false
+        tasks[i].targetDay = day
+        tasks[i].scheduledStart = nil
+        tasks[i].scheduledEnd = nil
+        planUnscheduledOnly(for: day)
+    }
+
     // MARK: - Planning
 
     func setPlanningDate(_ day: Date) {
@@ -385,6 +404,7 @@ final class AppState: ObservableObject {
             workStart: window.start,
             workEnd: window.end,
             day: planningDate,
+            now: Date(),
             externalBusyIntervals: externalBusy
         )
 
@@ -415,6 +435,7 @@ final class AppState: ObservableObject {
             workStart: window.start,
             workEnd: window.end,
             day: planningDate,
+            now: Date(),
             externalBusyIntervals: externalBusy
         )
 
@@ -449,6 +470,7 @@ final class AppState: ObservableObject {
                 workStart: window.start,
                 workEnd: window.end,
                 day: day,
+                now: Date(),
                 externalBusyIntervals: externalBusy
             )
             totalOverflow += overflow
@@ -578,9 +600,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// NEW behavior:
-    /// - Clear schedule times from tasks scheduled before today (replanning stays clean)
-    /// - Remove tasks that were created yesterday AND were scheduled yesterday (so "today" starts fresh)
+    /// Daily cleanup for unfinished tasks.
     private func performDailyRolloverIfNeeded(now: Date) {
         let cal = Calendar.current
         let todayStart = cal.startOfDay(for: now)
@@ -607,17 +627,26 @@ final class AppState: ObservableObject {
             let wasCreatedYesterday = cal.isDate(t.createdAt, inSameDayAs: lastActiveDayStart)
             let wasScheduledYesterday = originalStart.map { cal.isDate($0, inSameDayAs: lastActiveDayStart) } ?? false
 
-            // 1) Clear schedules that are in the past so planning starts clean
             if let s = originalStart, s < todayStart {
-                t.scheduledStart = nil
-                t.scheduledEnd = nil
+                switch unfinishedTaskPolicy {
+                case .askMe:
+                    break
+                case .carryOver:
+                    t.isPinned = false
+                    t.targetDay = todayStart
+                    t.scheduledStart = nil
+                    t.scheduledEnd = nil
+                    changed = true
+                case .autoClear:
+                    changed = true
+                    NotificationManager.cancelReminder(for: t.id)
+                    if calendarSyncEnabled {
+                        CalendarManager.shared.deleteEvent(for: t.id)
+                    }
+                    continue
+                }
+            } else if wasCreatedYesterday && wasScheduledYesterday && unfinishedTaskPolicy == .autoClear {
                 changed = true
-            }
-
-            // 2) Remove yesterday’s “today tasks” so they don’t carry over
-            if wasCreatedYesterday && wasScheduledYesterday {
-                changed = true
-
                 NotificationManager.cancelReminder(for: t.id)
                 if calendarSyncEnabled {
                     CalendarManager.shared.deleteEvent(for: t.id)
