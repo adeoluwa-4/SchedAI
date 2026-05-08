@@ -6,6 +6,7 @@ struct Scheduler {
         workStart: Date,
         workEnd: Date,
         day: Date = Date(),
+        now: Date = Date(),
         bufferMinutes: Int = 6,
         externalBusyIntervals: [DateInterval] = []
     ) -> Int {
@@ -41,8 +42,13 @@ struct Scheduler {
             return cal.date(from: merged) ?? day
         }
 
-        let startOfWindow = combine(workStart)
+        let rawStartOfWindow = combine(workStart)
         let endOfWindow   = combine(workEnd)
+        let todayStart = cal.startOfDay(for: now)
+        let futureStart = now.addingTimeInterval(TimeInterval(max(10, bufferMinutes) * 60))
+        let startOfWindow = cal.isDate(planningDay, inSameDayAs: todayStart)
+            ? max(rawStartOfWindow, futureStart)
+            : rawStartOfWindow
 
         // Keep pinned tasks. Clear any previously auto-scheduled tasks so re-planning can reshuffle.
         for i in tasks.indices {
