@@ -273,6 +273,10 @@ struct SettingsView: View {
 
             SettingsDivider()
 
+            SettingsUnfinishedTaskRow(selected: $app.unfinishedTaskPolicy)
+
+            SettingsDivider()
+
             SettingsToggleRow(
                 icon: "calendar.badge.plus",
                 title: "Sync to Calendar",
@@ -673,6 +677,45 @@ private struct SettingsThemeRow: View {
             Picker("Theme", selection: $selected) {
                 ForEach(AppTheme.allCases) { theme in
                     Text(theme.title).tag(theme)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .tint(Color.brandBlue)
+        }
+        .padding(.vertical, 12)
+        .onChange(of: selected) { _, _ in
+            Haptics.light()
+        }
+    }
+}
+
+private struct SettingsUnfinishedTaskRow: View {
+    @Binding var selected: UnfinishedTaskPolicy
+
+    var body: some View {
+        HStack(spacing: 11) {
+            SettingsIcon(systemName: "checklist.unchecked", color: .yellow)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Unfinished Tasks")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(selected.subtitle)
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 8)
+
+            Picker("Unfinished Tasks", selection: $selected) {
+                ForEach(UnfinishedTaskPolicy.allCases) { policy in
+                    Text(policy.title).tag(policy)
                 }
             }
             .labelsHidden()
