@@ -22,6 +22,30 @@ enum TaskPriority: String, CaseIterable, Codable, Hashable {
     }
 }
 
+enum UnfinishedTaskPolicy: String, CaseIterable, Codable, Hashable, Identifiable {
+    case askMe
+    case carryOver
+    case autoClear
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .askMe: return "Ask Me"
+        case .carryOver: return "Carry Over"
+        case .autoClear: return "Auto-clear"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .askMe: return "Review missed tasks before removing them"
+        case .carryOver: return "Move unfinished tasks to the next day"
+        case .autoClear: return "Remove unfinished tasks overnight"
+        }
+    }
+}
+
 struct TaskItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var title: String
@@ -41,6 +65,11 @@ struct TaskItem: Identifiable, Codable, Hashable {
 
     var scheduledStart: Date? = nil
     var scheduledEnd: Date? = nil
+
+    func isMissed(now: Date = Date()) -> Bool {
+        guard !isCompleted, let end = scheduledEnd else { return false }
+        return end < now
+    }
 
     init(
         id: UUID = UUID(),
