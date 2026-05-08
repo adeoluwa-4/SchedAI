@@ -610,6 +610,25 @@ struct SchedAITests {
         #expect(untimedStarts[0] >= fixedDate(2026, 4, 10, 10, 0))
     }
 
+    @Test func schedulerDoesNotPlaceTodayTasksBeforeNow() async throws {
+        let now = fixedDate(2026, 5, 6, 17, 11)
+        var tasks: [TaskItem] = [
+            TaskItem(title: "Untimed today", estimatedMinutes: 30, priority: .medium, isPinned: false, targetDay: now)
+        ]
+
+        _ = Scheduler.planToday(
+            tasks: &tasks,
+            workStart: fixedDate(2026, 5, 6, 8, 0),
+            workEnd: fixedDate(2026, 5, 6, 22, 0),
+            day: now,
+            now: now,
+            bufferMinutes: 0
+        )
+
+        let start = try #require(tasks.first?.scheduledStart)
+        #expect(start >= fixedDate(2026, 5, 6, 17, 21))
+    }
+
     @Test func schedulerRespectsTargetDayAssignments() async throws {
         let cal = Calendar.current
         let today = fixedDate(2026, 4, 17, 0, 0)
