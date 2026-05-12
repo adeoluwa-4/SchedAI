@@ -12,6 +12,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     @Published var isAuthorized = false
     @Published var isRecording  = false
     @Published var transcript   = ""
+    @Published var errorMessage: String? = nil
 
     private let recognizer = SFSpeechRecognizer()
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -32,14 +33,36 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     /// Returns `true` if authorized, `false` otherwise.
     @MainActor
     func ensureAuthorized() async -> Bool {
+        refreshAuthorizationStatus()
         if isAuthorized { return true }
 
-        let speechOK = await requestSpeechAuthorization()
-        let micOK    = await requestMicPermission()
+        let speechOK: Bool
+        if SFSpeechRecognizer.authorizationStatus() == .authorized {
+            speechOK = true
+        } else {
+            speechOK = await requestSpeechAuthorization()
+        }
+
+        let micOK: Bool
+        if AVAudioSession.sharedInstance().recordPermission == .granted {
+            micOK = true
+        } else {
+            micOK = await requestMicPermission()
+        }
 
         let ok = speechOK && micOK
         self.isAuthorized = ok
+        self.errorMessage = ok ? nil : "Speech Recognition and Microphone access are required for voice planning."
         return ok
+    }
+
+    @MainActor
+    func refreshAuthorizationStatus() {
+        isAuthorized = SFSpeechRecognizer.authorizationStatus() == .authorized
+            && AVAudioSession.sharedInstance().recordPermission == .granted
+        if isAuthorized {
+            errorMessage = nil
+        }
     }
 
     private func requestSpeechAuthorization() async -> Bool {
@@ -62,19 +85,33 @@ final class SpeechRecognizer: NSObject, ObservableObject {
 
     func start(update: @escaping (String) -> Void) {
         guard !isRecording else { return }
-        guard isAuthorized else { return }
+        guard isAuthorized else {
+            DispatchQueue.main.async {
+                self.errorMessage = "Voice planning needs Speech Recognition and Microphone access."
+            }
+            return
+        }
+        guard let recognizer, recognizer.isAvailable else {
+            DispatchQueue.main.async {
+                self.errorMessage = "Speech Recognition is not available right now."
+            }
+            return
+        }
 
         updateHandler = update
         transcript = ""
+        errorMessage = nil
 
         do {
             try configureAudioSession()
         } catch {
+            errorMessage = "Could not start the microphone."
             return
         }
 
-        request = SFSpeechAudioBufferRecognitionRequest()
-        request?.shouldReportPartialResults = true
+        let audioRequest = SFSpeechAudioBufferRecognitionRequest()
+        audioRequest.shouldReportPartialResults = true
+        request = audioRequest
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
@@ -85,7 +122,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         }
 
         recognitionTask?.cancel()
-        recognitionTask = recognizer?.recognitionTask(with: request!) { [weak self] result, error in
+        recognitionTask = recognizer.recognitionTask(with: audioRequest) { [weak self] result, error in
             guard let self else { return }
 
             if let result = result {
@@ -103,12 +140,29 @@ final class SpeechRecognizer: NSObject, ObservableObject {
                 // Stop audio without clearing transcript.
                 self.audioEngine.stop()
                 self.audioEngine.inputNode.removeTap(onBus: 0)
-                DispatchQueue.main.async { self.isRecording = false }
+                self.request?.endAudio()
+                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+                DispatchQueue.main.async {
+                    self.isRecording = false
+                    if error != nil {
+                        self.errorMessage = "Speech Recognition stopped unexpectedly."
+                    }
+                }
             }
         }
 
         audioEngine.prepare()
-        do { try audioEngine.start() } catch { return }
+        do {
+            try audioEngine.start()
+        } catch {
+            audioEngine.inputNode.removeTap(onBus: 0)
+            recognitionTask?.cancel()
+            recognitionTask = nil
+            request = nil
+            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            errorMessage = "Could not start recording."
+            return
+        }
 
         isRecording = true
     }
@@ -120,6 +174,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
         recognitionTask?.finish()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         isRecording = false
         // Do NOT wipe transcript here.
     }
