@@ -6,8 +6,18 @@ struct BigCalendarSheet: View {
 
     @State private var selectedDate: Date = Date()
 
-    private var hasActiveTasks: Bool {
-        app.tasks.contains { !$0.isCompleted }
+    private var hasPlannableTasksForSelectedDate: Bool {
+        app.tasks.contains { task in
+            guard !task.isCompleted else { return false }
+            let cal = Calendar.current
+            if let start = task.scheduledStart {
+                return cal.isDate(start, inSameDayAs: selectedDate)
+            }
+            if let target = task.targetDay {
+                return cal.isDate(target, inSameDayAs: selectedDate)
+            }
+            return true
+        }
     }
 
     var body: some View {
@@ -97,7 +107,7 @@ struct BigCalendarSheet: View {
                     } label: {
                         Label("Plan Day", systemImage: "wand.and.stars")
                     }
-                    .disabled(!hasActiveTasks)
+                    .disabled(!hasPlannableTasksForSelectedDate)
                 }
             }
         }

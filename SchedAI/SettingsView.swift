@@ -290,7 +290,7 @@ struct SettingsView: View {
             SettingsInfoRow(
                 icon: "info.circle",
                 title: "Calendar Status",
-                subtitle: calendarStatusText,
+                subtitle: app.calendarSyncEnabled ? "\(calendarStatusText) - reads busy times and writes SchedAI events" : calendarStatusText,
                 color: .gray
             )
 

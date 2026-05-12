@@ -11,3 +11,6 @@
 *.zip
 GoogleService-Info.plist
 **/GoogleService-Info.plist
+
+# Local scratch project (contains secrets like SupabaseSecrets.xcconfig)
+ios/

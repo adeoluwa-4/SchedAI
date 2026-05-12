@@ -42,6 +42,7 @@ final class AppState: ObservableObject {
         let priorityRaw: String
         let estimatedMinutes: Int
         let isCompleted: Bool
+        let targetDay: Date?
         let scheduledStart: Date?
         let scheduledEnd: Date?
     }
@@ -396,23 +397,15 @@ final class AppState: ObservableObject {
     }
 
     func planToday(for day: Date = Date()) {
-        planningDate = Calendar.current.startOfDay(for: day)
-        let externalBusy = CalendarManager.shared.busyIntervals(on: planningDate) ?? []
-        let window = schedulingWindow(for: planningDate)
-        lastPlanOverflow = Scheduler.planToday(
-            tasks: &tasks,
-            workStart: window.start,
-            workEnd: window.end,
-            day: planningDate,
-            now: Date(),
-            externalBusyIntervals: externalBusy
-        )
+        let targetDay = Calendar.current.startOfDay(for: day)
+        planningDate = targetDay
+        lastPlanOverflow = planSchedule(for: targetDay)
 
         if remindersEnabled {
             rescheduleReminders()
         }
 
-        calendarSyncIfEnabled(day: day, showSuccessMessage: false)
+        calendarSyncIfEnabled(day: targetDay, showSuccessMessage: false)
     }
 
     /// Schedule only currently unscheduled tasks for the selected day.
@@ -459,21 +452,12 @@ final class AppState: ObservableObject {
 
         let cal = Calendar.current
         var totalOverflow = 0
+        var plannedDays: [Date] = []
 
         for dayOffset in 0..<count {
             guard let day = cal.date(byAdding: .day, value: dayOffset, to: cal.startOfDay(for: start)) else { continue }
-            let externalBusy = CalendarManager.shared.busyIntervals(on: day) ?? []
-            let window = schedulingWindow(for: day)
-
-            let overflow = Scheduler.planToday(
-                tasks: &tasks,
-                workStart: window.start,
-                workEnd: window.end,
-                day: day,
-                now: Date(),
-                externalBusyIntervals: externalBusy
-            )
-            totalOverflow += overflow
+            plannedDays.append(day)
+            totalOverflow += planSchedule(for: day)
         }
 
         lastPlanOverflow = totalOverflow
@@ -482,7 +466,31 @@ final class AppState: ObservableObject {
             rescheduleReminders()
         }
 
-        calendarSyncIfEnabled(day: start, showSuccessMessage: false)
+        calendarSyncIfEnabled(days: plannedDays, showSuccessMessage: false)
+    }
+
+    func planSpecificDays(_ days: [Date], focusDay: Date? = nil) {
+        let cal = Calendar.current
+        let normalizedDays = Array(Set(days.map { cal.startOfDay(for: $0) })).sorted()
+        guard !normalizedDays.isEmpty else { return }
+
+        if let focusDay {
+            planningDate = cal.startOfDay(for: focusDay)
+        } else if let firstDay = normalizedDays.first {
+            planningDate = firstDay
+        }
+
+        var totalOverflow = 0
+        for day in normalizedDays {
+            totalOverflow += planSchedule(for: day)
+        }
+        lastPlanOverflow = totalOverflow
+
+        if remindersEnabled {
+            rescheduleReminders()
+        }
+
+        calendarSyncIfEnabled(days: normalizedDays, showSuccessMessage: false)
     }
 
     func planMonth(containing date: Date) {
@@ -505,10 +513,50 @@ final class AppState: ObservableObject {
         calendarSyncIfEnabled(day: day, showSuccessMessage: true)
     }
 
+    private func planSchedule(for day: Date) -> Int {
+        let targetDay = Calendar.current.startOfDay(for: day)
+        let externalBusy = CalendarManager.shared.busyIntervals(on: targetDay) ?? []
+        let window = schedulingWindow(for: targetDay)
+        return Scheduler.planToday(
+            tasks: &tasks,
+            workStart: window.start,
+            workEnd: window.end,
+            day: targetDay,
+            now: Date(),
+            externalBusyIntervals: externalBusy
+        )
+    }
+
+    private func calendarSyncIfEnabled(days: [Date], showSuccessMessage: Bool) {
+        let cal = Calendar.current
+        let normalizedDays = Array(Set(days.map { cal.startOfDay(for: $0) })).sorted()
+        guard !normalizedDays.isEmpty else { return }
+
+        var totalSynced = 0
+        for day in normalizedDays {
+            let previousMessage = calendarSyncMessage
+            calendarSyncIfEnabled(day: day, showSuccessMessage: false)
+            if calendarSyncMessage != previousMessage {
+                return
+            }
+
+            let count = tasks.filter { task in
+                guard !task.isCompleted, let start = task.scheduledStart else { return false }
+                return cal.isDate(start, inSameDayAs: day)
+            }.count
+            totalSynced += count
+        }
+
+        if showSuccessMessage {
+            calendarSyncMessage = "Synced \(totalSynced) task\(totalSynced == 1 ? "" : "s") to your SchedAI calendar."
+        }
+    }
+
     private func calendarSyncIfEnabled(day: Date, showSuccessMessage: Bool) {
         guard calendarSyncEnabled else { return }
 
-        let result = CalendarManager.shared.upsertTodayEvents(from: tasks, day: day)
+        let targetDay = Calendar.current.startOfDay(for: day)
+        let result = CalendarManager.shared.upsertTodayEvents(from: tasks, day: targetDay)
         refreshCalendarConnectionStatus()
 
         switch result {
@@ -557,21 +605,46 @@ final class AppState: ObservableObject {
     // MARK: - Persistence
 
     private var saveURL: URL {
-        let dir = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let fm = FileManager.default
+        let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SchedAI", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("tasks.json")
+    }
+
+    private var legacySaveURL: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("tasks.json")
+    }
+
+    private var protectedWriteOptions: Data.WritingOptions {
+        var options: Data.WritingOptions = [.atomic]
+        #if os(iOS)
+        options.insert(.completeFileProtection)
+        #endif
+        return options
     }
 
     private func persist() {
         guard let data = try? JSONEncoder().encode(tasks) else { return }
-        try? data.write(to: saveURL, options: [.atomic])
+        try? data.write(to: saveURL, options: protectedWriteOptions)
         persistWidgetData()
     }
 
     @discardableResult
     private func restore() -> Bool {
-        guard let data = try? Data(contentsOf: saveURL) else { return false }
-        guard let decoded = try? JSONDecoder().decode([TaskItem].self, from: data) else { return false }
-        tasks = decoded
+        if let data = try? Data(contentsOf: saveURL),
+           let decoded = try? JSONDecoder().decode([TaskItem].self, from: data) {
+            tasks = decoded
+            return true
+        }
+
+        guard let legacyData = try? Data(contentsOf: legacySaveURL),
+              let legacyDecoded = try? JSONDecoder().decode([TaskItem].self, from: legacyData)
+        else { return false }
+
+        tasks = legacyDecoded
+        persist()
         return true
     }
 
@@ -707,6 +780,7 @@ final class AppState: ObservableObject {
                 priorityRaw: task.priority.rawValue,
                 estimatedMinutes: task.estimatedMinutes,
                 isCompleted: task.isCompleted,
+                targetDay: task.targetDay,
                 scheduledStart: task.scheduledStart,
                 scheduledEnd: task.scheduledEnd
             )

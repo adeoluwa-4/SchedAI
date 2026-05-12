@@ -20,9 +20,9 @@ struct Provider: AppIntentTimelineProvider {
 
     func timeline(for configuration: ConfigurationAppIntent, in context: Context) async -> Timeline<SimpleEntry> {
         let now = Date()
-        let entries = (0..<12).map { offset in
-            let date = Calendar.current.date(byAdding: .hour, value: offset, to: now) ?? now
-            return SimpleEntry(date: date, configuration: configuration)
+        let refreshDates = WidgetSnapshot.refreshDates(startingAt: now)
+        let entries = refreshDates.map { date in
+            SimpleEntry(date: date, configuration: configuration)
         }
         return Timeline(entries: entries, policy: .atEnd)
     }
@@ -69,20 +69,6 @@ struct SchedAI_Widget: Widget {
     }
 }
 
-extension ConfigurationAppIntent {
-    fileprivate static var smiley: ConfigurationAppIntent {
-        let intent = ConfigurationAppIntent()
-        intent.favoriteEmoji = "😀"
-        return intent
-    }
-
-    fileprivate static var starEyes: ConfigurationAppIntent {
-        let intent = ConfigurationAppIntent()
-        intent.favoriteEmoji = "🤩"
-        return intent
-    }
-}
-
 private enum WidgetBridge {
     static let appGroupID = "group.me.SchedAI.shared"
     static let tasksKey = "widget_shared_tasks_v1"
@@ -93,6 +79,7 @@ private enum WidgetBridge {
         let priorityRaw: String?
         let estimatedMinutes: Int
         let isCompleted: Bool
+        let targetDay: Date?
         let scheduledStart: Date?
         let scheduledEnd: Date?
     }
@@ -141,6 +128,17 @@ private extension WidgetBridge.SharedTask {
     var bracketStartLine: String {
         guard let start = scheduledStart else { return "[Anytime]" }
         return "[\(start.widgetBracketTime)]"
+    }
+
+    func applies(to date: Date) -> Bool {
+        let calendar = Calendar.current
+        if let scheduledStart {
+            return calendar.isDate(scheduledStart, inSameDayAs: date)
+        }
+        if let targetDay {
+            return calendar.isDate(targetDay, inSameDayAs: date)
+        }
+        return true
     }
 }
 
@@ -229,13 +227,10 @@ private struct WidgetSnapshot {
 
     static func make(for date: Date) -> WidgetSnapshot {
         let allTasks = WidgetBridge.loadTasks()
-        let remaining = allTasks.filter { !$0.isCompleted }
-        let completedCount = allTasks.count - remaining.count
         let calendar = Calendar.current
-
-        let scheduledRemaining = remaining
-            .filter { $0.scheduledStart != nil }
-            .sorted { ($0.scheduledStart ?? .distantFuture) < ($1.scheduledStart ?? .distantFuture) }
+        let todayTasks = allTasks.filter { $0.applies(to: date) }
+        let remaining = todayTasks.filter { !$0.isCompleted }
+        let completedCount = todayTasks.count - remaining.count
 
         let scheduledToday = remaining
             .filter { task in
@@ -261,11 +256,18 @@ private struct WidgetSnapshot {
         let mode: PlanMode
         let items: [WidgetBridge.SharedTask]
 
-        let combined = scheduledRemaining + unscheduled
+        let upcomingScheduled = scheduledToday.filter { task in
+            guard let end = task.resolvedEnd else { return true }
+            return end > date
+        }
+        let combined = upcomingScheduled + unscheduled
 
-        if !combined.isEmpty {
+        if !upcomingScheduled.isEmpty {
             mode = .scheduled
             items = combined
+        } else if !unscheduled.isEmpty {
+            mode = .unscheduled
+            items = unscheduled
         } else {
             mode = .empty
             items = []
@@ -273,7 +275,7 @@ private struct WidgetSnapshot {
 
         return WidgetSnapshot(
             day: date,
-            allCount: allTasks.count,
+            allCount: todayTasks.count,
             completedCount: completedCount,
             remainingCount: remaining.count,
             planMode: mode,
@@ -281,6 +283,21 @@ private struct WidgetSnapshot {
             nextTask: nextTask,
             planItems: items
         )
+    }
+
+    static func refreshDates(startingAt date: Date) -> [Date] {
+        let calendar = Calendar.current
+        let nextHour = calendar.date(byAdding: .hour, value: 1, to: date) ?? date.addingTimeInterval(3600)
+        let boundaries = WidgetBridge.loadTasks()
+            .filter { !$0.isCompleted && $0.applies(to: date) }
+            .flatMap { [$0.scheduledStart, $0.resolvedEnd] }
+            .compactMap { $0 }
+            .filter { $0 > date && calendar.isDate($0, inSameDayAs: date) }
+
+        return Array(Set([date, nextHour] + boundaries))
+            .sorted()
+            .prefix(12)
+            .map { $0 }
     }
 }
 
@@ -906,17 +923,17 @@ private extension Date {
 #Preview(as: .systemSmall) {
     SchedAI_Widget()
 } timeline: {
-    SimpleEntry(date: .now, configuration: .smiley)
+    SimpleEntry(date: .now, configuration: ConfigurationAppIntent())
 }
 
 #Preview(as: .systemMedium) {
     SchedAI_Widget()
 } timeline: {
-    SimpleEntry(date: .now, configuration: .starEyes)
+    SimpleEntry(date: .now, configuration: ConfigurationAppIntent())
 }
 
 #Preview(as: .systemLarge) {
     SchedAI_Widget()
 } timeline: {
-    SimpleEntry(date: .now, configuration: .smiley)
+    SimpleEntry(date: .now, configuration: ConfigurationAppIntent())
 }
