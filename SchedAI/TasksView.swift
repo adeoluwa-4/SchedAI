@@ -9,6 +9,7 @@ struct TasksView: View {
     @State private var showCompleted: Bool = false
     @State private var planMessage: String? = nil
     @State private var planMessageHideWorkItem: DispatchWorkItem? = nil
+    @State private var taskPendingDelete: TaskItem? = nil
     
     private enum TaskFilter: String, CaseIterable {
         case all, unscheduled, scheduled, high
@@ -34,8 +35,15 @@ struct TasksView: View {
     
     private var activeTasks: [TaskItem] { app.tasks.filter { !$0.isCompleted } }
     private var completedTasks: [TaskItem] { app.tasks.filter { $0.isCompleted } }
+    private var planningDay: Date { Calendar.current.startOfDay(for: app.planningDate) }
+    private var planningDayLabel: String {
+        Calendar.current.isDate(planningDay, inSameDayAs: Date()) ? "Today" : shortDate(planningDay)
+    }
+    private var activeTasksForPlanningDay: [TaskItem] {
+        activeTasks.filter { taskAppliesToPlanningDay($0) }
+    }
     private var unscheduledActiveCount: Int {
-        activeTasks.filter { $0.scheduledStart == nil || $0.scheduledEnd == nil }.count
+        activeTasksForPlanningDay.filter { $0.scheduledStart == nil || $0.scheduledEnd == nil }.count
     }
     
     private var displayedActiveTasks: [TaskItem] {
@@ -100,7 +108,7 @@ struct TasksView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom) {
-                if activeTasks.count > 0 {
+                if activeTasksForPlanningDay.count > 0 {
                     planButton
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
@@ -127,6 +135,21 @@ struct TasksView: View {
                         .padding(.horizontal, 20)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+            }
+            .alert("Delete Task?", isPresented: Binding(
+                get: { taskPendingDelete != nil },
+                set: { if !$0 { taskPendingDelete = nil } }
+            )) {
+                Button("Delete", role: .destructive) {
+                    guard let task = taskPendingDelete else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        app.deleteTask(id: task.id)
+                    }
+                    taskPendingDelete = nil
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This will remove \"\(taskPendingDelete?.title ?? "this task")\" from SchedAI and your synced calendar.")
             }
         }
     }
@@ -245,11 +268,7 @@ struct TasksView: View {
                                 }
                             },
                             onEdit: { editingTask = task },
-                            onDelete: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    app.deleteTask(id: task.id)
-                                }
-                            }
+                            onDelete: { taskPendingDelete = task }
                         )
                     }
                 }
@@ -297,11 +316,7 @@ struct TasksView: View {
                                 }
                             },
                             onEdit: { editingTask = task },
-                            onDelete: {
-                                withAnimation(.easeInOut(duration: 0.2)) {
-                                    app.deleteTask(id: task.id)
-                                }
-                            }
+                            onDelete: { taskPendingDelete = task }
                         )
                     }
                 }
@@ -391,15 +406,15 @@ struct TasksView: View {
 
     private var buttonTitle: String {
         if unscheduledActiveCount > 0 {
-            return "Schedule Today (\(unscheduledActiveCount))"
+            return "Schedule \(planningDayLabel) (\(unscheduledActiveCount))"
         }
-        return "Replan Today (\(activeTasks.count))"
+        return "Replan \(planningDayLabel) (\(activeTasksForPlanningDay.count))"
     }
     
     // MARK: - Helpers
 
     private func planActiveTasks() {
-        guard !activeTasks.isEmpty else {
+        guard !activeTasksForPlanningDay.isEmpty else {
             showPlanMessage("Add a task before planning.")
             return
         }
@@ -408,9 +423,9 @@ struct TasksView: View {
         let hadUnscheduledTasks = unscheduledActiveCount > 0
         withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
             if hadUnscheduledTasks {
-                app.planUnscheduledOnly(for: app.planningDate)
+                app.planUnscheduledOnly(for: planningDay)
             } else {
-                app.planToday(for: app.planningDate)
+                app.planToday(for: planningDay)
             }
         }
 
@@ -420,8 +435,25 @@ struct TasksView: View {
         } else if hadUnscheduledTasks {
             showPlanMessage("Unscheduled tasks were placed.")
         } else {
-            showPlanMessage("Today has been replanned.")
+            showPlanMessage(Calendar.current.isDate(planningDay, inSameDayAs: Date()) ? "Today has been replanned." : "\(planningDayLabel) has been replanned.")
         }
+    }
+
+    private func taskAppliesToPlanningDay(_ task: TaskItem) -> Bool {
+        let cal = Calendar.current
+        if let start = task.scheduledStart {
+            return cal.isDate(start, inSameDayAs: planningDay)
+        }
+        if let target = task.targetDay {
+            return cal.isDate(target, inSameDayAs: planningDay)
+        }
+        return true
+    }
+
+    private func shortDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.setLocalizedDateFormatFromTemplate("MMM d")
+        return formatter.string(from: date)
     }
 
     private func showPlanMessage(_ message: String) {
@@ -443,14 +475,14 @@ struct TasksView: View {
     private func addTask() {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        
-        let parsed = OfflineNLP.parseSafely(trimmed)
-        if parsed.isEmpty {
+
+        let result = AIService.parseTasksOffline(from: trimmed, now: Date())
+        if result.tasks.isEmpty {
             app.addTask(title: trimmed)
         } else {
-            parsed.forEach { app.addTask($0) }
+            result.tasks.forEach { app.addTask($0) }
         }
-        
+
         newTitle = ""
         Haptics.medium()
     }
