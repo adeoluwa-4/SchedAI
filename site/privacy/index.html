@@ -66,7 +66,8 @@
           <h2>Calendar access</h2>
           <p>
             If you choose to enable Calendar sync, SchedAI asks for Calendar permission so it can create and update events in a dedicated SchedAI calendar.
-            If you do not turn this on, SchedAI does not write to your Calendar.
+            SchedAI may also read event times from readable calendars to avoid scheduling tasks over existing commitments. It uses those times as busy blocks and does not store event titles from your other calendars.
+            If you do not turn Calendar sync on, SchedAI does not read from or write to your Calendar.
           </p>
         </section>
 
@@ -75,6 +76,14 @@
           <p>
             If you use voice planning, SchedAI asks for Microphone and Speech Recognition permission so spoken input can be turned into text for task planning.
             If you do not use voice planning, SchedAI does not need those permissions.
+          </p>
+        </section>
+
+        <section>
+          <h2>Optional AI parsing</h2>
+          <p>
+            SchedAI can preview tasks on device first. If you choose to improve a preview with AI, the task text you typed or spoke, the planning date, your locale, time zone, and an offline preview are sent to SchedAI's hosted parsing service and processed by OpenAI to return structured tasks.
+            This is used only to provide the task parsing feature. Do not include sensitive information in task text that you do not want processed by the hosted AI service.
           </p>
         </section>
 
@@ -97,7 +106,7 @@
         <section>
           <h2>What SchedAI does not do at launch</h2>
           <p>
-            At launch, SchedAI is designed around on device planning. We do not use ads inside the app.
+            At launch, SchedAI is designed around local planning with optional hosted AI parsing when you choose to use it. We do not use ads inside the app.
             We do not sell your personal information.
             If we add new cloud features later, this policy will be updated before those changes go live.
           </p>
@@ -131,7 +140,7 @@
         <section>
           <h2>Effective date</h2>
           <p>
-            Effective date: April 25, 2026
+            Effective date: May 12, 2026
           </p>
         </section>
       </div>
