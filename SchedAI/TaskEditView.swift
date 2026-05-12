@@ -154,6 +154,7 @@ struct TaskEditView: View {
         } else {
             updated.estimatedMinutes = max(5, estimatedMinutes)
             updated.isPinned = false
+            updated.targetDay = nil
             updated.scheduledStart = nil
             updated.scheduledEnd = nil
         }
