@@ -9,6 +9,7 @@ import Foundation
 import UserNotifications
 
 enum NotificationManager {
+    private static let maximumScheduledReminders = 60
 
     enum AuthorizationState: Equatable {
         case notDetermined
@@ -58,18 +59,27 @@ enum NotificationManager {
     }
 
     /// Schedule reminders N minutes before each scheduled task.
-    static func scheduleReminders(for tasks: [TaskItem], minutesBefore: Int) {
+    @discardableResult
+    static func scheduleReminders(for tasks: [TaskItem], minutesBefore: Int) -> Int {
         let center = UNUserNotificationCenter.current()
+        let now = Date()
+        let scheduleableTasks = tasks
+            .compactMap { task -> (task: TaskItem, triggerDate: Date)? in
+                guard let start = task.scheduledStart else { return nil }
+                let triggerDate = start.addingTimeInterval(TimeInterval(-minutesBefore * 60))
+                guard triggerDate > now else { return nil }
+                return (task, triggerDate)
+            }
+            .sorted { $0.triggerDate < $1.triggerDate }
+            .prefix(maximumScheduledReminders)
 
-        for t in tasks {
+        for item in scheduleableTasks {
+            let t = item.task
             guard let start = t.scheduledStart else { continue }
-
-            let triggerDate = start.addingTimeInterval(TimeInterval(-minutesBefore * 60))
-            guard triggerDate > Date() else { continue }
 
             let comps = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute, .second],
-                from: triggerDate
+                from: item.triggerDate
             )
 
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
@@ -81,7 +91,7 @@ enum NotificationManager {
             content.subtitle = "Starts at \(start.formatted(date: .omitted, time: .shortened))"
             content.body = "Starts in about \(minutesBefore) min (\(t.estimatedMinutes)m)"
             content.sound = .default
-            content.interruptionLevel = t.priority == .high ? .timeSensitive : .active
+            content.interruptionLevel = .active
 
             let req = UNNotificationRequest(
                 identifier: t.id.uuidString,
@@ -89,8 +99,16 @@ enum NotificationManager {
                 trigger: trigger
             )
 
-            center.add(req)
+            center.add(req) { error in
+                #if DEBUG
+                if let error {
+                    print("SchedAI reminder scheduling failed: \(error.localizedDescription)")
+                }
+                #endif
+            }
         }
+
+        return scheduleableTasks.count
     }
 
     private static func reminderDot(for priority: TaskPriority) -> String {
