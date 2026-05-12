@@ -12,7 +12,5 @@ import SwiftUI
 struct SchedAI_WidgetBundle: WidgetBundle {
     var body: some Widget {
         SchedAI_Widget()
-        SchedAI_WidgetControl()
-        SchedAI_WidgetLiveActivity()
     }
 }
