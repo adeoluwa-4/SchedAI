@@ -13,16 +13,28 @@ struct TodayView: View {
     @State private var overflowHideWorkItem: DispatchWorkItem? = nil
     @State private var showCalendar = false
     @State private var showWorkWindowPicker = false
-    @State private var showQuickAdd = false
     @State private var planMessage: String? = nil
     @State private var planMessageHideWorkItem: DispatchWorkItem? = nil
+    @State private var taskPendingSkip: TaskItem? = nil
 
     private var planningDay: Date {
         Calendar.current.startOfDay(for: app.planningDate)
     }
 
     private var activeTaskCount: Int {
-        app.tasks.filter { !$0.isCompleted }.count
+        activeTasksForPlanningDay.count
+    }
+
+    private var activeTasksForPlanningDay: [TaskItem] {
+        app.tasks
+            .filter { !$0.isCompleted }
+            .filter { taskAppliesToPlanningDay($0) }
+    }
+
+    private var completedTasksForPlanningDay: [TaskItem] {
+        app.tasks
+            .filter { $0.isCompleted }
+            .filter { taskAppliesToPlanningDay($0) }
     }
 
     private var isPlanningToday: Bool {
@@ -137,21 +149,6 @@ struct TodayView: View {
             WorkWindowPicker(start: $app.workStart, end: $app.workEnd)
                 .presentationDetents([.medium])
         }
-        .sheet(isPresented: $showQuickAdd) {
-            QuickAddSheet { text in
-                let trimmed = text.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
-                guard !trimmed.isEmpty else { return }
-                let entries = OfflineNLP.splitListEntries(trimmed)
-                let inputs = entries.isEmpty ? [trimmed] : entries
-
-                for input in inputs {
-                    let parsed = OfflineNLP.parseSafely(input)
-                    if parsed.isEmpty { app.addTask(title: input) }
-                    else { parsed.forEach { app.addTask($0) } }
-                }
-                app.planToday(for: planningDay)
-            }
-        }
         .onAppear {
             updateOverflowBanner()
             handleWidgetVoiceRequestIfNeeded()
@@ -177,6 +174,21 @@ struct TodayView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(app.calendarSyncMessage ?? "")
+        }
+        .alert("Skip Task?", isPresented: Binding(
+            get: { taskPendingSkip != nil },
+            set: { if !$0 { taskPendingSkip = nil } }
+        )) {
+            Button("Skip", role: .destructive) {
+                guard let task = taskPendingSkip else { return }
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    app.deleteTask(id: task.id)
+                }
+                taskPendingSkip = nil
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \"\(taskPendingSkip?.title ?? "this task")\" from SchedAI and your synced calendar.")
         }
         .overlay(alignment: .top) {
             if let planMessage {
@@ -230,22 +242,22 @@ struct TodayView: View {
                 
                 StatsCard(
                     icon: "list.bullet",
-                    value: "\(app.tasks.filter { !$0.isCompleted }.count)",
+                    value: "\(activeTaskCount)",
                     label: "Remaining",
                     color: .orange
                 )
                 
                 StatsCard(
                     icon: "checkmark.circle.fill",
-                    value: "\(app.tasks.filter { $0.isCompleted }.count)",
+                    value: "\(completedTasksForPlanningDay.count)",
                     label: "Done",
                     color: .green
                 )
             }
             
             // Progress Bar
-            let totalRemaining = app.tasks.filter { !$0.isCompleted }.count
-            let completedCount = app.tasks.filter { $0.isCompleted }.count
+            let totalRemaining = activeTaskCount
+            let completedCount = completedTasksForPlanningDay.count
             let denom = max(1, totalRemaining + completedCount)
             let progress = Double(completedCount) / Double(denom)
             
@@ -339,7 +351,7 @@ struct TodayView: View {
                             
                             Button {
                                 Haptics.medium()
-                                showQuickAdd.toggle()
+                                openOfflineNLPSheet(autoStartRecording: false)
                             } label: {
                                 Label("Quick Add", systemImage: "plus")
                                     .font(.subheadline)
@@ -377,7 +389,7 @@ struct TodayView: View {
                         }
                         
                         VStack(spacing: 8) {
-                            Text("\(app.tasks.filter { !$0.isCompleted }.count) Tasks Ready")
+                            Text("\(activeTaskCount) Tasks Ready")
                                 .font(.title2)
                                 .fontWeight(.bold)
                             
@@ -401,7 +413,7 @@ struct TodayView: View {
                             
                             Button {
                                 Haptics.medium()
-                                showQuickAdd.toggle()
+                                openOfflineNLPSheet(autoStartRecording: false)
                             } label: {
                                 Label("Add More", systemImage: "plus")
                                     .font(.subheadline)
@@ -456,7 +468,7 @@ struct TodayView: View {
                                 }
                             }, onReschedule: {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    app.rescheduleTaskForLater(id: task.id)
+                                    app.rescheduleTaskForLater(id: task.id, from: planningDay)
                                 }
                             })
                         }
@@ -479,7 +491,7 @@ struct TodayView: View {
                                 }
                             }, onReschedule: {
                                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    app.rescheduleTaskForLater(id: task.id)
+                                    app.rescheduleTaskForLater(id: task.id, from: planningDay)
                                 }
                             })
                         }
@@ -506,13 +518,11 @@ struct TodayView: View {
                         },
                         onReschedule: {
                             withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                app.rescheduleTaskForLater(id: task.id)
+                                app.rescheduleTaskForLater(id: task.id, from: planningDay)
                             }
                         },
                         onSkip: {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                app.deleteTask(id: task.id)
-                            }
+                            taskPendingSkip = task
                         }
                     )
                 }
@@ -550,7 +560,7 @@ struct TodayView: View {
             if !scheduledToday.isEmpty {
                 Button {
                     Haptics.medium()
-                    showQuickAdd.toggle()
+                    openOfflineNLPSheet(autoStartRecording: false)
                 } label: {
                     Label("Add Tasks", systemImage: "plus.circle.fill")
                         .font(.subheadline)
@@ -685,6 +695,17 @@ struct TodayView: View {
     
     private func nextStartDate() -> Date? {
         nextTasks(limit: 1).first?.scheduledStart
+    }
+
+    private func taskAppliesToPlanningDay(_ task: TaskItem) -> Bool {
+        let cal = Calendar.current
+        if let start = task.scheduledStart {
+            return cal.isDate(start, inSameDayAs: planningDay)
+        }
+        if let target = task.targetDay {
+            return cal.isDate(target, inSameDayAs: planningDay)
+        }
+        return true
     }
 }
 
