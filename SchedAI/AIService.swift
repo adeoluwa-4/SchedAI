@@ -36,6 +36,10 @@ struct AIService {
         static let aiParseEndpoint = "SCHEDAI_AI_PARSE_ENDPOINT"
     }
 
+    private enum Limits {
+        static let maxRemoteInputCharacters = 4000
+    }
+
     private struct ParseTasksRequest: Encodable {
         let input: String
         let nowISO8601: String
@@ -83,14 +87,15 @@ struct AIService {
         now: Date = Date(),
         planningDate: Date = Date()
     ) async -> TaskParseResult {
-        let offline = fallbackTasks(from: input, now: now)
+        let safeInput = remoteSafeInput(input)
+        let offline = fallbackTasks(from: safeInput, now: now)
         guard let endpoint = parseEndpoint else {
             return TaskParseResult(tasks: offline, source: .offline, message: nil)
         }
 
         do {
             let drafts = try await extractTasks(
-                from: input,
+                from: safeInput,
                 endpoint: endpoint,
                 now: now,
                 planningDate: planningDate,
@@ -192,7 +197,29 @@ struct AIService {
     private static func cleanURL(_ raw: String) -> URL? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return URL(string: trimmed)
+        guard let url = URL(string: trimmed),
+              let scheme = url.scheme?.lowercased(),
+              let host = url.host,
+              !host.isEmpty
+        else { return nil }
+
+        if scheme == "https" { return url }
+
+        #if DEBUG
+        if scheme == "http", ["localhost", "127.0.0.1", "::1"].contains(host) {
+            return url
+        }
+        #endif
+
+        return nil
+    }
+
+    private static func remoteSafeInput(_ input: String) -> String {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= Limits.maxRemoteInputCharacters {
+            return trimmed
+        }
+        return String(trimmed.prefix(Limits.maxRemoteInputCharacters))
     }
 
     private static func priority(from raw: String?) -> TaskPriority {
