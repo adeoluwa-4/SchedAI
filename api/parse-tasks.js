@@ -1,10 +1,42 @@
 const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
+const DEFAULT_MAX_INPUT_CHARS = 4000;
+const DEFAULT_MAX_TASKS = 30;
+const DEFAULT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const DEFAULT_RATE_LIMIT_REQUESTS = 30;
+
+const rateBuckets = globalThis.__schedaiRateBuckets || new Map();
+globalThis.__schedaiRateBuckets = rateBuckets;
+
+function configuredList(name) {
+  return String(process.env[name] || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+}
+
+function numericEnv(name, fallback) {
+  const value = Number(process.env[name]);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function corsHeaders(req) {
+  const allowedOrigins = configuredList('SCHEDAI_ALLOWED_ORIGINS');
+  const origin = req.headers.origin;
+  const allowOrigin = allowedOrigins.length === 0 || allowedOrigins.includes(origin)
+    ? (origin || '*')
+    : 'null';
+
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Vary': 'Origin',
+  };
+}
 
 const jsonHeaders = {
-  'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-SchedAI-API-Token',
   'Content-Type': 'application/json',
+  'Cache-Control': 'no-store',
 };
 
 const taskSchema = {
@@ -71,8 +103,9 @@ const taskSchema = {
   required: ['tasks', 'needsClarification', 'clarificationQuestion'],
 };
 
-function send(res, status, body) {
+function send(req, res, status, body) {
   res.status(status);
+  Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
   Object.entries(jsonHeaders).forEach(([key, value]) => res.setHeader(key, value));
   res.end(JSON.stringify(body));
 }
@@ -99,6 +132,103 @@ function extractOutputText(response) {
   return null;
 }
 
+function requestKey(req) {
+  const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  return forwardedFor || req.socket?.remoteAddress || 'unknown';
+}
+
+function isRateLimited(req) {
+  const windowMs = numericEnv('SCHEDAI_RATE_LIMIT_WINDOW_MS', DEFAULT_RATE_LIMIT_WINDOW_MS);
+  const maxRequests = numericEnv('SCHEDAI_RATE_LIMIT_REQUESTS', DEFAULT_RATE_LIMIT_REQUESTS);
+  const now = Date.now();
+  const key = requestKey(req);
+  const bucket = (rateBuckets.get(key) || []).filter((timestamp) => now - timestamp < windowMs);
+
+  if (bucket.length >= maxRequests) {
+    rateBuckets.set(key, bucket);
+    return true;
+  }
+
+  bucket.push(now);
+  rateBuckets.set(key, bucket);
+
+  for (const [bucketKey, timestamps] of rateBuckets.entries()) {
+    const active = timestamps.filter((timestamp) => now - timestamp < windowMs);
+    if (active.length === 0) rateBuckets.delete(bucketKey);
+    else rateBuckets.set(bucketKey, active);
+  }
+
+  return false;
+}
+
+function tokenAuthorized(req) {
+  const tokens = configuredList('SCHEDAI_API_TOKENS');
+  if (tokens.length === 0) return true;
+
+  const auth = String(req.headers.authorization || '');
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  const headerToken = String(req.headers['x-schedai-api-token'] || '').trim();
+  return tokens.includes(bearer) || tokens.includes(headerToken);
+}
+
+function clampInt(value, lower, upper, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, lower), upper);
+}
+
+function limitedString(value, maxLength) {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+}
+
+function normalizeOfflinePreview(value) {
+  const maxTasks = numericEnv('SCHEDAI_MAX_TASKS', DEFAULT_MAX_TASKS);
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, maxTasks).map((task) => ({
+    title: limitedString(task?.title, 140) || 'Task',
+    estimatedMinutes: clampInt(task?.estimatedMinutes, 5, 600, 30),
+    priority: ['high', 'medium', 'low'].includes(task?.priority) ? task.priority : 'medium',
+    targetDayISO8601: limitedString(task?.targetDayISO8601, 40),
+    scheduledStartISO8601: limitedString(task?.scheduledStartISO8601, 80),
+    scheduledEndISO8601: limitedString(task?.scheduledEndISO8601, 80),
+    isPinned: Boolean(task?.isPinned),
+    notes: limitedString(task?.notes, 500),
+  }));
+}
+
+function sanitizeParsedResponse(parsed) {
+  const maxTasks = numericEnv('SCHEDAI_MAX_TASKS', DEFAULT_MAX_TASKS);
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.tasks)) {
+    return null;
+  }
+
+  const tasks = parsed.tasks.slice(0, maxTasks).map((task) => {
+    const title = limitedString(task?.title, 140);
+    if (!title) return null;
+    const scheduledStart = limitedString(task?.scheduledStartISO8601, 80);
+
+    return {
+      title,
+      estimatedMinutes: clampInt(task?.estimatedMinutes, 5, 600, 30),
+      priority: ['high', 'medium', 'low'].includes(task?.priority) ? task.priority : 'medium',
+      targetDayISO8601: limitedString(task?.targetDayISO8601, 40),
+      scheduledStartISO8601: scheduledStart,
+      scheduledEndISO8601: limitedString(task?.scheduledEndISO8601, 80),
+      isPinned: scheduledStart ? Boolean(task?.isPinned) : false,
+      notes: limitedString(task?.notes, 500),
+    };
+  }).filter(Boolean);
+
+  return {
+    tasks,
+    needsClarification: Boolean(parsed.needsClarification),
+    clarificationQuestion: limitedString(parsed.clarificationQuestion, 240),
+  };
+}
+
 function systemPrompt() {
   return [
     'You are SchedAI, a careful task parser for students and busy people.',
@@ -114,6 +244,7 @@ function systemPrompt() {
 }
 
 module.exports = async function handler(req, res) {
+  Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
   Object.entries(jsonHeaders).forEach(([key, value]) => res.setHeader(key, value));
 
   if (req.method === 'OPTIONS') {
@@ -122,20 +253,36 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
-    send(res, 405, { error: 'Method not allowed' });
+    send(req, res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  if (!tokenAuthorized(req)) {
+    send(req, res, 401, { error: 'Unauthorized' });
+    return;
+  }
+
+  if (isRateLimited(req)) {
+    send(req, res, 429, { error: 'Too many requests' });
     return;
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    send(res, 503, { error: 'AI parser is not configured' });
+    send(req, res, 503, { error: 'AI parser is not configured' });
     return;
   }
 
   const body = parseBody(req);
   const input = String(body.input || '').trim();
+  const maxInputChars = numericEnv('SCHEDAI_MAX_INPUT_CHARS', DEFAULT_MAX_INPUT_CHARS);
 
   if (!input) {
-    send(res, 400, { error: 'Missing input' });
+    send(req, res, 400, { error: 'Missing input' });
+    return;
+  }
+
+  if (input.length > maxInputChars) {
+    send(req, res, 413, { error: 'Input is too long' });
     return;
   }
 
@@ -151,7 +298,7 @@ module.exports = async function handler(req, res) {
           planningDateISO8601: body.planningDateISO8601 || body.nowISO8601 || new Date().toISOString(),
           timeZone: body.timeZone || 'UTC',
           locale: body.locale || 'en_US',
-          offlinePreview: Array.isArray(body.offlinePreview) ? body.offlinePreview : [],
+          offlinePreview: normalizeOfflinePreview(body.offlinePreview),
         }),
       },
     ],
@@ -178,28 +325,30 @@ module.exports = async function handler(req, res) {
     });
     data = await openaiResponse.json().catch(() => null);
   } catch {
-    send(res, 502, { error: 'AI parser request failed' });
+    send(req, res, 502, { error: 'AI parser request failed' });
     return;
   }
 
   if (!openaiResponse.ok) {
-    send(res, openaiResponse.status, {
-      error: 'OpenAI request failed',
-      detail: data?.error?.message || null,
-    });
+    send(req, res, openaiResponse.status, { error: 'AI parser request failed' });
     return;
   }
 
   const outputText = extractOutputText(data);
   if (!outputText) {
-    send(res, 502, { error: 'AI parser returned no text' });
+    send(req, res, 502, { error: 'AI parser returned no text' });
     return;
   }
 
   try {
     const parsed = JSON.parse(outputText);
-    send(res, 200, parsed);
+    const sanitized = sanitizeParsedResponse(parsed);
+    if (!sanitized) {
+      send(req, res, 502, { error: 'AI parser returned invalid task data' });
+      return;
+    }
+    send(req, res, 200, sanitized);
   } catch {
-    send(res, 502, { error: 'AI parser returned invalid JSON' });
+    send(req, res, 502, { error: 'AI parser returned invalid JSON' });
   }
 };
