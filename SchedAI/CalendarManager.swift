@@ -66,15 +66,9 @@ final class CalendarManager: ObservableObject {
             }
         } else {
             switch status {
-            case .fullAccess:
-                isAuthorized = true
-                return .connected
             case .authorized:
                 isAuthorized = true
                 return .connected
-            case .writeOnly:
-                isAuthorized = false
-                return .denied
             case .notDetermined:
                 isAuthorized = false
                 return .notConnected
@@ -270,10 +264,10 @@ final class CalendarManager: ObservableObject {
             return
         }
 
-        // 2) Fallback: search around today
+        // 2) Fallback: search a broad release-safe window in case EventKit's saved identifier changed.
         let cal = Calendar.current
-        let start = cal.date(byAdding: .day, value: -1, to: cal.startOfDay(for: Date())) ?? Date()
-        let end = cal.date(byAdding: .day, value: 2, to: cal.startOfDay(for: Date())) ?? Date().addingTimeInterval(2 * 86400)
+        let start = cal.date(byAdding: .day, value: -30, to: cal.startOfDay(for: Date())) ?? Date()
+        let end = cal.date(byAdding: .day, value: 365, to: cal.startOfDay(for: Date())) ?? Date().addingTimeInterval(365 * 86400)
 
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: [calendar])
         let events = store.events(matching: predicate)
