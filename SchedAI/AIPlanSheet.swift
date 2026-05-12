@@ -75,9 +75,9 @@ struct AIPlanSheet: View {
                                     .disabled(isPlanning)
 
                                     VStack(alignment: .leading, spacing: 6) {
-                                        Text(speech.isRecording ? "Listening…" : (isAuthorized ? "Ready" : "Needs permission"))
+                                        Text(speech.isRecording ? "Listening…" : (isAuthorized ? "Ready" : "Tap mic to enable voice"))
                                             .font(.headline)
-                                        Text(isAuthorized ? "" : "Allow Speech Recognition to use voice planning")
+                                        Text(speech.errorMessage ?? (isAuthorized ? "" : "Speech and microphone access are only requested when you start recording."))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
@@ -289,7 +289,7 @@ struct AIPlanSheet: View {
                         .disabled(isPlanning)
                 }
             }
-            .task { await setupPermissions() }
+            .task { await setupSheetState() }
             .onReceive(speech.$transcript) { text in
                 self.transcript = text
                 resetPreviewState()
@@ -312,12 +312,15 @@ struct AIPlanSheet: View {
 
     // MARK: - Actions
 
-    private func setupPermissions() async {
-        let ok = await speech.ensureAuthorized()
+    private func setupSheetState() async {
         await MainActor.run {
-            isAuthorized = ok
+            speech.refreshAuthorizationStatus()
+            isAuthorized = speech.isAuthorized
             previewDay = Calendar.current.startOfDay(for: app.planningDate)
-            maybeAutoStartRecording()
+        }
+
+        if autoStartRecording {
+            await requestVoicePermissionAndStart()
         }
     }
 
@@ -337,7 +340,20 @@ struct AIPlanSheet: View {
         if speech.isRecording {
             speech.stop()
         } else {
-            if isAuthorized {
+            Task { await requestVoicePermissionAndStart() }
+        }
+    }
+
+    private func requestVoicePermissionAndStart() async {
+        let ok = await speech.ensureAuthorized()
+        await MainActor.run {
+            isAuthorized = ok
+            guard ok else {
+                parseStatusMessage = "Voice planning needs Speech Recognition and Microphone access."
+                return
+            }
+            maybeAutoStartRecording()
+            if !speech.isRecording {
                 speech.start { text in
                     self.transcript = text
                 }
@@ -407,8 +423,13 @@ struct AIPlanSheet: View {
                     return cleaned.title.isEmpty ? nil : cleaned
                 }
                 cleanedPreview.forEach { app.addTask($0) }
-                app.setPlanningDate(targetDay)
-                app.planToday(for: targetDay)
+                let affectedDays = cleanedPreview.map { task in
+                    if let start = task.scheduledStart {
+                        return Calendar.current.startOfDay(for: start)
+                    }
+                    return Calendar.current.startOfDay(for: task.targetDay ?? targetDay)
+                }
+                app.planSpecificDays(affectedDays.isEmpty ? [targetDay] : affectedDays, focusDay: targetDay)
                 dismiss()
             }
         }
