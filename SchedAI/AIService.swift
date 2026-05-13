@@ -30,6 +30,7 @@ enum AIServiceError: Error, Equatable {
 struct AIService {
     private enum DefaultsKey {
         static let aiParseEndpoint = "aiParseEndpoint"
+        static let aiClientID = "aiClientID"
     }
 
     private enum BundleKey {
@@ -107,7 +108,21 @@ struct AIService {
             }
             return TaskParseResult(tasks: remote, source: .ai, message: nil)
         } catch {
-            let message = offline.isEmpty ? "AI parser unavailable." : "AI parser unavailable. Used offline parser."
+            let message: String
+            if let serviceError = error as? AIServiceError {
+                switch serviceError {
+                case .badResponse(403):
+                    message = offline.isEmpty ? "AI access is disabled for this app right now." : "AI access is disabled for this app right now. Used offline parser."
+                case .badResponse(429):
+                    message = offline.isEmpty ? "AI is being used too quickly right now." : "AI is being used too quickly right now. Used offline parser."
+                case .badResponse(503):
+                    message = offline.isEmpty ? "AI is temporarily turned off." : "AI is temporarily turned off. Used offline parser."
+                default:
+                    message = offline.isEmpty ? "AI parser unavailable." : "AI parser unavailable. Used offline parser."
+                }
+            } else {
+                message = offline.isEmpty ? "AI parser unavailable." : "AI parser unavailable. Used offline parser."
+            }
             return TaskParseResult(tasks: offline, source: .offline, message: message)
         }
     }
@@ -151,6 +166,7 @@ struct AIService {
         request.httpMethod = "POST"
         request.timeoutInterval = 12
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(clientID(), forHTTPHeaderField: "X-SchedAI-Client-ID")
 
         let body = ParseTasksRequest(
             input: input,
@@ -220,6 +236,23 @@ struct AIService {
             return trimmed
         }
         return String(trimmed.prefix(Limits.maxRemoteInputCharacters))
+    }
+
+    private static func clientID() -> String {
+        let defaults = UserDefaults.standard
+        if let existing = defaults.string(forKey: DefaultsKey.aiClientID),
+           isValidClientID(existing) {
+            return existing
+        }
+
+        let generated = "schedai." + UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        defaults.set(generated, forKey: DefaultsKey.aiClientID)
+        return generated
+    }
+
+    private static func isValidClientID(_ value: String) -> Bool {
+        let pattern = #"^[A-Za-z0-9._-]{8,128}$"#
+        return value.range(of: pattern, options: .regularExpression) != nil
     }
 
     private static func priority(from raw: String?) -> TaskPriority {
