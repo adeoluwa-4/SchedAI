@@ -83,7 +83,12 @@
           <h2>Optional AI parsing</h2>
           <p>
             SchedAI can preview tasks on device first. If you choose to improve a preview with AI, the task text you typed or spoke, the planning date, your locale, time zone, and an offline preview are sent to SchedAI's hosted parsing service and processed by OpenAI to return structured tasks.
+            SchedAI also sends a rotating app-side client identifier so the service can prevent abuse, apply rate limits, and disable hosted AI for a specific app install if needed.
             This is used only to provide the task parsing feature. Do not include sensitive information in task text that you do not want processed by the hosted AI service.
+          </p>
+          <p>
+            Hosted AI improve is optional. SchedAI asks before first use, and you can turn it back off later in the app's Settings.
+            SchedAI is designed not to store your submitted task text in a separate app database after parsing, but limited technical records or provider-side processing records may still exist for security, abuse prevention, and reliability.
           </p>
         </section>
 
@@ -98,8 +103,8 @@
         <section>
           <h2>Sign in with Apple</h2>
           <p>
-            If you choose to sign in with Apple, SchedAI may store your display name locally so the app can greet you by name.
-            At launch, this sign in flow is used for personalization inside the app.
+            If you choose to share your Apple-provided name, SchedAI stores that display name locally on your device so the app can greet you by name.
+            At launch, this flow is used only for local personalization inside the app. It does not create a SchedAI cloud account.
           </p>
         </section>
 
@@ -126,8 +131,18 @@
             <li>You can keep Calendar sync off.</li>
             <li>You can keep reminders off.</li>
             <li>You can choose not to use voice planning.</li>
+            <li>You can decline or later turn off hosted AI improve in Settings.</li>
             <li>You can remove app data from your device by deleting the app.</li>
           </ul>
+        </section>
+
+        <section>
+          <h2>Retention and deletion</h2>
+          <p>
+            Most SchedAI planning data is stored locally on your device unless you choose features that require system or hosted services.
+            If you want to stop future hosted AI processing, you can turn hosted AI improve off in Settings.
+            If you have questions about deletion or privacy choices, contact schedaisupport@gmail.com.
+          </p>
         </section>
 
         <section>
