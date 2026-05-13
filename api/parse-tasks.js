@@ -2,7 +2,7 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 const DEFAULT_MAX_INPUT_CHARS = 4000;
 const DEFAULT_MAX_TASKS = 30;
 const DEFAULT_RATE_LIMIT_WINDOW_MS = 60 * 1000;
-const DEFAULT_RATE_LIMIT_REQUESTS = 30;
+const DEFAULT_RATE_LIMIT_REQUESTS = 5;
 
 const rateBuckets = globalThis.__schedaiRateBuckets || new Map();
 globalThis.__schedaiRateBuckets = rateBuckets;
@@ -34,7 +34,7 @@ function corsHeaders(req) {
 
 const jsonHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-SchedAI-API-Token',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-SchedAI-API-Token, X-SchedAI-Client-ID',
   'Content-Type': 'application/json',
   'Cache-Control': 'no-store',
 };
@@ -110,6 +110,14 @@ function send(req, res, status, body) {
   res.end(JSON.stringify(body));
 }
 
+function normalizedBooleanEnv(name, fallback = false) {
+  const value = String(process.env[name] || '').trim().toLowerCase();
+  if (!value) return fallback;
+  if (['1', 'true', 'yes', 'on'].includes(value)) return true;
+  if (['0', 'false', 'no', 'off'].includes(value)) return false;
+  return fallback;
+}
+
 function parseBody(req) {
   if (!req.body) return {};
   if (typeof req.body === 'object') return req.body;
@@ -132,9 +140,20 @@ function extractOutputText(response) {
   return null;
 }
 
+function normalizedClientID(req) {
+  const clientID = String(req.headers['x-schedai-client-id'] || '').trim();
+  if (!/^[A-Za-z0-9._-]{8,128}$/.test(clientID)) return null;
+  return clientID;
+}
+
+function requestIPAddress(req) {
+  return String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+    || req.socket?.remoteAddress
+    || 'unknown';
+}
+
 function requestKey(req) {
-  const forwardedFor = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-  return forwardedFor || req.socket?.remoteAddress || 'unknown';
+  return normalizedClientID(req) || requestIPAddress(req);
 }
 
 function isRateLimited(req) {
@@ -146,7 +165,14 @@ function isRateLimited(req) {
 
   if (bucket.length >= maxRequests) {
     rateBuckets.set(key, bucket);
-    return true;
+    const oldestActive = bucket[0] || now;
+    const retryAfterSeconds = Math.max(1, Math.ceil((windowMs - (now - oldestActive)) / 1000));
+    return {
+      limited: true,
+      retryAfterSeconds,
+      maxRequests,
+      windowMs,
+    };
   }
 
   bucket.push(now);
@@ -158,7 +184,12 @@ function isRateLimited(req) {
     else rateBuckets.set(bucketKey, active);
   }
 
-  return false;
+  return {
+    limited: false,
+    retryAfterSeconds: 0,
+    maxRequests,
+    windowMs,
+  };
 }
 
 function tokenAuthorized(req) {
@@ -169,6 +200,21 @@ function tokenAuthorized(req) {
   const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   const headerToken = String(req.headers['x-schedai-api-token'] || '').trim();
   return tokens.includes(bearer) || tokens.includes(headerToken);
+}
+
+function isAIEnabled() {
+  return normalizedBooleanEnv('SCHEDAI_AI_ENABLED', true);
+}
+
+function blockedClientID(req) {
+  const clientID = normalizedClientID(req);
+  if (!clientID) return null;
+  const blocked = configuredList('SCHEDAI_BLOCKED_CLIENT_IDS');
+  return blocked.includes(clientID) ? clientID : null;
+}
+
+function clientIDRequired() {
+  return normalizedBooleanEnv('SCHEDAI_REQUIRE_CLIENT_ID', false);
 }
 
 function clampInt(value, lower, upper, fallback) {
@@ -257,12 +303,29 @@ module.exports = async function handler(req, res) {
     return;
   }
 
+  if (!isAIEnabled()) {
+    send(req, res, 503, { error: 'AI features are temporarily disabled' });
+    return;
+  }
+
+  if (clientIDRequired() && !normalizedClientID(req)) {
+    send(req, res, 400, { error: 'Missing client identifier' });
+    return;
+  }
+
+  if (blockedClientID(req)) {
+    send(req, res, 403, { error: 'AI access disabled for this client' });
+    return;
+  }
+
   if (!tokenAuthorized(req)) {
     send(req, res, 401, { error: 'Unauthorized' });
     return;
   }
 
-  if (isRateLimited(req)) {
+  const rateLimit = isRateLimited(req);
+  if (rateLimit.limited) {
+    res.setHeader('Retry-After', String(rateLimit.retryAfterSeconds));
     send(req, res, 429, { error: 'Too many requests' });
     return;
   }
