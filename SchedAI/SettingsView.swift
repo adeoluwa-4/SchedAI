@@ -12,6 +12,7 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var calendarToastMessage: String? = nil
     @State private var signInMessage: String? = nil
+    @State private var showAIConsentSheet: Bool = false
 #if canImport(AuthenticationServices)
     @State private var appleSignIn = AppleIDSignInCoordinator()
 #endif
@@ -87,6 +88,11 @@ struct SettingsView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
+            .sheet(isPresented: $showAIConsentSheet) {
+                AIConsentSheet {
+                    app.hostedAIConsent = true
+                }
+            }
         }
     }
     
@@ -135,7 +141,7 @@ struct SettingsView: View {
                         .font(.system(size: 21, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                     
-                    Text("Ready to plan your day.")
+                    Text("Everything here stays local unless you choose hosted AI improve.")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                     
@@ -147,7 +153,7 @@ struct SettingsView: View {
                             HStack(spacing: 6) {
                                 Image(systemName: "person.badge.key")
                                     .font(.system(size: 12, weight: .semibold))
-                                Text("Sign in to personalize")
+                                Text("Use Apple name locally")
                                     .font(.system(size: 14, weight: .semibold, design: .rounded))
                             }
                             .padding(.horizontal, 14)
@@ -193,6 +199,7 @@ struct SettingsView: View {
             profileCard
             accountGroup
             notificationsGroup
+            privacyGroup
             aboutGroup
         }
     }
@@ -321,6 +328,73 @@ struct SettingsView: View {
                 subtitle: versionString,
                 color: .gray
             )
+
+            SettingsDivider()
+
+            SettingsInfoRow(
+                icon: "person.badge.key",
+                title: "Apple Name",
+                subtitle: "Optional local personalization only",
+                color: .gray
+            )
+        }
+    }
+
+    private var privacyGroup: some View {
+        SettingsGroupCard(icon: "lock.shield", title: "Privacy & Support", color: .teal) {
+            SettingsToggleRow(
+                icon: "sparkles.rectangle.stack",
+                title: "Allow Hosted AI Improve",
+                subtitle: app.hostedAIConsent
+                    ? "Task text may be sent to SchedAI and OpenAI when you tap Improve."
+                    : "Off. Preview stays on device until you choose otherwise.",
+                isOn: hostedAIBinding,
+                color: .teal
+            )
+
+            SettingsDivider()
+
+            SettingsActionRow(
+                icon: "slider.horizontal.3",
+                title: "Privacy Choices",
+                subtitle: "Review AI, calendar, voice, and reminder choices",
+                color: .teal
+            ) {
+                openURL(LegalLinks.privacyChoices)
+            }
+
+            SettingsDivider()
+
+            SettingsActionRow(
+                icon: "hand.raised",
+                title: "Privacy Policy",
+                subtitle: "See what data stays local and what can leave the device",
+                color: .teal
+            ) {
+                openURL(LegalLinks.privacy)
+            }
+
+            SettingsDivider()
+
+            SettingsActionRow(
+                icon: "doc.text",
+                title: "Terms",
+                subtitle: "Read the product terms",
+                color: .teal
+            ) {
+                openURL(LegalLinks.terms)
+            }
+
+            SettingsDivider()
+
+            SettingsActionRow(
+                icon: "questionmark.bubble",
+                title: "Support",
+                subtitle: "Contact support or review common setup answers",
+                color: .teal
+            ) {
+                openURL(LegalLinks.support)
+            }
         }
     }
 
@@ -369,9 +443,9 @@ struct SettingsView: View {
     private var profileStatusText: String {
         if let name = app.userDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
            !name.isEmpty {
-            return "Signed in as \(name)"
+            return "Using Apple-provided name: \(name)"
         }
-        return "Sign in from the welcome card"
+        return "Optional local-only personalization"
     }
     
     private var welcomeTitle: String {
@@ -380,6 +454,22 @@ struct SettingsView: View {
             return "Welcome Back, \(name)"
         }
         return "Welcome Back"
+    }
+
+    private var hostedAIBinding: Binding<Bool> {
+        Binding(
+            get: { app.hostedAIConsent },
+            set: { newValue in
+                if newValue {
+                    if app.hostedAIConsent {
+                        return
+                    }
+                    showAIConsentSheet = true
+                } else {
+                    app.hostedAIConsent = false
+                }
+            }
+        )
     }
 
 #if canImport(AuthenticationServices)
@@ -393,13 +483,13 @@ struct SettingsView: View {
                     if !name.isEmpty {
                         app.userDisplayName = name
                     } else {
-                        signInMessage = "Apple ID did not provide a name. If you previously signed in, Apple only shares the name once."
+                        signInMessage = "Apple only shares the name once. SchedAI uses it only for local personalization on this device."
                     }
                 } else {
-                    signInMessage = "Apple ID did not provide a name. If you previously signed in, Apple only shares the name once."
+                    signInMessage = "Apple only shares the name once. SchedAI uses it only for local personalization on this device."
                 }
             case .failure:
-                signInMessage = "Sign in was cancelled or failed."
+                signInMessage = "Apple name sharing was cancelled or failed."
             }
         }
     }
