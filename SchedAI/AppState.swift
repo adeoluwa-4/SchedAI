@@ -28,6 +28,7 @@ final class AppState: ObservableObject {
         static let workStart = "workStart"
         static let workEnd = "workEnd"
         static let unfinishedTaskPolicy = "unfinishedTaskPolicy"
+        static let hostedAIConsent = "hostedAIConsent"
     }
 
     private enum WidgetBridge {
@@ -92,6 +93,12 @@ final class AppState: ObservableObject {
     @Published var unfinishedTaskPolicy: UnfinishedTaskPolicy {
         didSet {
             UserDefaults.standard.set(unfinishedTaskPolicy.rawValue, forKey: DefaultsKey.unfinishedTaskPolicy)
+        }
+    }
+
+    @Published var hostedAIConsent: Bool {
+        didSet {
+            UserDefaults.standard.set(hostedAIConsent, forKey: DefaultsKey.hostedAIConsent)
         }
     }
 
@@ -162,6 +169,7 @@ final class AppState: ObservableObject {
         self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? true
         let unfinishedRaw = defaults.string(forKey: DefaultsKey.unfinishedTaskPolicy) ?? UnfinishedTaskPolicy.askMe.rawValue
         self.unfinishedTaskPolicy = UnfinishedTaskPolicy(rawValue: unfinishedRaw) ?? .askMe
+        self.hostedAIConsent = (defaults.object(forKey: DefaultsKey.hostedAIConsent) as? Bool) ?? false
         self.workStart = (defaults.object(forKey: DefaultsKey.workStart) as? Date) ?? workStart
         self.workEnd = (defaults.object(forKey: DefaultsKey.workEnd) as? Date) ?? workEnd
         validateWorkWindow()
