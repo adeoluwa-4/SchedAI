@@ -50,6 +50,14 @@ api/parse-tasks.js
 
 To use it, set an `OPENAI_API_KEY` in your Vercel project. The iOS app points to the deployed parser endpoint by default, and falls back to offline parsing if the API is unavailable.
 
+Recommended abuse controls for the hosted parser:
+
+- Keep the OpenAI key only in Vercel server env vars. The iOS app never calls OpenAI directly.
+- Set `SCHEDAI_RATE_LIMIT_REQUESTS=5` and `SCHEDAI_RATE_LIMIT_WINDOW_MS=60000` for a five-requests-per-minute default.
+- Set `SCHEDAI_AI_ENABLED=true` so you can flip it to `false` as a global kill switch without shipping an app update.
+- Set `SCHEDAI_BLOCKED_CLIENT_IDS=` with a comma-separated list of client IDs to disable AI for specific abusive installs.
+- Set `SCHEDAI_REQUIRE_CLIENT_ID=true` after your current app builds are sending `X-SchedAI-Client-ID` to the API.
+
 ## Tech Used
 
 - SwiftUI for the iOS app
