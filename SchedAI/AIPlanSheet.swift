@@ -20,6 +20,7 @@ struct AIPlanSheet: View {
     @State private var isPlanning = false
     @State private var animateLoader = false
     @State private var didAutoStartRecording = false
+    @State private var showAIConsentSheet = false
 
     init(autoStartRecording: Bool = false) {
         self.autoStartRecording = autoStartRecording
@@ -123,7 +124,7 @@ struct AIPlanSheet: View {
 
                                 if !previewUsedAI {
                                     Button {
-                                        Task { await improvePreviewWithAI() }
+                                        requestHostedAIImprove()
                                     } label: {
                                         Label("Improve with AI", systemImage: "sparkles")
                                             .frame(maxWidth: .infinity)
@@ -132,7 +133,7 @@ struct AIPlanSheet: View {
                                     .buttonStyle(.bordered)
                                     .disabled(isPlanning)
 
-                                    Text("Preview is free/offline. Use AI only if the result looks wrong.")
+                                    Text("Preview stays on device. AI Improve is optional and asks before sending task text off device.")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                 }
@@ -307,6 +308,12 @@ struct AIPlanSheet: View {
                 guard !hasManualPreviewEdits else { return }
                 parsedPreview = autoPlace(previewBase, on: newValue)
             }
+            .sheet(isPresented: $showAIConsentSheet) {
+                AIConsentSheet {
+                    app.hostedAIConsent = true
+                    Task { await improvePreviewWithAI() }
+                }
+            }
         }
     }
 
@@ -381,6 +388,14 @@ struct AIPlanSheet: View {
 
         let result = await AIService.improveTasksWithAI(from: text, now: Date(), planningDate: app.planningDate)
         applyParseResult(result, for: text)
+    }
+
+    private func requestHostedAIImprove() {
+        if app.hostedAIConsent {
+            Task { await improvePreviewWithAI() }
+        } else {
+            showAIConsentSheet = true
+        }
     }
 
     private func applyParseResult(_ result: TaskParseResult, for text: String) {
