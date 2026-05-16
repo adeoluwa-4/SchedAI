@@ -157,50 +157,73 @@ struct TasksView: View {
     // MARK: - Quick Add Section
     
     private var quickAddSection: some View {
-        VStack(spacing: 12) {
-            HStack(spacing: 12) {
-                Image(systemName: "plus.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [.blue, .cyan],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.blue.opacity(0.16))
+                        .frame(width: 42, height: 42)
+
+                    Image(systemName: "keyboard.fill")
+                        .font(.headline)
+                        .foregroundStyle(.blue)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Quick Add")
+                        .font(.headline.weight(.bold))
+                    Text("Type a task, duration, or priority")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text("Typing")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(Color.blue.opacity(0.12))
                     )
-                
-                TextField("e.g., finish essay 60m urgent", text: $newTitle)
+            }
+
+            HStack(spacing: 12) {
+                TextField("Finish essay 60m urgent", text: $newTitle)
                     .textFieldStyle(.plain)
                     .submitLabel(.done)
                     .onSubmit(addTask)
-                
+
                 if !newTitle.isEmpty {
                     Button(action: { newTitle = "" }) {
                         Image(systemName: "xmark.circle.fill")
+                            .font(.title3)
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
                 }
-                
+
                 Button(action: addTask) {
                     Image(systemName: "arrow.up.circle.fill")
-                        .font(.title2)
+                        .font(.system(size: 30, weight: .semibold))
                         .foregroundStyle(newTitle.isEmpty ? Color.secondary : Color.blue)
                 }
                 .disabled(newTitle.isEmpty)
                 .buttonStyle(.plain)
             }
-            .padding(16)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
             .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(scheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.9))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.blue.opacity(newTitle.isEmpty ? 0.18 : 0.4), lineWidth: 1)
                     )
             )
-            .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
-            
+
             // Helper chips
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
@@ -212,6 +235,16 @@ struct TasksView: View {
                 }
             }
         }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
     }
     
     // MARK: - Filter Section

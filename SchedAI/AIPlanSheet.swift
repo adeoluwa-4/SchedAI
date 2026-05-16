@@ -91,14 +91,13 @@ struct AIPlanSheet: View {
 
                         HStack(spacing: 12) {
                             Button {
-                                transcript = ""
-                                resetPreviewState()
+                                clearPlanInput()
                             } label: {
                                 Label("Clear", systemImage: "trash")
                                     .frame(maxWidth: .infinity)
                             }
                             .buttonStyle(.bordered)
-                            .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlanning)
+                            .disabled((transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && parsedPreview.isEmpty && !speech.isRecording) || isPlanning)
 
                             Button {
                                 Task { await buildPreview() }
@@ -396,6 +395,13 @@ struct AIPlanSheet: View {
         } else {
             showAIConsentSheet = true
         }
+    }
+
+    private func clearPlanInput() {
+        speech.resetForFreshInput()
+        transcript = ""
+        resetPreviewState()
+        previewDay = Calendar.current.startOfDay(for: app.planningDate)
     }
 
     private func applyParseResult(_ result: TaskParseResult, for text: String) {

@@ -16,6 +16,8 @@ enum AppNotifications {
 final class AppState: ObservableObject {
 
     private var midnightTimer: Timer? = nil
+    private var completionCleanupTimer: Timer? = nil
+    private let completedTaskRetention: TimeInterval = 24 * 60 * 60
 
     private enum DefaultsKey {
         static let remindersEnabled = "remindersEnabled"
@@ -175,6 +177,8 @@ final class AppState: ObservableObject {
         validateWorkWindow()
 
         _ = restore()
+        pruneExpiredCompletedTasks(now: Date())
+        scheduleCompletedTaskCleanup()
         persistWidgetData()
 
         // Permissions are intentionally not requested on launch.
@@ -336,6 +340,8 @@ final class AppState: ObservableObject {
     deinit {
         midnightTimer?.invalidate()
         midnightTimer = nil
+        completionCleanupTimer?.invalidate()
+        completionCleanupTimer = nil
         #if os(iOS)
         NotificationCenter.default.removeObserver(
             self,
@@ -348,12 +354,13 @@ final class AppState: ObservableObject {
     // MARK: - CRUD
 
     func addTask(_ t: TaskItem) {
-        var task = t
+        var task = normalizedCompletionState(t)
         if let start = task.scheduledStart {
             task.targetDay = Calendar.current.startOfDay(for: start)
         }
         tasks.insert(task, at: 0)
         if remindersEnabled { rescheduleReminders() }
+        scheduleCompletedTaskCleanup()
     }
 
     func addTask(title: String, estimatedMinutes: Int = 30, priority: TaskPriority = .medium) {
@@ -364,7 +371,7 @@ final class AppState: ObservableObject {
 
     func updateTask(_ t: TaskItem) {
         guard let i = tasks.firstIndex(where: { $0.id == t.id }) else { return }
-        var task = t
+        var task = normalizedCompletionState(t)
         if let start = task.scheduledStart {
             task.targetDay = Calendar.current.startOfDay(for: start)
         } else if let target = task.targetDay {
@@ -372,6 +379,7 @@ final class AppState: ObservableObject {
         }
         tasks[i] = task
         if remindersEnabled { rescheduleReminders() }
+        scheduleCompletedTaskCleanup()
     }
 
     func deleteTask(id: UUID) {
@@ -385,7 +393,19 @@ final class AppState: ObservableObject {
     func toggleComplete(id: UUID) {
         guard let i = tasks.firstIndex(where: { $0.id == id }) else { return }
         tasks[i].isCompleted.toggle()
+        tasks[i].completedAt = tasks[i].isCompleted ? Date() : nil
         if remindersEnabled { rescheduleReminders() }
+        scheduleCompletedTaskCleanup()
+    }
+
+    private func normalizedCompletionState(_ task: TaskItem) -> TaskItem {
+        var normalized = task
+        if normalized.isCompleted {
+            normalized.completedAt = normalized.completedAt ?? Date()
+        } else {
+            normalized.completedAt = nil
+        }
+        return normalized
     }
 
     func rescheduleTaskForLater(id: UUID, from now: Date = Date()) {
@@ -659,8 +679,10 @@ final class AppState: ObservableObject {
     // MARK: - Daily rollover (reset at midnight)
 
     @objc private func appWillEnterForeground() {
+        pruneExpiredCompletedTasks(now: Date())
         performDailyRolloverIfNeeded(now: Date())
         scheduleMidnightReset()
+        scheduleCompletedTaskCleanup()
     }
 
     private func scheduleMidnightReset() {
@@ -677,6 +699,53 @@ final class AppState: ObservableObject {
             Task { @MainActor in
                 appState.performDailyRolloverIfNeeded(now: Date())
                 appState.scheduleMidnightReset()
+            }
+        }
+    }
+
+    private func scheduleCompletedTaskCleanup() {
+        completionCleanupTimer?.invalidate()
+        completionCleanupTimer = nil
+
+        let now = Date()
+        let nextRemovalDate = tasks
+            .filter(\.isCompleted)
+            .map { task -> Date in
+                let completedAt = task.completedAt ?? task.createdAt
+                return completedAt.addingTimeInterval(completedTaskRetention)
+            }
+            .filter { $0 > now }
+            .min()
+
+        guard let nextRemovalDate else { return }
+        let interval = max(1, nextRemovalDate.timeIntervalSince(now))
+
+        completionCleanupTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            guard let appState = self else { return }
+            Task { @MainActor in
+                appState.pruneExpiredCompletedTasks(now: Date())
+                appState.scheduleCompletedTaskCleanup()
+            }
+        }
+    }
+
+    private func pruneExpiredCompletedTasks(now: Date) {
+        let expiredIDs = tasks
+            .filter { task in
+                guard task.isCompleted else { return false }
+                let completedAt = task.completedAt ?? task.createdAt
+                return now.timeIntervalSince(completedAt) >= completedTaskRetention
+            }
+            .map(\.id)
+
+        guard !expiredIDs.isEmpty else { return }
+        let expiredSet = Set(expiredIDs)
+        tasks.removeAll { expiredSet.contains($0.id) }
+
+        for id in expiredIDs {
+            NotificationManager.cancelReminder(for: id)
+            if calendarSyncEnabled {
+                CalendarManager.shared.deleteEvent(for: id)
             }
         }
     }
