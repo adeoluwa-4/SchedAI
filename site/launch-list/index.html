@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SchedAI Launch List</title>
+    <meta name="description" content="Join the SchedAI launch list to get notified when the app is ready.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:title" content="SchedAI Launch List">
+    <meta property="og:description" content="Leave your details and we will let you know when SchedAI launches.">
+    <meta property="og:image" content="https://schedai-snowy.vercel.app/og.png">
+    <meta property="og:url" content="https://schedai-snowy.vercel.app/launch-list/">
+    <link rel="icon" href="/favicon.png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="shell nav">
+        <a class="brand" href="/">
+          <span class="brand-mark"><img src="/favicon.png" alt="SchedAI icon"></span>
+          <span>SchedAI</span>
+        </a>
+        <nav class="nav-links" aria-label="Primary">
+          <a href="/">Home</a>
+          <a href="/support/">Support</a>
+          <a href="/privacy/">Privacy</a>
+          <a href="/terms/">Terms</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="legal-shell">
+      <section class="page-hero">
+        <div class="shell">
+          <div class="page-kicker">Launch List</div>
+          <h1>Leave your details and we will let you know</h1>
+          <p class="hero-copy">
+            Join the SchedAI launch list to get the release update by email as soon as the app is ready.
+          </p>
+        </div>
+      </section>
+
+      <div class="shell launch-grid">
+        <section class="launch-card">
+          <h2>Join the list</h2>
+          <p class="launch-copy">Add your name, email, and phone number so we can keep you posted. Phone number is optional for now.</p>
+
+          <form id="launch-list-form" class="launch-form" novalidate>
+            <label class="launch-field">
+              <span>Full name</span>
+              <input type="text" name="fullName" autocomplete="name" required maxlength="120">
+            </label>
+
+            <label class="launch-field">
+              <span>Email address</span>
+              <input type="email" name="email" autocomplete="email" required maxlength="254">
+            </label>
+
+            <label class="launch-field">
+              <span>Phone number</span>
+              <input type="tel" name="phoneNumber" autocomplete="tel" maxlength="32">
+            </label>
+
+            <div class="launch-honeypot" aria-hidden="true">
+              <label>
+                Company
+                <input type="text" name="company" tabindex="-1" autocomplete="off">
+              </label>
+            </div>
+
+            <button class="button button-primary launch-submit" type="submit">Join the launch list</button>
+
+            <p class="launch-help">By joining, you agree to receive launch-related email updates about SchedAI. Read the <a href="/privacy/">Privacy Policy</a>.</p>
+            <p id="launch-status" class="launch-status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section class="support-card">
+          <h2>What happens next</h2>
+          <ul>
+            <li>Your details are saved to the SchedAI launch list.</li>
+            <li>We send a confirmation email when email delivery is configured.</li>
+            <li>You hear from us when the app is ready to download.</li>
+          </ul>
+        </section>
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="shell footer-wrap">
+        <div>© 2026 SchedAI by Adeoluwa Adekoya</div>
+        <div class="footer-links">
+          <a href="/support/">Support</a>
+          <a href="/privacy/">Privacy</a>
+          <a href="/terms/">Terms</a>
+        </div>
+      </div>
+    </footer>
+
+    <script src="/launch-list.js"></script>
+  </body>
+</html>

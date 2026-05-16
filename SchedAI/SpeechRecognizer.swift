@@ -179,6 +179,26 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         // Do NOT wipe transcript here.
     }
 
+    /// Stops any active recognition and clears local speech state so a new planning pass starts cleanly.
+    func resetForFreshInput() {
+        if isRecording {
+            request?.endAudio()
+        }
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
+        recognitionTask?.cancel()
+        recognitionTask = nil
+        request = nil
+        updateHandler = nil
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
+        DispatchQueue.main.async {
+            self.transcript = ""
+            self.errorMessage = nil
+            self.isRecording = false
+        }
+    }
+
     // MARK: - Audio Session
 
     private func configureAudioSession() throws {
