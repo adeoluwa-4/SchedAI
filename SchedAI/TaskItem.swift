@@ -53,6 +53,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var estimatedMinutes: Int = 30
 
     var isCompleted: Bool = false
+    var completedAt: Date? = nil
     var createdAt: Date = Date()
 
     /// If true, the user (or NLP) explicitly chose the time and the scheduler should not move it.
@@ -77,6 +78,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         estimatedMinutes: Int = 30,
         priority: TaskPriority = .medium,
         isCompleted: Bool = false,
+        completedAt: Date? = nil,
         createdAt: Date = Date(),
         isPinned: Bool = false,
         targetDay: Date? = nil,
@@ -88,6 +90,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.estimatedMinutes = estimatedMinutes
         self.priority = priority
         self.isCompleted = isCompleted
+        self.completedAt = completedAt
         self.createdAt = createdAt
         self.isPinned = isPinned
         self.targetDay = targetDay
@@ -103,6 +106,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case priority
         case estimatedMinutes
         case isCompleted
+        case completedAt
         case createdAt
         case isPinned
         case targetDay
@@ -117,6 +121,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.priority = try container.decodeIfPresent(TaskPriority.self, forKey: .priority) ?? .medium
         self.estimatedMinutes = try container.decodeIfPresent(Int.self, forKey: .estimatedMinutes) ?? 30
         self.isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
+        self.completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
         self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         self.targetDay = try container.decodeIfPresent(Date.self, forKey: .targetDay)
@@ -131,6 +136,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         try container.encode(priority, forKey: .priority)
         try container.encode(estimatedMinutes, forKey: .estimatedMinutes)
         try container.encode(isCompleted, forKey: .isCompleted)
+        try container.encodeIfPresent(completedAt, forKey: .completedAt)
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(isPinned, forKey: .isPinned)
         try container.encodeIfPresent(targetDay, forKey: .targetDay)
