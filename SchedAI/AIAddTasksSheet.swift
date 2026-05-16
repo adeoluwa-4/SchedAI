@@ -6,6 +6,7 @@ import Foundation
 struct AIAddTasksSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var app: AppState
+    @Environment(\.colorScheme) private var scheme
 
     @State private var input: String = ""
     @State private var isParsing: Bool = false
@@ -15,13 +16,8 @@ struct AIAddTasksSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 12) {
-
-                TextEditor(text: $input)
-                    .frame(minHeight: 160)
-                    .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.thinMaterial))
-                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.quaternary, lineWidth: 1))
+            VStack(spacing: 14) {
+                typingInputCard
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
 
@@ -127,6 +123,77 @@ struct AIAddTasksSheet: View {
                 }
             }
         }
+    }
+
+    private var typingInputCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.blue.opacity(0.16))
+                        .frame(width: 42, height: 42)
+
+                    Image(systemName: "keyboard.fill")
+                        .font(.headline)
+                        .foregroundStyle(.blue)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Add Tasks")
+                        .font(.headline.weight(.bold))
+                    Text("Type one task per line")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Text("Typing")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.blue)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(
+                        Capsule()
+                            .fill(Color.blue.opacity(0.12))
+                    )
+            }
+
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $input)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(10)
+                    .frame(minHeight: 172)
+
+                if input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Finish essay 60m urgent\nWorkout 45m\nCall mom today")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 18)
+                        .allowsHitTesting(false)
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(scheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.9))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.blue.opacity(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.18 : 0.4), lineWidth: 1)
+                    )
+            )
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.08), radius: 12, x: 0, y: 4)
     }
 
     private func parsePreview() async {
