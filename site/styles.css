@@ -365,9 +365,12 @@ img {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
+  align-items: stretch;
 }
 
 .shot-card {
+  display: flex;
+  flex-direction: column;
   padding: 18px;
   border-radius: var(--radius-lg);
   background: var(--panel);
@@ -386,20 +389,41 @@ img {
 .shot-frame img {
   width: 100%;
   height: auto;
+  display: block;
 }
 
 .shot-frame-widget {
+  position: relative;
   aspect-ratio: 1206 / 2622;
-  display: flex;
-  align-items: flex-start;
-  padding-top: clamp(52px, 7vw, 86px);
+  background: rgba(9, 18, 34, 0.96);
 }
 
 .shot-frame-widget img {
   width: 100%;
-  height: auto;
-  transform: scale(1.04);
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+  transform: translateY(18px) scale(1.01);
   transform-origin: center top;
+}
+
+.shot-frame-widget::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 27%;
+  background:
+    linear-gradient(180deg, rgba(9, 18, 34, 0.72), rgba(9, 18, 34, 0.98) 22%),
+    rgba(9, 18, 34, 0.98);
+  pointer-events: none;
+}
+
+.shot-card-widget {
+  justify-content: flex-start;
+}
+
+.shot-card-widget .shot-frame {
+  margin-bottom: 14px;
 }
 
 .shot-card h3 {
@@ -460,6 +484,102 @@ img {
   gap: 18px;
 }
 
+.launch-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+  gap: 18px;
+}
+
+.launch-card {
+  padding: 28px;
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--shadow);
+}
+
+.launch-card h2 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.6rem;
+}
+
+.launch-copy {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.launch-form {
+  display: grid;
+  gap: 14px;
+}
+
+.launch-field {
+  display: grid;
+  gap: 8px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.launch-field span {
+  font-size: 0.95rem;
+}
+
+.launch-field input {
+  width: 100%;
+  min-height: 54px;
+  padding: 0 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+}
+
+.launch-field input:focus {
+  outline: 2px solid rgba(79, 163, 255, 0.35);
+  outline-offset: 2px;
+}
+
+.launch-honeypot {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+
+.launch-submit[disabled] {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.launch-help {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.7;
+}
+
+.launch-help a {
+  text-decoration: underline;
+}
+
+.launch-status {
+  min-height: 24px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.launch-status[data-state="success"] {
+  color: var(--mint);
+}
+
+.launch-status[data-state="error"] {
+  color: #ff9d9d;
+}
+
 .legal-copy section,
 .support-card {
   padding: 24px;
@@ -507,7 +627,8 @@ img {
   .hero-grid,
   .card-grid,
   .two-up,
-  .gallery-grid {
+  .gallery-grid,
+  .launch-grid {
     grid-template-columns: 1fr;
   }
 
