@@ -26,14 +26,13 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         floatingHeader
                             .padding(.top, 26)
-                            .padding(.bottom, 54)
-
-                        appIdentity
-                            .padding(.bottom, 34)
+                            .padding(.bottom, 18)
 
                         settingsGroups
 
-                        Color.clear.frame(height: 40)
+                        appIdentity
+                            .padding(.top, 30)
+                            .padding(.bottom, 44)
                     }
                     .padding(.horizontal, 20)
                 }
@@ -292,12 +291,21 @@ struct SettingsView: View {
                 color: .green
             )
 
+            if app.calendarSyncEnabled {
+                SettingsDivider()
+
+                SettingsCalendarDestinationRow(
+                    selected: $app.selectedCalendarDestinationID,
+                    destinations: app.calendarDestinations
+                )
+            }
+
             SettingsDivider()
 
             SettingsInfoRow(
                 icon: "info.circle",
                 title: "Calendar Status",
-                subtitle: app.calendarSyncEnabled ? "\(calendarStatusText) - reads busy times and writes SchedAI events" : calendarStatusText,
+                subtitle: app.calendarSyncEnabled ? "\(calendarStatusText) - reads busy times and writes planned tasks to \(calendarDestinationName)" : calendarStatusText,
                 color: .gray
             )
 
@@ -427,6 +435,10 @@ struct SettingsView: View {
         case .denied: return "Denied"
         case .unavailable: return "Unavailable"
         }
+    }
+
+    private var calendarDestinationName: String {
+        app.calendarDestinations.first(where: { $0.id == app.selectedCalendarDestinationID })?.title ?? "your calendar"
     }
     
     private var versionString: String {
@@ -817,6 +829,50 @@ private struct SettingsUnfinishedTaskRow: View {
         .onChange(of: selected) { _, _ in
             Haptics.light()
         }
+    }
+}
+
+private struct SettingsCalendarDestinationRow: View {
+    @Binding var selected: String
+    let destinations: [CalendarManager.CalendarDestination]
+
+    var body: some View {
+        HStack(spacing: 11) {
+            SettingsIcon(systemName: "calendar.badge.checkmark", color: .green)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Calendar Destination")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(selectedDestination?.subtitle ?? "Choose where SchedAI writes planned tasks")
+                    .font(.system(size: 14, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 8)
+
+            Picker("Calendar Destination", selection: $selected) {
+                ForEach(destinations) { destination in
+                    Text(destination.title).tag(destination.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .font(.system(size: 16, weight: .semibold, design: .rounded))
+            .tint(Color.brandBlue)
+        }
+        .padding(.vertical, 12)
+        .onChange(of: selected) { _, _ in
+            Haptics.light()
+        }
+    }
+
+    private var selectedDestination: CalendarManager.CalendarDestination? {
+        destinations.first { $0.id == selected }
     }
 }
 
