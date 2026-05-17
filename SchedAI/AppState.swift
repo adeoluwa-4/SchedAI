@@ -63,6 +63,23 @@ final class AppState: ObservableObject {
 
     /// Current calendar connection state (non-prompting).
     @Published var calendarConnectionStatus: CalendarManager.ConnectionStatus = .notConnected
+    @Published var calendarDestinations: [CalendarManager.CalendarDestination] = [CalendarManager.CalendarDestination(
+        id: CalendarManager.defaultDestinationID,
+        title: "SchedAI Calendar",
+        sourceTitle: "SchedAI",
+        isDefaultSchedAI: true
+    )]
+    @Published var selectedCalendarDestinationID: String {
+        didSet {
+            guard selectedCalendarDestinationID != oldValue else { return }
+            CalendarManager.shared.setSelectedDestinationID(selectedCalendarDestinationID)
+            calendarConnectionStatus = CalendarManager.shared.connectionStatus()
+            calendarDestinations = CalendarManager.shared.writableDestinations()
+            if calendarSyncEnabled {
+                calendarSyncIfEnabled(day: planningDate, showSuccessMessage: false)
+            }
+        }
+    }
 
     /// Date currently being planned/viewed in Today screen.
     @Published var planningDate: Date = Calendar.current.startOfDay(for: Date()) {
@@ -167,6 +184,7 @@ final class AppState: ObservableObject {
         self.remindersEnabled = (defaults.object(forKey: DefaultsKey.remindersEnabled) as? Bool) ?? false
         self.reminderLeadMinutes = (defaults.object(forKey: DefaultsKey.reminderLeadMinutes) as? Int) ?? 5
         self.calendarSyncEnabled = (defaults.object(forKey: DefaultsKey.calendarSyncEnabled) as? Bool) ?? false
+        self.selectedCalendarDestinationID = CalendarManager.shared.selectedDestinationID()
         self.userDisplayName = defaults.string(forKey: DefaultsKey.userDisplayName)
         self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? true
         let unfinishedRaw = defaults.string(forKey: DefaultsKey.unfinishedTaskPolicy) ?? UnfinishedTaskPolicy.askMe.rawValue
@@ -270,9 +288,11 @@ final class AppState: ObservableObject {
 
     func refreshCalendarConnectionStatus() {
         calendarConnectionStatus = CalendarManager.shared.connectionStatus()
+        calendarDestinations = CalendarManager.shared.writableDestinations()
+        selectedCalendarDestinationID = CalendarManager.shared.selectedDestinationID()
     }
 
-    /// User-driven calendar sync enablement. Requests permission if needed and creates/links the SchedAI calendar.
+    /// User-driven calendar sync enablement. Requests permission if needed and resolves a writable calendar destination.
     func enableCalendarSyncUserDriven() {
         let status = CalendarManager.shared.connectionStatus()
         calendarConnectionStatus = status
@@ -280,6 +300,7 @@ final class AppState: ObservableObject {
         switch status {
         case .connected:
             calendarSyncEnabled = true
+            refreshCalendarConnectionStatus()
 
         case .denied:
             calendarSyncEnabled = false
@@ -297,6 +318,7 @@ final class AppState: ObservableObject {
                 switch status {
                 case .connected:
                     self.calendarSyncEnabled = true
+                    self.refreshCalendarConnectionStatus()
                     self.calendarSyncToast = "Calendar connected"
                 case .denied, .unavailable, .notConnected:
                     self.calendarSyncEnabled = false
@@ -576,7 +598,8 @@ final class AppState: ObservableObject {
         }
 
         if showSuccessMessage {
-            calendarSyncMessage = "Synced \(totalSynced) task\(totalSynced == 1 ? "" : "s") to your SchedAI calendar."
+            let destination = CalendarManager.shared.selectedDestinationName()
+            calendarSyncMessage = "Synced \(totalSynced) task\(totalSynced == 1 ? "" : "s") to \(destination)."
         }
     }
 
@@ -590,7 +613,8 @@ final class AppState: ObservableObject {
         switch result {
         case .success(let syncedCount):
             if showSuccessMessage {
-                calendarSyncMessage = "Synced \(syncedCount) task\(syncedCount == 1 ? "" : "s") to your SchedAI calendar."
+                let destination = CalendarManager.shared.selectedDestinationName()
+                calendarSyncMessage = "Synced \(syncedCount) task\(syncedCount == 1 ? "" : "s") to \(destination)."
             }
         case .notConnected:
             calendarSyncMessage = "Calendar is not connected. Go to Settings → Calendar → Connect Calendar."
