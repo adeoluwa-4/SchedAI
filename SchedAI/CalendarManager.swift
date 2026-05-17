@@ -7,8 +7,20 @@ import EventKit
 @MainActor
 final class CalendarManager: ObservableObject {
     static let shared = CalendarManager()
+    static let defaultDestinationID = "__schedai_default_calendar__"
 
     @Published var isAuthorized: Bool = false
+
+    struct CalendarDestination: Identifiable, Equatable {
+        let id: String
+        let title: String
+        let sourceTitle: String
+        let isDefaultSchedAI: Bool
+
+        var subtitle: String {
+            isDefaultSchedAI ? "Creates or uses a dedicated SchedAI calendar" : sourceTitle
+        }
+    }
 
     /// Non-prompting calendar connection state.
     enum ConnectionStatus: Equatable {
@@ -30,9 +42,19 @@ final class CalendarManager: ObservableObject {
     #if canImport(EventKit)
     private let store = EKEventStore()
     #endif
+    private let selectedDestinationKey = "SchedAI_SelectedCalendarDestination"
 
     private init() {
         self.isAuthorized = (connectionStatus() == .connected)
+    }
+
+    private var defaultDestination: CalendarDestination {
+        CalendarDestination(
+            id: Self.defaultDestinationID,
+            title: "SchedAI Calendar",
+            sourceTitle: "SchedAI",
+            isDefaultSchedAI: true
+        )
     }
 
     // MARK: - Authorization (NON-prompting status)
@@ -66,9 +88,15 @@ final class CalendarManager: ObservableObject {
             }
         } else {
             switch status {
+            case .fullAccess:
+                isAuthorized = true
+                return .connected
             case .authorized:
                 isAuthorized = true
                 return .connected
+            case .writeOnly:
+                isAuthorized = false
+                return .denied
             case .notDetermined:
                 isAuthorized = false
                 return .notConnected
@@ -112,7 +140,7 @@ final class CalendarManager: ObservableObject {
         #endif
     }
 
-    /// Request access (user-driven) and ensure the SchedAI calendar exists.
+    /// Request access (user-driven) and ensure the selected writable destination exists.
     func requestAccessAndEnsureCalendar(completion: @escaping (ConnectionStatus, String?) -> Void) {
         #if canImport(EventKit)
         requestAccess { [weak self] granted in
@@ -122,10 +150,10 @@ final class CalendarManager: ObservableObject {
                 return
             }
 
-            if self.ensureCalendar() != nil {
+            if self.destinationCalendar() != nil {
                 completion(.connected, nil)
             } else {
-                completion(.notConnected, "Could not create/find the SchedAI calendar.")
+                completion(.notConnected, "Could not find a writable calendar destination.")
             }
         }
         #else
@@ -133,9 +161,59 @@ final class CalendarManager: ObservableObject {
         #endif
     }
 
+    func selectedDestinationID() -> String {
+        UserDefaults.standard.string(forKey: selectedDestinationKey) ?? Self.defaultDestinationID
+    }
+
+    func setSelectedDestinationID(_ id: String) {
+        if id == Self.defaultDestinationID {
+            UserDefaults.standard.removeObject(forKey: selectedDestinationKey)
+        } else {
+            UserDefaults.standard.set(id, forKey: selectedDestinationKey)
+        }
+    }
+
+    func selectedDestinationName() -> String {
+        #if canImport(EventKit)
+        if let calendar = destinationCalendar() {
+            return calendar.title
+        }
+        #endif
+        return "your calendar"
+    }
+
+    func writableDestinations() -> [CalendarDestination] {
+        #if canImport(EventKit)
+        guard connectionStatus() == .connected else {
+            return [defaultDestination]
+        }
+
+        let writable = store.calendars(for: .event)
+            .filter { $0.allowsContentModifications }
+            .sorted {
+                if $0.source.title == $1.source.title {
+                    return $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+                }
+                return $0.source.title.localizedCaseInsensitiveCompare($1.source.title) == .orderedAscending
+            }
+            .map {
+                CalendarDestination(
+                    id: $0.calendarIdentifier,
+                    title: $0.title,
+                    sourceTitle: $0.source.title,
+                    isDefaultSchedAI: false
+                )
+            }
+
+        return [defaultDestination] + writable
+        #else
+        return [defaultDestination]
+        #endif
+    }
+
     // MARK: - Public sync API
 
-    /// Sync today's scheduled tasks into a dedicated "SchedAI" calendar.
+    /// Sync today's scheduled tasks into the selected writable calendar destination.
     /// Never prompts for permission; returns a status instead.
     func upsertTodayEvents(from tasks: [TaskItem], day: Date = Date()) -> SyncResult {
         #if canImport(EventKit)
@@ -150,8 +228,8 @@ final class CalendarManager: ObservableObject {
             return .unavailable
         }
 
-        guard let calendar = ensureCalendar() else {
-            return .failed("Could not create/find SchedAI calendar")
+        guard let calendar = destinationCalendar() else {
+            return .failed("Could not find a writable calendar destination")
         }
 
         let (start, end) = dayBounds(day)
@@ -250,7 +328,7 @@ final class CalendarManager: ObservableObject {
     func deleteEvent(for taskID: UUID) {
         #if canImport(EventKit)
         guard connectionStatus() == .connected else { return }
-        guard let calendar = ensureCalendar() else { return }
+        guard let calendar = destinationCalendar() else { return }
 
         var map = loadEventMap()
 
@@ -321,13 +399,30 @@ final class CalendarManager: ObservableObject {
     // MARK: - Helpers
     #if canImport(EventKit)
 
+    private func destinationCalendar() -> EKCalendar? {
+        let selectedID = selectedDestinationID()
+        if selectedID != Self.defaultDestinationID,
+           let calendar = store.calendar(withIdentifier: selectedID),
+           calendar.allowsContentModifications {
+            return calendar
+        }
+
+        if selectedID != Self.defaultDestinationID {
+            UserDefaults.standard.removeObject(forKey: selectedDestinationKey)
+        }
+
+        return ensureCalendar()
+    }
+
     private func ensureCalendar() -> EKCalendar? {
         let idKey = "SchedAI_CalendarIdentifier"
-        if let saved = UserDefaults.standard.string(forKey: idKey), let cal = store.calendar(withIdentifier: saved) {
+        if let saved = UserDefaults.standard.string(forKey: idKey),
+           let cal = store.calendar(withIdentifier: saved),
+           cal.allowsContentModifications {
             return cal
         }
 
-        if let cal = store.calendars(for: .event).first(where: { $0.title == "SchedAI" }) {
+        if let cal = store.calendars(for: .event).first(where: { $0.title == "SchedAI" && $0.allowsContentModifications }) {
             UserDefaults.standard.set(cal.calendarIdentifier, forKey: idKey)
             return cal
         }
