@@ -8,6 +8,7 @@ struct TodayView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.colorScheme) private var scheme
     @State private var showAI = false
+    @State private var showQuickAdd = false
     @State private var autoStartOfflineNLPFromWidget = false
     @State private var showOverflowBanner = false
     @State private var overflowHideWorkItem: DispatchWorkItem? = nil
@@ -140,6 +141,10 @@ struct TodayView: View {
         }
         .sheet(isPresented: $showAI) {
             AIPlanSheet(autoStartRecording: autoStartOfflineNLPFromWidget)
+                .environmentObject(app)
+        }
+        .sheet(isPresented: $showQuickAdd) {
+            AIAddTasksSheet(navigationTitle: "Quick Add")
                 .environmentObject(app)
         }
         .sheet(isPresented: $showCalendar) {
@@ -351,7 +356,7 @@ struct TodayView: View {
                             
                             Button {
                                 Haptics.medium()
-                                openOfflineNLPSheet(autoStartRecording: false)
+                                openQuickAddSheet()
                             } label: {
                                 Label("Quick Add", systemImage: "plus")
                                     .font(.subheadline)
@@ -413,7 +418,7 @@ struct TodayView: View {
                             
                             Button {
                                 Haptics.medium()
-                                openOfflineNLPSheet(autoStartRecording: false)
+                                openQuickAddSheet()
                             } label: {
                                 Label("Add More", systemImage: "plus")
                                     .font(.subheadline)
@@ -560,7 +565,7 @@ struct TodayView: View {
             if !scheduledToday.isEmpty {
                 Button {
                     Haptics.medium()
-                    openOfflineNLPSheet(autoStartRecording: false)
+                    openQuickAddSheet()
                 } label: {
                     Label("Add Tasks", systemImage: "plus.circle.fill")
                         .font(.subheadline)
@@ -664,6 +669,10 @@ struct TodayView: View {
     private func openOfflineNLPSheet(autoStartRecording: Bool) {
         autoStartOfflineNLPFromWidget = autoStartRecording
         showAI = true
+    }
+
+    private func openQuickAddSheet() {
+        showQuickAdd = true
     }
 
     private func handleWidgetVoiceRequestIfNeeded() {

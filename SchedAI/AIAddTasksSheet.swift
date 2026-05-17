@@ -8,11 +8,26 @@ struct AIAddTasksSheet: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.colorScheme) private var scheme
 
+    let initialInput: String
+    let navigationTitle: String
+    let onAddComplete: () -> Void
+
     @State private var input: String = ""
     @State private var isParsing: Bool = false
     @State private var parsedPreview: [TaskItem] = []
     @State private var parseStatusMessage: String? = nil
     @State private var showAIConsentSheet: Bool = false
+    @State private var didLoadInitialInput = false
+
+    init(
+        initialInput: String = "",
+        navigationTitle: String = "Quick Add",
+        onAddComplete: @escaping () -> Void = {}
+    ) {
+        self.initialInput = initialInput
+        self.navigationTitle = navigationTitle
+        self.onAddComplete = onAddComplete
+    }
 
     var body: some View {
         NavigationStack {
@@ -105,8 +120,13 @@ struct AIAddTasksSheet: View {
 
                 Spacer(minLength: 10)
             }
-            .navigationTitle("Add Tasks")
+            .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
+            .onAppear {
+                guard !didLoadInitialInput else { return }
+                didLoadInitialInput = true
+                input = initialInput
+            }
             .onChange(of: input) { _, _ in
                 parsedPreview = []
                 parseStatusMessage = nil
@@ -139,9 +159,9 @@ struct AIAddTasksSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Add Tasks")
+                    Text("Quick Add")
                         .font(.headline.weight(.bold))
-                    Text("Type one task per line")
+                    Text("Type tasks, then preview before adding")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -235,6 +255,7 @@ struct AIAddTasksSheet: View {
             app.addTask(t)
         }
 
+        onAddComplete()
         dismiss()
     }
 

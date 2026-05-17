@@ -10,6 +10,7 @@ struct TasksView: View {
     @State private var planMessage: String? = nil
     @State private var planMessageHideWorkItem: DispatchWorkItem? = nil
     @State private var taskPendingDelete: TaskItem? = nil
+    @State private var showQuickAddPreview: Bool = false
     
     private enum TaskFilter: String, CaseIterable {
         case all, unscheduled, scheduled, high
@@ -128,6 +129,12 @@ struct TasksView: View {
                 TaskEditView(task: task)
                     .environmentObject(app)
             }
+            .sheet(isPresented: $showQuickAddPreview) {
+                AIAddTasksSheet(initialInput: newTitle, navigationTitle: "Quick Add") {
+                    newTitle = ""
+                }
+                .environmentObject(app)
+            }
             .overlay(alignment: .top) {
                 if let planMessage {
                     planToast(planMessage)
@@ -194,7 +201,7 @@ struct TasksView: View {
                 TextField("Finish essay 60m urgent", text: $newTitle)
                     .textFieldStyle(.plain)
                     .submitLabel(.done)
-                    .onSubmit(addTask)
+                    .onSubmit(openQuickAddPreview)
 
                 if !newTitle.isEmpty {
                     Button(action: { newTitle = "" }) {
@@ -205,7 +212,7 @@ struct TasksView: View {
                     .buttonStyle(.plain)
                 }
 
-                Button(action: addTask) {
+                Button(action: openQuickAddPreview) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 30, weight: .semibold))
                         .foregroundStyle(newTitle.isEmpty ? Color.secondary : Color.blue)
@@ -505,18 +512,11 @@ struct TasksView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
     }
     
-    private func addTask() {
+    private func openQuickAddPreview() {
         let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let result = AIService.parseTasksOffline(from: trimmed, now: Date())
-        if result.tasks.isEmpty {
-            app.addTask(title: trimmed)
-        } else {
-            result.tasks.forEach { app.addTask($0) }
-        }
-
-        newTitle = ""
+        showQuickAddPreview = true
         Haptics.medium()
     }
     
