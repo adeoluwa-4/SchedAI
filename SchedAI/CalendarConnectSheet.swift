@@ -24,7 +24,7 @@ struct CalendarConnectSheet: View {
                     Text("Connect Calendar")
                         .font(.title2).bold()
                         .multilineTextAlignment(.center)
-                    Text("Create a dedicated SchedAI calendar to sync your planned schedule. You can remove it anytime in Calendar.")
+                    Text("Sync your planned schedule to a dedicated SchedAI calendar, or choose an existing writable calendar like Google from Settings after connecting.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
