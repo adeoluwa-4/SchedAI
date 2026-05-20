@@ -11,6 +11,9 @@ import UIKit
 #endif
 
 struct SplashView: View {
+    @EnvironmentObject private var app: AppState
+    @Environment(\.colorScheme) private var scheme
+
     private let onStart: (() -> Void)?
 
     init(onStart: (() -> Void)? = nil) {
@@ -19,28 +22,29 @@ struct SplashView: View {
 
     var body: some View {
         SplashBackground {
-            VStack(spacing: 18) {
-                Spacer(minLength: 8)
+            VStack(spacing: 24) {
+                Spacer(minLength: 34)
 
-                // Header
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(greeting())
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(welcomeTitle)
+                        .font(.system(size: 38, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.82)
+                        .fixedSize(horizontal: false, vertical: true)
 
-                    Text("Let’s plan your day.")
-                        .font(.title3)
+                    Text("Ready to shape your day?")
+                        .font(.system(size: 18, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 20)
+                .padding(.horizontal, 24)
 
                 Spacer()
 
-                // Card + Button stack
-                VStack(spacing: 18) {
+                VStack(spacing: 20) {
                     StartCard()
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, 24)
 
                     Button {
                         #if canImport(UIKit)
@@ -52,36 +56,33 @@ struct SplashView: View {
                             Image(systemName: "wand.and.stars")
                             Text("Start Planning")
                         }
-                        .font(.headline)
-                        .fontWeight(.semibold)
+                        .font(.headline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                     }
-                    .background(
-                        LinearGradient(
-                            colors: [Color.blue.opacity(0.95), Color.blue],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .foregroundStyle(.white)
+                    .background(scheme == .dark ? Color.white : Color.black)
+                    .foregroundStyle(scheme == .dark ? Color.black : Color.white)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: Color.black.opacity(0.12), radius: 10, x: 0, y: 6)
-                    .padding(.horizontal, 20)
+                    .shadow(color: Color.black.opacity(scheme == .dark ? 0.32 : 0.12), radius: 16, x: 0, y: 10)
+                    .padding(.horizontal, 24)
                 }
 
-                Spacer(minLength: 28)
+                Spacer(minLength: 34)
             }
         }
     }
 
-    private func greeting() -> String {
-        let hour = Calendar.current.component(.hour, from: Date())
-        switch hour {
-        case 5..<12: return "Good morning"
-        case 12..<17: return "Good afternoon"
-        default: return "Good evening"
+    private var welcomeTitle: String {
+        if let name = app.userDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !name.isEmpty {
+            return "Welcome back, \(firstName(from: name))"
         }
+
+        return "Welcome back"
+    }
+
+    private func firstName(from name: String) -> String {
+        name.split(separator: " ").first.map(String.init) ?? name
     }
 }
 
@@ -91,40 +92,78 @@ private struct StartCard: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 28, style: .continuous)
+        RoundedRectangle(cornerRadius: 30, style: .continuous)
             .fill(cardFill)
             .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .stroke(borderColor, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(scheme == .dark ? 0.35 : 0.18),
-                    radius: scheme == .dark ? 18 : 22,
+            .shadow(color: Color.black.opacity(scheme == .dark ? 0.42 : 0.12),
+                    radius: scheme == .dark ? 22 : 20,
                     x: 0,
                     y: scheme == .dark ? 10 : 12)
-            .frame(height: 260)
-            .overlay(cardContent.padding(.horizontal, 20))
+            .frame(height: 324)
+            .overlay(cardContent.padding(.horizontal, 22))
     }
 
     private var cardFill: Color {
-        scheme == .dark ? Color(.secondarySystemBackground) : Color.white
+        scheme == .dark ? Color.white.opacity(0.08) : Color.white
     }
 
     private var borderColor: Color {
-        scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.06)
+        scheme == .dark ? Color.white.opacity(0.12) : Color.black.opacity(0.08)
     }
 
     private var cardContent: some View {
-        VStack(spacing: 14) {
-            LaunchArtworkImage(width: 140, height: 140)
+        VStack(spacing: 20) {
+            VStack(spacing: 10) {
+                LaunchArtworkImage(width: 76, height: 76)
 
-            Text("SchedAI")
-                .font(.system(size: 28, weight: .bold, design: .rounded))
-                .foregroundStyle(scheme == .dark ? .white : .black)
+                Text("SchedAI")
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
 
-            Text("Your personal AI-powered day planner.")
-                .font(.callout)
-                .foregroundStyle(scheme == .dark ? .white.opacity(0.65) : .black.opacity(0.45))
+                Text("Your day, planned clearly.")
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(spacing: 12) {
+                StartFeatureRow(icon: "text.badge.plus", title: "Add tasks naturally")
+                StartFeatureRow(icon: "checkmark.seal", title: "Preview before changes")
+                StartFeatureRow(icon: "bell", title: "Get reminders when it matters")
+            }
         }
+    }
+}
+
+private struct StartFeatureRow: View {
+    @Environment(\.colorScheme) private var scheme
+    let icon: String
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(Color.brandBlue.opacity(scheme == .dark ? 0.16 : 0.1))
+                )
+
+            Text(title)
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
+        )
     }
 }
 
@@ -170,16 +209,23 @@ private struct SplashBackground<Content: View>: View {
     var body: some View {
         ZStack {
             if scheme == .dark {
-                Color.black.ignoresSafeArea()
-            } else {
-                // ✅ matches the light screenshot: soft gray background
                 LinearGradient(
                     colors: [
-                        Color(.systemGray5).opacity(0.55),
+                        Color.black,
+                        Color(red: 0.025, green: 0.027, blue: 0.032)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+            } else {
+                LinearGradient(
+                    colors: [
+                        Color.white,
                         Color(.systemGray6)
                     ],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
                 .ignoresSafeArea()
             }
