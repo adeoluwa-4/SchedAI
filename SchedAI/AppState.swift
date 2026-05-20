@@ -186,7 +186,7 @@ final class AppState: ObservableObject {
         self.calendarSyncEnabled = (defaults.object(forKey: DefaultsKey.calendarSyncEnabled) as? Bool) ?? false
         self.selectedCalendarDestinationID = CalendarManager.shared.selectedDestinationID()
         self.userDisplayName = defaults.string(forKey: DefaultsKey.userDisplayName)
-        self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? true
+        self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? false
         let unfinishedRaw = defaults.string(forKey: DefaultsKey.unfinishedTaskPolicy) ?? UnfinishedTaskPolicy.askMe.rawValue
         self.unfinishedTaskPolicy = UnfinishedTaskPolicy(rawValue: unfinishedRaw) ?? .askMe
         self.hostedAIConsent = (defaults.object(forKey: DefaultsKey.hostedAIConsent) as? Bool) ?? false
