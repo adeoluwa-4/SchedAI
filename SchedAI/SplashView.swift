@@ -23,14 +23,14 @@ struct SplashView: View {
     var body: some View {
         SplashBackground {
             VStack(spacing: 24) {
-                Spacer(minLength: 34)
+                Spacer(minLength: 42)
 
                 VStack(alignment: .leading, spacing: 10) {
                     Text(welcomeTitle)
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
+                        .font(.system(size: 37, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(2)
-                        .minimumScaleFactor(0.82)
+                        .minimumScaleFactor(0.78)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text("Ready to shape your day?")
@@ -42,7 +42,7 @@ struct SplashView: View {
 
                 Spacer()
 
-                VStack(spacing: 20) {
+                VStack(spacing: 18) {
                     StartCard()
                         .padding(.horizontal, 24)
 
@@ -67,7 +67,7 @@ struct SplashView: View {
                     .padding(.horizontal, 24)
                 }
 
-                Spacer(minLength: 34)
+                Spacer(minLength: 26)
             }
         }
     }
@@ -102,8 +102,8 @@ private struct StartCard: View {
                     radius: scheme == .dark ? 22 : 20,
                     x: 0,
                     y: scheme == .dark ? 10 : 12)
-            .frame(height: 324)
-            .overlay(cardContent.padding(.horizontal, 22))
+            .frame(height: 374)
+            .overlay(cardContent.padding(.horizontal, 20))
     }
 
     private var cardFill: Color {
@@ -115,12 +115,12 @@ private struct StartCard: View {
     }
 
     private var cardContent: some View {
-        VStack(spacing: 20) {
-            VStack(spacing: 10) {
-                LaunchArtworkImage(width: 76, height: 76)
+        VStack(spacing: 18) {
+            VStack(spacing: 8) {
+                LaunchArtworkImage(width: 62, height: 62)
 
                 Text("SchedAI")
-                    .font(.system(size: 30, weight: .bold, design: .rounded))
+                    .font(.system(size: 29, weight: .bold, design: .rounded))
                     .foregroundStyle(.primary)
 
                 Text("Your day, planned clearly.")
@@ -128,7 +128,7 @@ private struct StartCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            VStack(spacing: 12) {
+            VStack(spacing: 10) {
                 StartFeatureRow(icon: "text.badge.plus", title: "Add tasks naturally")
                 StartFeatureRow(icon: "checkmark.seal", title: "Preview before changes")
                 StartFeatureRow(icon: "bell", title: "Get reminders when it matters")
@@ -147,7 +147,7 @@ private struct StartFeatureRow: View {
             Image(systemName: icon)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(Color.brandBlue)
-                .frame(width: 34, height: 34)
+                .frame(width: 38, height: 38)
                 .background(
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .fill(Color.brandBlue.opacity(scheme == .dark ? 0.16 : 0.1))
@@ -156,10 +156,13 @@ private struct StartFeatureRow: View {
             Text(title)
                 .font(.system(size: 16, weight: .semibold, design: .rounded))
                 .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
 
             Spacer(minLength: 0)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .frame(height: 60)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
