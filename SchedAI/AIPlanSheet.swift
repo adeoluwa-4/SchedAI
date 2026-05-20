@@ -27,67 +27,13 @@ struct AIPlanSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
+        ZStack {
+            VStack(spacing: 0) {
+                sheetHeader
+
                 ScrollView(showsIndicators: false) {
                     VStack(spacing: 16) {
-                        Text("Speak or type your tasks, then preview the plan.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                .fill(.thinMaterial)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                        .stroke(.quaternary, lineWidth: 1)
-                                )
-
-                            VStack(spacing: 12) {
-                                ZStack(alignment: .topLeading) {
-                                    TextEditor(text: $transcript)
-                                        .font(.body)
-                                        .scrollContentBackground(.hidden)
-                                        .padding(8)
-
-                                    if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                        Text("Say or type: 'finish essay 60m urgent, then gym 1h'")
-                                            .font(.body)
-                                            .foregroundStyle(.secondary)
-                                            .padding(16)
-                                            .allowsHitTesting(false)
-                                    }
-                                }
-                                .frame(height: parsedPreview.isEmpty ? 260 : 150)
-
-                                HStack(spacing: 16) {
-                                    Button(action: toggleRecord) {
-                                        ZStack {
-                                            Circle().fill(speech.isRecording ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
-                                                .frame(width: 76, height: 76)
-                                            Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
-                                                .font(.system(size: 28, weight: .bold))
-                                                .foregroundStyle(speech.isRecording ? .red : .blue)
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityLabel(speech.isRecording ? "Stop recording" : "Start recording")
-                                    .disabled(isPlanning)
-
-                                    VStack(alignment: .leading, spacing: 6) {
-                                        Text(speech.isRecording ? "Listening…" : (isAuthorized ? "Ready" : "Tap mic to enable voice"))
-                                            .font(.headline)
-                                        Text(speech.errorMessage ?? (isAuthorized ? "" : "Speech and microphone access are only requested when you start recording."))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 12)
-                            }
-                            .padding(12)
-                        }
+                        inputCard
 
                         HStack(spacing: 12) {
                             Button {
@@ -110,125 +56,13 @@ struct AIPlanSheet: View {
                         }
 
                         if !parsedPreview.isEmpty {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text("SchedAI detected \(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s"):")
-                                    .font(.subheadline.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-
-                                if let parseStatusMessage {
-                                    Text(parseStatusMessage)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                if !previewUsedAI {
-                                    Button {
-                                        requestHostedAIImprove()
-                                    } label: {
-                                        Label("Improve with AI", systemImage: "sparkles")
-                                            .frame(maxWidth: .infinity)
-                                    }
-                                    .font(.subheadline.weight(.semibold))
-                                    .buttonStyle(.bordered)
-                                    .disabled(isPlanning)
-
-                                    Text("Preview stays on device. AI Improve is optional and asks before sending task text off device.")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                }
-
-                                if needsInlineDaySelector {
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Schedule untimed tasks for:")
-                                            .font(.caption.weight(.semibold))
-                                            .foregroundStyle(.secondary)
-                                        DatePicker(
-                                            "Plan date",
-                                            selection: $previewDay,
-                                            displayedComponents: [.date]
-                                        )
-                                        .labelsHidden()
-                                    }
-                                }
-
-                                Text("Planning for \(day(previewDay))")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                ForEach(Array(parsedPreview.indices), id: \.self) { idx in
-                                    let task = parsedPreview[idx]
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        HStack(alignment: .top, spacing: 8) {
-                                            Text(task.title)
-                                                .font(.body)
-                                                .frame(maxWidth: .infinity, alignment: .leading)
-
-                                            Text(scheduleSummary(task))
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .multilineTextAlignment(.trailing)
-
-                                            Button(expandedPreviewTaskIDs.contains(task.id) ? "Done" : "Edit") {
-                                                if expandedPreviewTaskIDs.contains(task.id) {
-                                                    expandedPreviewTaskIDs.remove(task.id)
-                                                } else {
-                                                    expandedPreviewTaskIDs.insert(task.id)
-                                                }
-                                            }
-                                            .font(.caption.weight(.semibold))
-                                            .buttonStyle(.bordered)
-                                        }
-
-                                        if expandedPreviewTaskIDs.contains(task.id) {
-                                            VStack(alignment: .leading, spacing: 8) {
-                                                TextField("Task", text: previewTitleBinding(at: idx))
-                                                    .textFieldStyle(.roundedBorder)
-                                                    .textInputAutocapitalization(.sentences)
-
-                                                Picker("Priority", selection: previewPriorityBinding(at: idx)) {
-                                                    ForEach(TaskPriority.allCases, id: \.self) { level in
-                                                        Text(level.displayName).tag(level)
-                                                    }
-                                                }
-                                                .pickerStyle(.segmented)
-
-                                                DatePicker(
-                                                    "Day",
-                                                    selection: previewDayBinding(at: idx),
-                                                    displayedComponents: [.date]
-                                                )
-
-                                                Toggle("Set specific time", isOn: previewHasTimeBinding(at: idx))
-
-                                                if parsedPreview[idx].scheduledStart != nil {
-                                                    DatePicker(
-                                                        "Time",
-                                                        selection: previewTimeBinding(at: idx),
-                                                        displayedComponents: [.hourAndMinute]
-                                                    )
-                                                }
-                                            }
-                                            .padding(.top, 4)
-                                        }
-                                    }
-                                    .padding(.vertical, 4)
-                                }
-                            }
-
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .fill(.thinMaterial)
-                            )
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(.quaternary, lineWidth: 1)
-                            )
+                            previewCard
                         }
 
-                        Spacer(minLength: parsedPreview.isEmpty ? 0 : 92)
+                        Spacer(minLength: parsedPreview.isEmpty ? 14 : 108)
                     }
-                    .padding(16)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 10)
                 }
                 .scrollDismissesKeyboard(.interactively)
                 .safeAreaInset(edge: .bottom) {
@@ -245,50 +79,8 @@ struct AIPlanSheet: View {
                         .background(.bar)
                     }
                 }
-
-                if isPlanning {
-                    ZStack {
-                        Color.black.opacity(0.32)
-                            .ignoresSafeArea()
-
-                        VStack(spacing: 14) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.blue.opacity(0.16))
-                                    .frame(width: 92, height: 92)
-                                    .scaleEffect(animateLoader ? 1.08 : 0.92)
-                                    .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: animateLoader)
-
-                                Image(systemName: "sparkles")
-                                    .font(.system(size: 34, weight: .bold))
-                                    .foregroundStyle(.blue)
-                                    .rotationEffect(.degrees(animateLoader ? 360 : 0))
-                                    .animation(.linear(duration: 1.4).repeatForever(autoreverses: false), value: animateLoader)
-                            }
-
-                            Text("Making plan…")
-                                .font(.headline)
-                            Text("Organizing your tasks")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                                .fill(.ultraThinMaterial)
-                        )
-                    }
-                    .transition(.opacity)
-                }
             }
-            .navigationTitle("Plan")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
-                        .disabled(isPlanning)
-                }
-            }
+            .background(Color(uiColor: .systemBackground).ignoresSafeArea())
             .task { await setupSheetState() }
             .onReceive(speech.$transcript) { text in
                 self.transcript = text
@@ -313,7 +105,248 @@ struct AIPlanSheet: View {
                     Task { await improvePreviewWithAI() }
                 }
             }
+
+            if isPlanning {
+                planningOverlay
+            }
         }
+    }
+
+    private var sheetHeader: some View {
+        ZStack {
+            Text("Plan")
+                .font(.headline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+
+            HStack {
+                Button("Close") { dismiss() }
+                    .buttonStyle(.bordered)
+                    .disabled(isPlanning)
+
+                Spacer()
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
+        .background(.bar)
+    }
+
+    private var inputCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Speak or type your tasks, then preview the plan.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $transcript)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+
+                if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Say or type: 'finish essay 60m urgent, then gym 1h'")
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .padding(16)
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(height: parsedPreview.isEmpty ? 210 : 112)
+
+            HStack(spacing: 12) {
+                Button(action: toggleRecord) {
+                    ZStack {
+                        Circle().fill(speech.isRecording ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
+                            .frame(width: 58, height: 58)
+                        Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(speech.isRecording ? .red : .blue)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(speech.isRecording ? "Stop recording" : "Start recording")
+                .disabled(isPlanning)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(speech.isRecording ? "Listening" : (isAuthorized ? "Voice ready" : "Tap mic to enable voice"))
+                        .font(.subheadline.weight(.semibold))
+                    Text(speech.errorMessage ?? (isAuthorized ? "You can also type above." : "Permissions are requested only when needed."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.thinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.quaternary, lineWidth: 1)
+        )
+    }
+
+    private var previewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s") detected")
+                    .font(.headline.weight(.semibold))
+
+                Spacer()
+
+                Text(previewUsedAI ? "AI improved" : "Offline")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(.quaternary))
+            }
+
+            if let parseStatusMessage {
+                Text(parseStatusMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !previewUsedAI {
+                Button {
+                    requestHostedAIImprove()
+                } label: {
+                    Label("Improve with AI", systemImage: "sparkles")
+                        .frame(maxWidth: .infinity)
+                }
+                .font(.subheadline.weight(.semibold))
+                .buttonStyle(.bordered)
+                .disabled(isPlanning)
+
+                Text("Optional. SchedAI asks before sending task text off device.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+
+            if needsInlineDaySelector {
+                DatePicker(
+                    "Schedule untimed tasks for",
+                    selection: $previewDay,
+                    displayedComponents: [.date]
+                )
+                .font(.caption.weight(.semibold))
+            }
+
+            ForEach(Array(parsedPreview.indices), id: \.self) { idx in
+                previewTaskRow(index: idx)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.thinMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(.quaternary, lineWidth: 1)
+        )
+    }
+
+    private func previewTaskRow(index idx: Int) -> some View {
+        let task = parsedPreview[idx]
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 10) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.title)
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    Text(scheduleSummary(task))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(expandedPreviewTaskIDs.contains(task.id) ? "Done" : "Edit") {
+                    if expandedPreviewTaskIDs.contains(task.id) {
+                        expandedPreviewTaskIDs.remove(task.id)
+                    } else {
+                        expandedPreviewTaskIDs.insert(task.id)
+                    }
+                }
+                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+            }
+
+            if expandedPreviewTaskIDs.contains(task.id) {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("Task", text: previewTitleBinding(at: idx))
+                        .textFieldStyle(.roundedBorder)
+                        .textInputAutocapitalization(.sentences)
+
+                    Picker("Priority", selection: previewPriorityBinding(at: idx)) {
+                        ForEach(TaskPriority.allCases, id: \.self) { level in
+                            Text(level.displayName).tag(level)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    DatePicker(
+                        "Day",
+                        selection: previewDayBinding(at: idx),
+                        displayedComponents: [.date]
+                    )
+
+                    Toggle("Set specific time", isOn: previewHasTimeBinding(at: idx))
+
+                    if parsedPreview[idx].scheduledStart != nil {
+                        DatePicker(
+                            "Time",
+                            selection: previewTimeBinding(at: idx),
+                            displayedComponents: [.hourAndMinute]
+                        )
+                    }
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private var planningOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.32)
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(Color.blue.opacity(0.16))
+                        .frame(width: 92, height: 92)
+                        .scaleEffect(animateLoader ? 1.08 : 0.92)
+                        .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: animateLoader)
+
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 34, weight: .bold))
+                        .foregroundStyle(.blue)
+                        .rotationEffect(.degrees(animateLoader ? 360 : 0))
+                        .animation(.linear(duration: 1.4).repeatForever(autoreverses: false), value: animateLoader)
+                }
+
+                Text("Making plan...")
+                    .font(.headline)
+                Text("Organizing your tasks")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(20)
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(.ultraThinMaterial)
+            )
+        }
+        .transition(.opacity)
     }
 
     // MARK: - Actions
