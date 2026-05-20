@@ -24,7 +24,7 @@ struct LogoLaunchView: View {
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + logoHoldSeconds) {
                             withAnimation(.easeOut(duration: 0.25)) {
-                                phase = hasCompletedOnboarding ? .main : .onboarding
+                                phase = hasCompletedOnboarding ? .splash : .onboarding
                             }
                         }
                     }
@@ -40,9 +40,7 @@ struct LogoLaunchView: View {
 
             case .splash:
                 SplashView(onStart: {
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        phase = hasSeenNotificationOnboarding ? .main : .notifications
-                    }
+                    startMainExperience()
                 })
                 .transition(.opacity)
 
@@ -64,6 +62,31 @@ struct LogoLaunchView: View {
         hasSeenNotificationOnboarding = true
         withAnimation(.easeOut(duration: 0.25)) {
             phase = .main
+        }
+    }
+
+    private func startMainExperience() {
+        guard !hasSeenNotificationOnboarding else {
+            withAnimation(.easeOut(duration: 0.25)) {
+                phase = .main
+            }
+            return
+        }
+
+        NotificationManager.authorizationStatus { status in
+            DispatchQueue.main.async {
+                switch status {
+                case .authorized, .denied:
+                    hasSeenNotificationOnboarding = true
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        phase = .main
+                    }
+                case .notDetermined:
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        phase = .notifications
+                    }
+                }
+            }
         }
     }
 }
@@ -230,18 +253,20 @@ private struct NotificationPermissionOnboardingView: View {
     let onSkip: () -> Void
 
     var body: some View {
-        OnboardingBackground {
+        NotificationOnboardingBackground {
             VStack(spacing: 0) {
-                Spacer(minLength: 74)
+                Spacer(minLength: 96)
 
-                VStack(spacing: 26) {
+                VStack(spacing: 28) {
+                    OnboardingLogoImage(width: 72, height: 72)
+
                     ZStack {
                         Circle()
-                            .fill(Color.brandBlue.opacity(0.12))
-                            .frame(width: 82, height: 82)
+                            .fill(Color.white.opacity(0.06))
+                            .frame(width: 86, height: 86)
 
                         Image(systemName: "bell.badge.fill")
-                            .font(.system(size: 34, weight: .bold))
+                            .font(.system(size: 32, weight: .bold))
                             .foregroundStyle(Color.brandBlue)
                     }
 
@@ -249,8 +274,10 @@ private struct NotificationPermissionOnboardingView: View {
                         Text("Stay ahead of your plan.")
                             .font(.system(size: 38, weight: .bold, design: .rounded))
                             .multilineTextAlignment(.center)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.88)
 
-                        Text("SchedAI can remind you before scheduled tasks so your day does not drift.")
+                        Text("SchedAI can remind you before scheduled tasks so your day stays on track.")
                             .font(.system(size: 17, weight: .medium, design: .rounded))
                             .foregroundStyle(.secondary)
                             .lineSpacing(3)
@@ -268,12 +295,12 @@ private struct NotificationPermissionOnboardingView: View {
                     .padding(.vertical, 10)
                     .background(
                         Capsule()
-                            .fill(Color.brandBlue.opacity(0.12))
+                            .fill(Color.white.opacity(0.06))
                     )
                 }
                 .padding(.horizontal, 24)
 
-                Spacer(minLength: 34)
+                Spacer(minLength: 40)
 
                 VStack(spacing: 12) {
                     Button {
@@ -290,10 +317,12 @@ private struct NotificationPermissionOnboardingView: View {
                         }
                         .font(.headline.weight(.semibold))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 54)
+                        .frame(height: 58)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Color.brandBlue)
+                    .buttonStyle(.plain)
+                    .background(Color.white)
+                    .foregroundStyle(Color.black)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .disabled(isCheckingPermission || isRequestingPermission)
 
                     Button("Not Now") {
@@ -304,7 +333,7 @@ private struct NotificationPermissionOnboardingView: View {
                     .disabled(isRequestingPermission)
                 }
                 .padding(.horizontal, 24)
-                .padding(.bottom, 24)
+                .padding(.bottom, 28)
             }
         }
         .alert("Notifications", isPresented: Binding(
@@ -349,6 +378,54 @@ private struct NotificationPermissionOnboardingView: View {
                     message = "Notifications were not enabled. You can turn them on later in Settings."
                 }
             }
+        }
+    }
+}
+
+private struct OnboardingLogoImage: View {
+    let width: CGFloat
+    let height: CGFloat
+
+    var body: some View {
+        Group {
+            #if canImport(UIKit)
+            if let uiImage = UIImage(named: "LauchLogo") {
+                Image(uiImage: uiImage)
+                    .renderingMode(.original)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                fallback
+            }
+            #else
+            fallback
+            #endif
+        }
+        .frame(width: width, height: height)
+    }
+
+    private var fallback: some View {
+        Image(systemName: "calendar.badge.clock")
+            .symbolRenderingMode(.hierarchical)
+            .font(.system(size: min(width, height) * 0.78, weight: .semibold))
+            .foregroundStyle(Color.brandBlue)
+    }
+}
+
+private struct NotificationOnboardingBackground<Content: View>: View {
+    @Environment(\.colorScheme) private var scheme
+    let content: () -> Content
+
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        ZStack {
+            (scheme == .dark ? Color.black : Color.white)
+                .ignoresSafeArea()
+
+            content()
         }
     }
 }
