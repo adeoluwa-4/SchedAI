@@ -95,6 +95,8 @@ private struct OnboardingView: View {
     @EnvironmentObject private var app: AppState
     @State private var page = 0
     @State private var hasCompletedAppleSignIn = false
+    @State private var needsNameEntry = false
+    @State private var firstNameInput = ""
     @State private var signInMessage: String? = nil
 
     let onFinish: () -> Void
@@ -104,7 +106,9 @@ private struct OnboardingView: View {
     var body: some View {
         OnboardingBackground {
             VStack(spacing: 0) {
-                if hasCompletedAppleSignIn {
+                if needsNameEntry {
+                    NameEntryOnboardingScreen(firstName: $firstNameInput)
+                } else if hasCompletedAppleSignIn {
                     TabView(selection: $page) {
                         ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
                             OnboardingPageView(page: page)
@@ -148,7 +152,7 @@ private struct OnboardingView: View {
 
     private var bottomControls: some View {
         HStack(spacing: 12) {
-            if hasCompletedAppleSignIn && page > 0 {
+            if hasCompletedAppleSignIn && !needsNameEntry && page > 0 {
                 Button {
                     withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                         page -= 1
@@ -170,7 +174,22 @@ private struct OnboardingView: View {
                 )
             }
 
-            if hasCompletedAppleSignIn {
+            if needsNameEntry {
+                Button {
+                    saveManualFirstName()
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("Continue")
+                        Image(systemName: "arrow.right")
+                    }
+                    .font(.headline.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 54)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.brandBlue)
+                .disabled(firstNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            } else if hasCompletedAppleSignIn {
                 Button {
                     if page == pages.count - 1 {
                         onFinish()
@@ -221,16 +240,21 @@ private struct OnboardingView: View {
             if let fullName = credential.fullName {
                 let formatter = PersonNameComponentsFormatter()
                 let name = formatter.string(from: fullName).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !name.isEmpty {
-                    app.userDisplayName = name
-                } else {
-                    signInMessage = "You are signed in. Apple only shares your name once, so your name may not appear again."
-                }
+                app.userDisplayName = cleanDisplayName(from: fullName.givenName) ?? cleanDisplayName(from: name) ?? app.userDisplayName
+            }
+
+            if app.userDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
+               let fallbackName = displayNameFromEmail(credential.email) {
+                app.userDisplayName = fallbackName
             }
 
             withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
-                hasCompletedAppleSignIn = true
-                page = 0
+                if app.userDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
+                    needsNameEntry = true
+                } else {
+                    hasCompletedAppleSignIn = true
+                    page = 0
+                }
             }
         case .failure:
             signInMessage = "Sign in with Apple was cancelled or failed. It is required to continue."
@@ -241,6 +265,42 @@ private struct OnboardingView: View {
         signInMessage = "Sign in with Apple is unavailable on this device, so onboarding cannot continue here."
     }
     #endif
+
+    private func saveManualFirstName() {
+        let name = firstNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+
+        app.userDisplayName = name
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+            needsNameEntry = false
+            hasCompletedAppleSignIn = true
+            page = 0
+        }
+    }
+
+    private func cleanDisplayName(from rawValue: String?) -> String? {
+        let cleaned = rawValue?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .first
+            .map(String.init)
+        return cleaned?.isEmpty == false ? cleaned : nil
+    }
+
+    private func displayNameFromEmail(_ email: String?) -> String? {
+        guard let localPart = email?.split(separator: "@").first else { return nil }
+        let candidate = localPart
+            .split(whereSeparator: { ".-_+".contains($0) })
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard let candidate, !candidate.isEmpty, candidate.rangeOfCharacter(from: .letters) != nil else {
+            return nil
+        }
+
+        return candidate.prefix(1).uppercased() + candidate.dropFirst()
+    }
 }
 
 private struct NotificationPermissionOnboardingView: View {
@@ -378,6 +438,72 @@ private struct NotificationPermissionOnboardingView: View {
                     message = "Notifications were not enabled. You can turn them on later in Settings."
                 }
             }
+        }
+    }
+}
+
+private struct NameEntryOnboardingScreen: View {
+    @Binding var firstName: String
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(spacing: 26) {
+            Spacer(minLength: 92)
+
+            VStack(spacing: 16) {
+                OnboardingLogoImage(width: 78, height: 78)
+
+                VStack(spacing: 10) {
+                    Text("What should we call you?")
+                        .font(.system(size: 34, weight: .bold, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.84)
+
+                    Text("This keeps the start page personal. Your name stays on this device.")
+                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .frame(maxWidth: 310)
+                }
+            }
+
+            TextField("First name", text: $firstName)
+                .textContentType(.givenName)
+                .submitLabel(.continue)
+                .font(.system(size: 22, weight: .semibold, design: .rounded))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 20)
+                .frame(height: 62)
+                .background(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(Color.white.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                                .stroke(Color.white.opacity(isFocused ? 0.28 : 0.12), lineWidth: 1)
+                        )
+                )
+                .focused($isFocused)
+                .padding(.horizontal, 24)
+
+            HStack(spacing: 10) {
+                Image(systemName: "lock.shield")
+                Text("Used only for your welcome message.")
+            }
+            .font(.footnote.weight(.semibold))
+            .foregroundStyle(Color.brandBlue)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(
+                Capsule()
+                    .fill(Color.white.opacity(0.06))
+            )
+
+            Spacer(minLength: 20)
+        }
+        .onAppear {
+            isFocused = true
         }
     }
 }
@@ -581,7 +707,7 @@ private struct AppleSignInControl: View {
 
     var body: some View {
         SignInWithAppleButton(.signIn) { request in
-            request.requestedScopes = [.fullName]
+            request.requestedScopes = [.fullName, .email]
         } onCompletion: { result in
             onCompletion(result)
         }
