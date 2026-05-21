@@ -590,18 +590,18 @@ private struct OnboardingPageView: View {
     let page: OnboardingPage
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer(minLength: 34)
+        VStack(spacing: 18) {
+            Spacer(minLength: 22)
 
             OnboardingHeroCard(page: page)
 
-            VStack(spacing: 12) {
+            VStack(spacing: 9) {
                 Text(page.eyebrow.uppercased())
                     .font(.caption.weight(.bold))
                     .foregroundStyle(Color.brandBlue)
 
                 Text(page.title)
-                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -616,11 +616,11 @@ private struct OnboardingPageView: View {
 
                 if page.visual == .widget {
                     WidgetSetupInstruction()
-                        .padding(.top, 2)
+                        .padding(.top, 1)
                 }
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: 8)
         }
     }
 }
@@ -629,7 +629,7 @@ private struct WidgetSetupInstruction: View {
     @Environment(\.colorScheme) private var scheme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Label("How to add it after setup", systemImage: "square.grid.2x2")
                 .font(.caption.weight(.bold))
                 .foregroundStyle(Color.brandBlue)
@@ -645,7 +645,8 @@ private struct WidgetSetupInstruction: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
@@ -793,7 +794,7 @@ private struct OnboardingHeroCard: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity)
-        .frame(height: page.visual == .widget ? 286 : 304)
+        .frame(height: page.visual == .widget ? 304 : 304)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(scheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.84))
@@ -844,10 +845,10 @@ private struct PlanPreview: View {
 
 private struct WidgetPreview: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 LaunchLogoImage()
-                    .frame(width: 42, height: 42)
+                    .frame(width: 36, height: 36)
 
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 4) {
@@ -870,28 +871,28 @@ private struct WidgetPreview: View {
                 Spacer()
 
                 Image(systemName: "sparkles")
-                    .font(.title3.weight(.bold))
+                    .font(.subheadline.weight(.bold))
                     .foregroundStyle(Color.brandBlue)
-                    .frame(width: 40, height: 40)
+                    .frame(width: 34, height: 34)
                     .background(Circle().fill(Color.brandBlue.opacity(0.08)))
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 WidgetCurrentTask()
                 WidgetProgressTile()
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 WidgetUpcomingList()
                 WidgetRemainingTile()
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 8) {
                 WidgetAction(icon: "mic.fill", title: "Ask SchedAI")
                 WidgetAction(icon: "arrow.clockwise", title: "Replan Today")
             }
         }
-        .padding(14)
+        .padding(12)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
             RoundedRectangle(cornerRadius: 25, style: .continuous)
@@ -1008,8 +1009,8 @@ private struct WidgetCurrentTask: View {
                 .padding(.vertical, 3)
                 .background(Capsule().fill(Color.brandBlue.opacity(0.12)))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.brandBlue.opacity(0.08))
@@ -1019,7 +1020,7 @@ private struct WidgetCurrentTask: View {
 
 private struct WidgetProgressTile: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             Text("DONE")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(Color.brandBlue)
@@ -1041,11 +1042,11 @@ private struct WidgetProgressTile: View {
                         .foregroundStyle(.black)
                 }
             }
-            .frame(width: 58, height: 58)
+            .frame(width: 50, height: 50)
         }
-        .padding(12)
-        .frame(width: 100, alignment: .leading)
-        .frame(minHeight: 84, alignment: .leading)
+        .padding(10)
+        .frame(width: 88, alignment: .leading)
+        .frame(minHeight: 74, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.brandBlue.opacity(0.06))
@@ -1055,7 +1056,7 @@ private struct WidgetProgressTile: View {
 
 private struct WidgetUpcomingList: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 4) {
             Text("COMING UP")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(Color.brandBlue)
@@ -1064,8 +1065,8 @@ private struct WidgetUpcomingList: View {
             WidgetUpcomingRow(color: .purple, title: "Dinner", time: "5:00 - 6:00 PM", badge: "60m")
             WidgetUpcomingRow(color: .orange, title: "Study", time: "7:00 - 8:30 PM", badge: "90m")
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.brandBlue.opacity(0.06))
@@ -1080,7 +1081,7 @@ private struct WidgetUpcomingRow: View {
     let badge: String
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
@@ -1096,7 +1097,7 @@ private struct WidgetUpcomingRow: View {
             Text(badge)
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(color)
-                .padding(.horizontal, 5)
+                .padding(.horizontal, 4)
                 .padding(.vertical, 2)
                 .background(Capsule().fill(color.opacity(0.12)))
         }
@@ -1105,7 +1106,7 @@ private struct WidgetUpcomingRow: View {
 
 private struct WidgetRemainingTile: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 3) {
             Text("REMAINING")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(Color.brandBlue)
@@ -1119,17 +1120,17 @@ private struct WidgetRemainingTile: View {
             Spacer()
 
             Image(systemName: "list.bullet")
-                .font(.headline.weight(.bold))
+                .font(.subheadline.weight(.bold))
                 .foregroundStyle(Color.brandBlue)
-                .frame(width: 38, height: 38)
+                .frame(width: 32, height: 32)
                 .background(
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .fill(Color.brandBlue.opacity(0.08))
                 )
         }
-        .padding(12)
-        .frame(width: 100, alignment: .leading)
-        .frame(minHeight: 110, alignment: .leading)
+        .padding(10)
+        .frame(width: 88, alignment: .leading)
+        .frame(minHeight: 92, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(Color.brandBlue.opacity(0.06))
@@ -1149,7 +1150,7 @@ private struct WidgetAction: View {
         .font(.caption2.weight(.bold))
         .foregroundStyle(Color.brandBlue)
         .frame(maxWidth: .infinity)
-        .frame(height: 34)
+        .frame(height: 28)
         .background(
             Capsule()
                 .fill(Color.brandBlue.opacity(0.08))
