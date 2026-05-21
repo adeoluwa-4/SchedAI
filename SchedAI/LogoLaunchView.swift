@@ -613,10 +613,64 @@ private struct OnboardingPageView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if page.visual == .widget {
+                    WidgetSetupInstruction()
+                        .padding(.top, 2)
+                }
             }
 
             Spacer(minLength: 12)
         }
+    }
+}
+
+private struct WidgetSetupInstruction: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label("How to add it after setup", systemImage: "square.grid.2x2")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+
+            HStack(spacing: 8) {
+                WidgetInstructionStep(number: "1", text: "Hold Home Screen")
+                WidgetInstructionStep(number: "2", text: "Tap +")
+                WidgetInstructionStep(number: "3", text: "Search SchedAI")
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.brandBlue.opacity(0.12), lineWidth: 1)
+                )
+        )
+    }
+}
+
+private struct WidgetInstructionStep: View {
+    let number: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Text(number)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white)
+                .frame(width: 18, height: 18)
+                .background(Circle().fill(Color.brandBlue))
+
+            Text(text)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
