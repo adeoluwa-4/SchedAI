@@ -568,14 +568,14 @@ private struct OnboardingPage {
             icon: "wand.and.stars",
             eyebrow: "Plan clearly",
             title: "Type or speak naturally.",
-            subtitle: "SchedAI turns your tasks into a preview first, so you stay in control before anything changes.",
+            subtitle: "Add tasks in your own words, then preview the plan before anything changes.",
             visual: .plan
         ),
         OnboardingPage(
             icon: "square.grid.2x2",
             eyebrow: "Stay oriented",
             title: "Keep today in view.",
-            subtitle: "Add the widget after setup to see what is happening now, what is coming next, and what is left.",
+            subtitle: "Add the widget after setup to see what is happening now, what is next, and what is left.",
             visual: .widget
         )
     ]
@@ -639,6 +639,11 @@ private struct WidgetSetupInstruction: View {
                 WidgetInstructionStep(number: "2", text: "Tap +")
                 WidgetInstructionStep(number: "3", text: "Search SchedAI")
             }
+
+            Text("Choose the SchedAI widget size, then tap Add Widget.")
+                .font(.caption2.weight(.medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
         }
         .padding(12)
         .background(
@@ -788,7 +793,7 @@ private struct OnboardingHeroCard: View {
         }
         .padding(18)
         .frame(maxWidth: .infinity)
-        .frame(height: 260)
+        .frame(height: page.visual == .widget ? 286 : 304)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(scheme == .dark ? Color.white.opacity(0.08) : Color.white.opacity(0.84))
@@ -803,11 +808,11 @@ private struct OnboardingHeroCard: View {
 
 private struct PlanPreview: View {
     var body: some View {
-        VStack(spacing: 12) {
-            PreviewTaskRow(icon: "keyboard.fill", title: "Quick Add", subtitle: "Essay 60m, laundry, gym", tint: .blue)
-            PreviewTaskRow(icon: "mic.fill", title: "Plan My Day", subtitle: "Speak a full brain dump", tint: .cyan)
+        VStack(spacing: 10) {
+            PreviewInputRow(icon: "keyboard.fill", title: "Quick Add", subtitle: "Essay 60m, laundry, gym", tint: Color.brandBlue, showsClose: true)
+            PreviewInputRow(icon: "mic.fill", title: "Plan My Day", subtitle: "Speak a full brain dump", tint: .cyan, showsClose: false)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("Preview")
                         .font(.caption.weight(.bold))
@@ -820,8 +825,14 @@ private struct PlanPreview: View {
 
                 ProgressView(value: 0.66)
                     .tint(Color.brandBlue)
+
+                VStack(spacing: 7) {
+                    PreviewDetectedTask(color: Color.brandBlue, title: "Essay", duration: "60m", time: "Today - 2:00 PM")
+                    PreviewDetectedTask(color: .purple, title: "Laundry", duration: nil, time: "Today - 5:00 PM")
+                    PreviewDetectedTask(color: .orange, title: "Gym", duration: "60m", time: "Today - 7:00 PM")
+                }
             }
-            .padding(14)
+            .padding(12)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .fill(Color.brandBlue.opacity(0.08))
@@ -836,48 +847,73 @@ private struct WidgetPreview: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 LaunchLogoImage()
-                    .frame(width: 36, height: 36)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("SchedAI")
-                        .font(.headline.weight(.bold))
-                    Text("Today")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(Color.brandBlue)
-                }
-                Spacer()
-                Image(systemName: "sparkles")
+                    .frame(width: 42, height: 42)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 4) {
+                        Text("Sched")
+                            .foregroundStyle(.black)
+                        Text("AI")
+                            .foregroundStyle(Color.brandBlue)
+                        Text("Today")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(Color.brandBlue)
+                            .padding(.leading, 4)
+                    }
                     .font(.headline.weight(.bold))
+
+                    Text("Friday, May 17")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.gray)
+                }
+
+                Spacer()
+
+                Image(systemName: "sparkles")
+                    .font(.title3.weight(.bold))
                     .foregroundStyle(Color.brandBlue)
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(Color.brandBlue.opacity(0.08)))
             }
 
             HStack(spacing: 10) {
-                WidgetMetric(title: "NOW", value: "Workout", footnote: "45m")
-                WidgetMetric(title: "DONE", value: "40%", footnote: "2 of 5")
+                WidgetCurrentTask()
+                WidgetProgressTile()
             }
 
-            WidgetMetric(title: "COMING UP", value: "Meeting with team", footnote: "1:00 PM")
+            HStack(spacing: 10) {
+                WidgetUpcomingList()
+                WidgetRemainingTile()
+            }
+
+            HStack(spacing: 10) {
+                WidgetAction(icon: "mic.fill", title: "Ask SchedAI")
+                WidgetAction(icon: "arrow.clockwise", title: "Replan Today")
+            }
         }
-        .padding(16)
+        .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(Color.white.opacity(0.86))
+            RoundedRectangle(cornerRadius: 25, style: .continuous)
+                .fill(Color(red: 0.965, green: 0.982, blue: 1.0))
+                .shadow(color: Color.white.opacity(0.08), radius: 16, x: 0, y: 0)
         )
     }
 }
 
-private struct PreviewTaskRow: View {
+private struct PreviewInputRow: View {
     let icon: String
     let title: String
     let subtitle: String
     let tint: Color
+    let showsClose: Bool
 
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(tint)
-                .frame(width: 38, height: 38)
+                .frame(width: 36, height: 36)
                 .background(
                     RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .fill(tint.opacity(0.13))
@@ -893,8 +929,17 @@ private struct PreviewTaskRow: View {
             }
 
             Spacer()
+
+            if showsClose {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+                    .background(Circle().fill(Color.white.opacity(0.12)))
+            }
         }
-        .padding(12)
+        .padding(.horizontal, 12)
+        .frame(height: 56)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.ultraThinMaterial)
@@ -902,28 +947,211 @@ private struct PreviewTaskRow: View {
     }
 }
 
-private struct WidgetMetric: View {
+private struct PreviewDetectedTask: View {
+    let color: Color
     let title: String
-    let value: String
-    let footnote: String
+    let duration: String?
+    let time: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        HStack(spacing: 10) {
+            Circle()
+                .fill(color)
+                .frame(width: 12, height: 12)
+
             Text(title)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+
+            if let duration {
+                Text(duration)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.brandBlue.opacity(0.16)))
+            }
+
+            Spacer()
+
+            Text(time)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.08))
+        )
+    }
+}
+
+private struct WidgetCurrentTask: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("NOW")
                 .font(.caption2.weight(.bold))
                 .foregroundStyle(Color.brandBlue)
-            Text(value)
+            Text("Workout")
                 .font(.subheadline.weight(.bold))
                 .foregroundStyle(.black)
-                .lineLimit(1)
-            Text(footnote)
+            Text("9:00 - 9:45 AM")
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.gray)
+            Text("45m")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.brandBlue.opacity(0.12)))
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.brandBlue.opacity(0.08))
+        )
+    }
+}
+
+private struct WidgetProgressTile: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("DONE")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+
+            ZStack {
+                Circle()
+                    .stroke(Color.brandBlue.opacity(0.14), lineWidth: 7)
+                Circle()
+                    .trim(from: 0, to: 0.4)
+                    .stroke(Color.brandBlue, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+
+                VStack(spacing: 0) {
+                    Text("40%")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(.black)
+                    Text("2 of 5")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.black)
+                }
+            }
+            .frame(width: 58, height: 58)
+        }
+        .padding(12)
+        .frame(width: 100, alignment: .leading)
+        .frame(minHeight: 84, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.brandBlue.opacity(0.06))
+        )
+    }
+}
+
+private struct WidgetUpcomingList: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("COMING UP")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+
+            WidgetUpcomingRow(color: Color.brandBlue, title: "Meeting with team", time: "1:00 - 2:00 PM", badge: "60m")
+            WidgetUpcomingRow(color: .purple, title: "Dinner", time: "5:00 - 6:00 PM", badge: "60m")
+            WidgetUpcomingRow(color: .orange, title: "Study", time: "7:00 - 8:30 PM", badge: "90m")
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 110, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.brandBlue.opacity(0.06))
+        )
+    }
+}
+
+private struct WidgetUpcomingRow: View {
+    let color: Color
+    let title: String
+    let time: String
+    let badge: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.caption2.weight(.bold))
+                Text(time)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.gray)
+            }
+            .foregroundStyle(.black)
+            Spacer(minLength: 4)
+            Text(badge)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(color)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(color.opacity(0.12)))
+        }
+    }
+}
+
+private struct WidgetRemainingTile: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("REMAINING")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+            Text("3")
+                .font(.title.weight(.bold))
+                .foregroundStyle(.black)
+            Text("tasks")
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.gray)
+
+            Spacer()
+
+            Image(systemName: "list.bullet")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 38, height: 38)
+                .background(
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(Color.brandBlue.opacity(0.08))
+                )
+        }
+        .padding(12)
+        .frame(width: 100, alignment: .leading)
+        .frame(minHeight: 110, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.brandBlue.opacity(0.06))
+        )
+    }
+}
+
+private struct WidgetAction: View {
+    let icon: String
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+            Text(title)
+        }
+        .font(.caption2.weight(.bold))
+        .foregroundStyle(Color.brandBlue)
+        .frame(maxWidth: .infinity)
+        .frame(height: 34)
+        .background(
+            Capsule()
                 .fill(Color.brandBlue.opacity(0.08))
         )
     }
