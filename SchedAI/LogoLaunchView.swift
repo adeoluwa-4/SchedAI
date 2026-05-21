@@ -93,11 +93,13 @@ struct LogoLaunchView: View {
 
 private struct OnboardingView: View {
     @EnvironmentObject private var app: AppState
+    @AppStorage("hasSeenWidgetGuide") private var hasSeenWidgetGuide = false
     @State private var page = 0
     @State private var hasCompletedAppleSignIn = false
     @State private var needsNameEntry = false
     @State private var firstNameInput = ""
     @State private var signInMessage: String? = nil
+    @State private var presentedSheet: OnboardingSheet? = nil
 
     let onFinish: () -> Void
 
@@ -136,6 +138,15 @@ private struct OnboardingView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(signInMessage ?? "")
+        }
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet {
+            case .widgetGuide:
+                WidgetGuideSheet(
+                    onDone: completeWidgetGuide,
+                    onMaybeLater: completeWidgetGuide
+                )
+            }
         }
     }
 
@@ -192,7 +203,11 @@ private struct OnboardingView: View {
             } else if hasCompletedAppleSignIn {
                 Button {
                     if page == pages.count - 1 {
-                        onFinish()
+                        if hasSeenWidgetGuide {
+                            onFinish()
+                        } else {
+                            presentedSheet = .widgetGuide
+                        }
                     } else {
                         withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
                             page += 1
@@ -200,8 +215,8 @@ private struct OnboardingView: View {
                     }
                 } label: {
                     HStack(spacing: 10) {
-                        Text(page == pages.count - 1 ? "Start Planning" : "Continue")
-                        Image(systemName: page == pages.count - 1 ? "checkmark" : "arrow.right")
+                        Text(primaryButtonTitle)
+                        Image(systemName: primaryButtonIcon)
                     }
                         .font(.headline.weight(.semibold))
                         .frame(maxWidth: .infinity)
@@ -226,6 +241,16 @@ private struct OnboardingView: View {
                 #endif
             }
         }
+    }
+
+    private var primaryButtonTitle: String {
+        guard page == pages.count - 1 else { return "Continue" }
+        return hasSeenWidgetGuide ? "Start Planning" : "How to Add the Widget"
+    }
+
+    private var primaryButtonIcon: String {
+        guard page == pages.count - 1 else { return "arrow.right" }
+        return hasSeenWidgetGuide ? "checkmark" : "questionmark.circle"
     }
 
     #if canImport(AuthenticationServices)
@@ -278,6 +303,12 @@ private struct OnboardingView: View {
         }
     }
 
+    private func completeWidgetGuide() {
+        hasSeenWidgetGuide = true
+        presentedSheet = nil
+        onFinish()
+    }
+
     private func cleanDisplayName(from rawValue: String?) -> String? {
         let cleaned = rawValue?
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -300,6 +331,17 @@ private struct OnboardingView: View {
         }
 
         return candidate.prefix(1).uppercased() + candidate.dropFirst()
+    }
+}
+
+private enum OnboardingSheet: Identifiable {
+    case widgetGuide
+
+    var id: String {
+        switch self {
+        case .widgetGuide:
+            return "widgetGuide"
+        }
     }
 }
 
@@ -573,9 +615,9 @@ private struct OnboardingPage {
         ),
         OnboardingPage(
             icon: "square.grid.2x2",
-            eyebrow: "Stay oriented",
-            title: "Keep today in view.",
-            subtitle: "Add the widget after setup to see what is happening now, what is next, and what is left.",
+            eyebrow: "Add the widget",
+            title: "See today at a glance.",
+            subtitle: "Instantly see what is happening now, what is next, and your progress.",
             visual: .widget
         )
     ]
@@ -613,11 +655,6 @@ private struct OnboardingPageView: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 6)
                     .fixedSize(horizontal: false, vertical: true)
-
-                if page.visual == .widget {
-                    WidgetSetupInstruction()
-                        .padding(.top, 1)
-                }
             }
 
             Spacer(minLength: 8)
@@ -625,58 +662,174 @@ private struct OnboardingPageView: View {
     }
 }
 
-private struct WidgetSetupInstruction: View {
+private struct WidgetGuideSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("How to add it after setup", systemImage: "square.grid.2x2")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(Color.brandBlue)
+    let onDone: () -> Void
+    let onMaybeLater: () -> Void
 
-            HStack(spacing: 8) {
-                WidgetInstructionStep(number: "1", text: "Hold Home Screen")
-                WidgetInstructionStep(number: "2", text: "Tap +")
-                WidgetInstructionStep(number: "3", text: "Search SchedAI")
+    var body: some View {
+        VStack(spacing: 22) {
+            Capsule()
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 42, height: 5)
+                .padding(.top, 10)
+
+            VStack(spacing: 14) {
+                WidgetMiniPreview()
+                    .frame(height: 120)
+
+                VStack(spacing: 8) {
+                    Text("How to add the widget")
+                        .font(.system(size: 26, weight: .bold, design: .rounded))
+                        .multilineTextAlignment(.center)
+
+                    Text("iOS requires you to add widgets from the Home Screen. This takes a few seconds.")
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(2)
+                }
             }
 
-            Text("Choose the SchedAI widget size, then tap Add Widget.")
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
+            VStack(spacing: 10) {
+                WidgetGuideStep(number: "1", icon: "hand.tap", title: "Touch and hold the Home Screen", detail: "Wait until the icons start to move.")
+                WidgetGuideStep(number: "2", icon: "plus", title: "Tap +", detail: "Open the widget picker from the top corner.")
+                WidgetGuideStep(number: "3", icon: "magnifyingglass", title: "Search SchedAI", detail: "Choose a widget size, then tap Add Widget.")
+            }
+
+            VStack(spacing: 10) {
+                Button {
+                    dismiss()
+                    onDone()
+                } label: {
+                    Text("Done")
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.brandBlue)
+
+                Button {
+                    dismiss()
+                    onMaybeLater()
+                } label: {
+                    Text("Maybe later")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 42)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 22)
+        .padding(.bottom, 18)
+        .presentationDetents([.height(620), .large])
+        .presentationDragIndicator(.hidden)
+        .background(scheme == .dark ? Color.black : Color(.systemBackground))
+    }
+}
+
+private struct WidgetGuideStep: View {
+    let number: String
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(Color.brandBlue.opacity(0.13))
+
+                Image(systemName: icon)
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.brandBlue)
+            }
+            .frame(width: 46, height: 46)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(number)
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 18, height: 18)
+                        .background(Circle().fill(Color.brandBlue))
+
+                    Text(title)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
+
+                Text(detail)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(scheme == .dark ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
+                .fill(Color.secondary.opacity(0.09))
+        )
+    }
+}
+
+private struct WidgetMiniPreview: View {
+    var body: some View {
+        HStack(spacing: 0) {
+            WidgetMiniColumn(title: "NOW", value: "Workout", detail: "45m", color: Color.brandBlue, icon: "dumbbell")
+            Divider().overlay(Color.white.opacity(0.16))
+            WidgetMiniColumn(title: "PROGRESS", value: "40%", detail: "2 of 5 tasks", color: .green, icon: "circle.dashed")
+            Divider().overlay(Color.white.opacity(0.16))
+            WidgetMiniColumn(title: "NEXT", value: "1:00 PM", detail: "Meeting", color: .purple, icon: "calendar")
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.white.opacity(0.07))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .stroke(Color.brandBlue.opacity(0.12), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 26, style: .continuous)
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
                 )
         )
     }
 }
 
-private struct WidgetInstructionStep: View {
-    let number: String
-    let text: String
+private struct WidgetMiniColumn: View {
+    let title: String
+    let value: String
+    let detail: String
+    let color: Color
+    let icon: String
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(number)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
                 .font(.caption2.weight(.bold))
-                .foregroundStyle(.white)
-                .frame(width: 18, height: 18)
-                .background(Circle().fill(Color.brandBlue))
-
-            Text(text)
+                .foregroundStyle(color)
+            Text(value)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+            Image(systemName: icon)
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(color)
+            Text(detail)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.78)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
     }
 }
 
