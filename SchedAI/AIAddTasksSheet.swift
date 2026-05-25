@@ -232,7 +232,12 @@ struct AIAddTasksSheet: View {
         isParsing = true
         defer { isParsing = false }
 
-        let result = await AIService.improveTasksWithAI(from: trimmed, now: Date(), planningDate: app.planningDate)
+        let result = await AIService.improveTasksWithAI(
+            from: trimmed,
+            now: Date(),
+            planningDate: app.planningDate,
+            allowsHostedAI: app.hostedAIConsent
+        )
         parsedPreview = result.tasks
         parseStatusMessage = result.message ?? (result.source == .ai ? "AI improved this preview." : "Offline preview. No credits used.")
     }
