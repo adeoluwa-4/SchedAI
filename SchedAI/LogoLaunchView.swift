@@ -131,7 +131,7 @@ private struct OnboardingView: View {
                     .padding(.bottom, 22)
             }
         }
-        .alert("Sign in required", isPresented: Binding(
+        .alert("Sign in optional", isPresented: Binding(
             get: { signInMessage != nil },
             set: { if !$0 { signInMessage = nil } }
         )) {
@@ -225,19 +225,40 @@ private struct OnboardingView: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Color.brandBlue)
             } else {
-                #if canImport(AuthenticationServices)
-                AppleSignInControl(onCompletion: handleAppleSignInResult)
-                #else
-                Button {
-                    signInMessage = "Sign in with Apple is unavailable on this device, so onboarding cannot continue here."
-                } label: {
-                    Text("Sign in with Apple")
-                        .font(.headline.weight(.semibold))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 54)
+                VStack(spacing: 10) {
+                    #if canImport(AuthenticationServices)
+                    AppleSignInControl(onCompletion: handleAppleSignInResult)
+                    #else
+                    Button {
+                        continueWithoutApple()
+                    } label: {
+                        Text("Continue without Apple")
+                            .font(.headline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandBlue)
+                    #endif
+
+                    #if canImport(AuthenticationServices)
+                    Button {
+                        continueWithoutApple()
+                    } label: {
+                        Text("Continue without Apple")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    #endif
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.brandBlue)
+                .frame(maxWidth: .infinity)
+                #if !canImport(AuthenticationServices)
+                .onAppear {
+                    signInMessage = "Sign in with Apple is unavailable on this device. You can continue without it."
+                }
                 #endif
             }
         }
@@ -282,14 +303,20 @@ private struct OnboardingView: View {
                 }
             }
         case .failure:
-            signInMessage = "Sign in with Apple was cancelled or failed. It is required to continue."
+            signInMessage = "Sign in with Apple was cancelled or failed. You can try again or continue without it."
         }
     }
     #else
     private func handleAppleSignInResult(_ result: Result<Void, Error>) {
-        signInMessage = "Sign in with Apple is unavailable on this device, so onboarding cannot continue here."
+        signInMessage = "Sign in with Apple is unavailable on this device. You can continue without it."
     }
     #endif
+
+    private func continueWithoutApple() {
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+            needsNameEntry = true
+        }
+    }
 
     private func saveManualFirstName() {
         let name = firstNameInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -885,7 +912,7 @@ private struct SignInOnboardingScreen: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.primary)
 
-                    Text("Sign in to personalize SchedAI and continue setup.")
+                    Text("Use Apple to fill your name, or continue without it.")
                         .font(.system(size: 17, weight: .medium, design: .rounded))
                         .lineSpacing(3)
                         .multilineTextAlignment(.center)
@@ -895,7 +922,7 @@ private struct SignInOnboardingScreen: View {
 
                 HStack(spacing: 10) {
                     Image(systemName: "lock.shield")
-                    Text("Your Apple name stays local on this device.")
+                    Text("Your name stays local on this device.")
                 }
                 .font(.footnote.weight(.semibold))
                 .foregroundStyle(Color.brandBlue)
