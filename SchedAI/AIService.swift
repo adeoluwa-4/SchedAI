@@ -74,9 +74,10 @@ struct AIService {
     static func parseTasks(
         from input: String,
         now: Date = Date(),
-        planningDate: Date = Date()
+        planningDate: Date = Date(),
+        allowsHostedAI: Bool = false
     ) async -> TaskParseResult {
-        await improveTasksWithAI(from: input, now: now, planningDate: planningDate)
+        await improveTasksWithAI(from: input, now: now, planningDate: planningDate, allowsHostedAI: allowsHostedAI)
     }
 
     static func parseTasksOffline(from input: String, now: Date = Date()) -> TaskParseResult {
@@ -86,10 +87,15 @@ struct AIService {
     static func improveTasksWithAI(
         from input: String,
         now: Date = Date(),
-        planningDate: Date = Date()
+        planningDate: Date = Date(),
+        allowsHostedAI: Bool = false
     ) async -> TaskParseResult {
         let safeInput = remoteSafeInput(input)
         let offline = fallbackTasks(from: safeInput, now: now)
+        guard allowsHostedAI else {
+            return TaskParseResult(tasks: offline, source: .offline, message: "Hosted AI is off. Used offline parser.")
+        }
+
         guard let endpoint = parseEndpoint else {
             return TaskParseResult(tasks: offline, source: .offline, message: nil)
         }
