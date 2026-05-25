@@ -10,11 +10,22 @@ import UserNotifications
 
 enum NotificationManager {
     private static let maximumScheduledReminders = 60
+    private static let reminderIdentifierPrefix = "schedai.task."
+
+    private enum DefaultsKey {
+        static let showTaskTitlesInNotifications = "showTaskTitlesInNotifications"
+    }
 
     enum AuthorizationState: Equatable {
         case notDetermined
         case denied
         case authorized
+    }
+
+    struct ScheduleResult: Equatable {
+        let queued: Int
+        let skippedPast: Int
+        let skippedLimit: Int
     }
 
     /// Read current notification authorization status without prompting.
@@ -31,7 +42,9 @@ enum NotificationManager {
             @unknown default:
                 state = .denied
             }
-            completion(state)
+            DispatchQueue.main.async {
+                completion(state)
+            }
         }
     }
 
@@ -39,7 +52,9 @@ enum NotificationManager {
     static func requestPermission(completion: @escaping (Bool) -> Void) {
         UNUserNotificationCenter.current()
             .requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
-                completion(granted)
+                DispatchQueue.main.async {
+                    completion(granted)
+                }
             }
     }
 
@@ -52,18 +67,19 @@ enum NotificationManager {
 
     /// Cancel a single scheduled reminder by task id.
     static func cancelReminder(for id: UUID) {
-        let key = id.uuidString
+        let legacyKey = id.uuidString
+        let key = reminderIdentifier(for: id)
         let c = UNUserNotificationCenter.current()
-        c.removePendingNotificationRequests(withIdentifiers: [key])
-        c.removeDeliveredNotifications(withIdentifiers: [key])
+        c.removePendingNotificationRequests(withIdentifiers: [key, legacyKey])
+        c.removeDeliveredNotifications(withIdentifiers: [key, legacyKey])
     }
 
     /// Schedule reminders N minutes before each scheduled task.
     @discardableResult
-    static func scheduleReminders(for tasks: [TaskItem], minutesBefore: Int) -> Int {
+    static func scheduleReminders(for tasks: [TaskItem], minutesBefore: Int) -> ScheduleResult {
         let center = UNUserNotificationCenter.current()
         let now = Date()
-        let scheduleableTasks = tasks
+        let candidates = tasks
             .compactMap { task -> (task: TaskItem, triggerDate: Date)? in
                 guard let start = task.scheduledStart else { return nil }
                 let triggerDate = start.addingTimeInterval(TimeInterval(-minutesBefore * 60))
@@ -71,7 +87,10 @@ enum NotificationManager {
                 return (task, triggerDate)
             }
             .sorted { $0.triggerDate < $1.triggerDate }
-            .prefix(maximumScheduledReminders)
+
+        let scheduleableTasks = Array(candidates.prefix(maximumScheduledReminders))
+        let skippedPast = max(0, tasks.filter { $0.scheduledStart != nil }.count - candidates.count)
+        let skippedLimit = max(0, candidates.count - scheduleableTasks.count)
 
         for item in scheduleableTasks {
             let t = item.task
@@ -87,14 +106,20 @@ enum NotificationManager {
             let content = UNMutableNotificationContent()
             let priorityDot = reminderDot(for: t.priority)
             let priorityText = "\(t.priority.displayName) Priority"
-            content.title = "\(priorityDot) \(priorityText): \(t.title)"
-            content.subtitle = "Starts at \(start.formatted(date: .omitted, time: .shortened))"
-            content.body = "Starts in about \(minutesBefore) min (\(t.estimatedMinutes)m)"
+            if shouldShowTaskTitles() {
+                content.title = "\(priorityDot) \(priorityText): \(t.title)"
+                content.subtitle = "Starts at \(start.formatted(date: .omitted, time: .shortened))"
+                content.body = "Starts in about \(minutesBefore) min (\(t.estimatedMinutes)m)"
+            } else {
+                content.title = "SchedAI Reminder"
+                content.subtitle = "Starts at \(start.formatted(date: .omitted, time: .shortened))"
+                content.body = "\(priorityText) task starts in about \(minutesBefore) min."
+            }
             content.sound = .default
             content.interruptionLevel = .active
 
             let req = UNNotificationRequest(
-                identifier: t.id.uuidString,
+                identifier: reminderIdentifier(for: t.id),
                 content: content,
                 trigger: trigger
             )
@@ -108,7 +133,15 @@ enum NotificationManager {
             }
         }
 
-        return scheduleableTasks.count
+        return ScheduleResult(queued: scheduleableTasks.count, skippedPast: skippedPast, skippedLimit: skippedLimit)
+    }
+
+    private static func reminderIdentifier(for id: UUID) -> String {
+        "\(reminderIdentifierPrefix)\(id.uuidString)"
+    }
+
+    private static func shouldShowTaskTitles() -> Bool {
+        UserDefaults.standard.bool(forKey: DefaultsKey.showTaskTitlesInNotifications)
     }
 
     private static func reminderDot(for priority: TaskPriority) -> String {
@@ -136,6 +169,12 @@ enum NotificationManager {
             trigger: trigger
         )
 
-        UNUserNotificationCenter.current().add(req)
+        UNUserNotificationCenter.current().add(req) { error in
+            #if DEBUG
+            if let error {
+                print("SchedAI test reminder failed: \(error.localizedDescription)")
+            }
+            #endif
+        }
     }
 }
