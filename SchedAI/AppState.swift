@@ -23,6 +23,7 @@ final class AppState: ObservableObject {
     private enum DefaultsKey {
         static let remindersEnabled = "remindersEnabled"
         static let reminderLeadMinutes = "reminderLeadMinutes"
+        static let showTaskTitlesInNotifications = "showTaskTitlesInNotifications"
         static let theme = "appThemePreference"
         static let lastResetDay = "lastResetDay"
         static let calendarSyncEnabled = "calendarSyncEnabled"
@@ -158,6 +159,15 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Whether local notifications may show task titles on the lock screen.
+    @Published var showTaskTitlesInNotifications: Bool {
+        didSet {
+            UserDefaults.standard.set(showTaskTitlesInNotifications, forKey: DefaultsKey.showTaskTitlesInNotifications)
+            guard remindersEnabled else { return }
+            rescheduleReminders()
+        }
+    }
+
     /// Whether to sync scheduled tasks into Apple Calendar.
     @Published var calendarSyncEnabled: Bool {
         didSet {
@@ -186,6 +196,7 @@ final class AppState: ObservableObject {
         // Default OFF for first-run so we don't prompt on launch.
         self.remindersEnabled = (defaults.object(forKey: DefaultsKey.remindersEnabled) as? Bool) ?? false
         self.reminderLeadMinutes = (defaults.object(forKey: DefaultsKey.reminderLeadMinutes) as? Int) ?? 5
+        self.showTaskTitlesInNotifications = (defaults.object(forKey: DefaultsKey.showTaskTitlesInNotifications) as? Bool) ?? false
         self.calendarSyncEnabled = (defaults.object(forKey: DefaultsKey.calendarSyncEnabled) as? Bool) ?? false
         self.selectedCalendarDestinationID = CalendarManager.shared.selectedDestinationID()
         self.userDisplayName = defaults.string(forKey: DefaultsKey.userDisplayName)
