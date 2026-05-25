@@ -373,7 +373,12 @@ final class CalendarManager: ObservableObject {
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: calendars)
         let events = store.events(matching: predicate)
 
+        let generatedCalendarIDs = generatedSchedAICalendarIdentifiers()
         let clipped: [DateInterval] = events.compactMap { event in
+            guard !shouldIgnoreBusyEvent(event, generatedCalendarIDs: generatedCalendarIDs) else {
+                return nil
+            }
+
             let intervalStart = max(start, event.startDate)
             let intervalEnd = min(end, event.endDate)
             guard intervalStart < intervalEnd else { return nil }
@@ -452,6 +457,25 @@ final class CalendarManager: ObservableObject {
         let start = cal.startOfDay(for: day)
         let end = cal.date(byAdding: .day, value: 1, to: start) ?? start
         return (start, end)
+    }
+
+    private func generatedSchedAICalendarIdentifiers() -> Set<String> {
+        guard selectedDestinationID() == Self.defaultDestinationID else { return [] }
+        guard let saved = UserDefaults.standard.string(forKey: "SchedAI_CalendarIdentifier") else { return [] }
+        return [saved]
+    }
+
+    private func shouldIgnoreBusyEvent(_ event: EKEvent, generatedCalendarIDs: Set<String>) -> Bool {
+        if event.isAllDay { return true }
+        if extractTaskID(from: event) != nil { return true }
+        if generatedCalendarIDs.contains(event.calendar.calendarIdentifier) { return true }
+
+        switch event.availability {
+        case .free:
+            return true
+        default:
+            return false
+        }
     }
 
     private func extractTaskID(from event: EKEvent) -> String? {
