@@ -83,8 +83,8 @@ struct AIPlanSheet: View {
             .background(Color(uiColor: .systemBackground).ignoresSafeArea())
             .task { await setupSheetState() }
             .onReceive(speech.$transcript) { text in
-                self.transcript = text
-                resetPreviewState()
+                guard text != transcript else { return }
+                transcript = text
             }
             .onChange(of: transcript) { _, _ in
                 resetPreviewState()
@@ -104,6 +104,11 @@ struct AIPlanSheet: View {
                     app.hostedAIConsent = true
                     Task { await improvePreviewWithAI() }
                 }
+            }
+            .onDisappear {
+                speech.resetForFreshInput()
+                isPlanning = false
+                animateLoader = false
             }
 
             if isPlanning {
