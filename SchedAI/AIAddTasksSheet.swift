@@ -44,7 +44,7 @@ struct AIAddTasksSheet: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(isParsing)
+                    .disabled(isParsing || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
                     Button {
                         requestHostedAIImprove()
@@ -251,9 +251,6 @@ struct AIAddTasksSheet: View {
     }
 
     private func addAllAndDismiss() {
-        if parsedPreview.isEmpty {
-            parsedPreview = OfflineNLP.parseSafely(input)
-        }
         guard !parsedPreview.isEmpty else { return }
 
         for t in parsedPreview {
