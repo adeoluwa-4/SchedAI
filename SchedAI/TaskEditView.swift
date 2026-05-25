@@ -5,6 +5,7 @@ struct TaskEditView: View {
     @EnvironmentObject private var app: AppState
 
     let item: TaskItem
+    private let originalTargetDay: Date?
 
     @State private var title: String
     @State private var priority: TaskPriority
@@ -15,11 +16,13 @@ struct TaskEditView: View {
 
     init(task: TaskItem) {
         self.item = task
+        self.originalTargetDay = task.targetDay
+            ?? task.scheduledStart.map { Calendar.current.startOfDay(for: $0) }
         _title = State(initialValue: task.title)
         _priority = State(initialValue: task.priority)
         _estimatedMinutes = State(initialValue: task.estimatedMinutes)
         _hasScheduledTime = State(initialValue: task.scheduledStart != nil)
-        let start = task.scheduledStart ?? Date()
+        let start = task.scheduledStart ?? originalTargetDay ?? Date()
         _scheduledStart = State(initialValue: start)
         _scheduledEnd = State(
             initialValue: task.scheduledEnd
@@ -154,7 +157,7 @@ struct TaskEditView: View {
         } else {
             updated.estimatedMinutes = max(5, estimatedMinutes)
             updated.isPinned = false
-            updated.targetDay = nil
+            updated.targetDay = originalTargetDay.map { Calendar.current.startOfDay(for: $0) }
             updated.scheduledStart = nil
             updated.scheduledEnd = nil
         }
