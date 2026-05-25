@@ -85,16 +85,6 @@
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		6AA3AC082F44BB5B003693DD /* Sign in */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Sign in";
-			sourceTree = "<group>";
-		};
-		6AA3AC1D2F44BE00003693DD /* Sign in */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "Sign in";
-			sourceTree = "<group>";
-		};
 		6AEC17202F92C4F000FC61A5 /* SchedAI-Widget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -170,8 +160,6 @@
 				CF2DEE302EF4EB1B00F2998C /* SchedAI */,
 				CF2DEE3E2EF4EB1E00F2998C /* SchedAITests */,
 				CF2DEE482EF4EB1E00F2998C /* SchedAIUITests */,
-				6AA3AC082F44BB5B003693DD /* Sign in */,
-				6AA3AC1D2F44BE00003693DD /* Sign in */,
 				6AEC17202F92C4F000FC61A5 /* SchedAI-Widget */,
 				6AA3AC052F44BB5B003693DD /* Frameworks */,
 				CF2DEE2F2EF4EB1B00F2998C /* Products */,
