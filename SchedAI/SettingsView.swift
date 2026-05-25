@@ -140,7 +140,7 @@ struct SettingsView: View {
                         .font(.system(size: 21, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                     
-                    Text("Everything here stays local unless you choose hosted AI improve.")
+                    Text("Tasks stay local unless you enable hosted AI, calendar sync, widgets, voice input, or reminders.")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
                     
@@ -275,6 +275,18 @@ struct SettingsView: View {
                     )
                 }
                 .buttonStyle(.plain)
+
+                SettingsDivider()
+
+                SettingsToggleRow(
+                    icon: app.showTaskTitlesInNotifications ? "text.badge.checkmark" : "lock",
+                    title: "Show Titles in Alerts",
+                    subtitle: app.showTaskTitlesInNotifications
+                        ? "Reminder notifications may show task names"
+                        : "Reminder notifications hide task names",
+                    isOn: $app.showTaskTitlesInNotifications,
+                    color: .orange
+                )
             }
 
             SettingsDivider()
@@ -357,6 +369,24 @@ struct SettingsView: View {
                     ? "Task text may be sent to SchedAI and OpenAI when you tap Improve."
                     : "Off. Preview stays on device until you choose otherwise.",
                 isOn: hostedAIBinding,
+                color: .teal
+            )
+
+            SettingsDivider()
+
+            SettingsInfoRow(
+                icon: "mic",
+                title: "Voice Planning",
+                subtitle: "Apple speech and microphone access are used only when you start recording.",
+                color: .teal
+            )
+
+            SettingsDivider()
+
+            SettingsInfoRow(
+                icon: "rectangle.inset.filled",
+                title: "Widget & Alerts",
+                subtitle: "Widget data is shared with the extension. Alert titles stay hidden unless enabled.",
                 color: .teal
             )
 
