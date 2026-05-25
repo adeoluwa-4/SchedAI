@@ -8,6 +8,7 @@ import AVFoundation
 import Speech
 import Combine
 
+@MainActor
 final class SpeechRecognizer: NSObject, ObservableObject {
     @Published var isAuthorized = false
     @Published var isRecording  = false
@@ -31,7 +32,6 @@ final class SpeechRecognizer: NSObject, ObservableObject {
 
     /// Ensures both Speech Recognition + Microphone permission are granted.
     /// Returns `true` if authorized, `false` otherwise.
-    @MainActor
     func ensureAuthorized() async -> Bool {
         refreshAuthorizationStatus()
         if isAuthorized { return true }
@@ -44,7 +44,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         }
 
         let micOK: Bool
-        if AVAudioSession.sharedInstance().recordPermission == .granted {
+        if microphonePermissionGranted() {
             micOK = true
         } else {
             micOK = await requestMicPermission()
@@ -56,10 +56,9 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         return ok
     }
 
-    @MainActor
     func refreshAuthorizationStatus() {
         isAuthorized = SFSpeechRecognizer.authorizationStatus() == .authorized
-            && AVAudioSession.sharedInstance().recordPermission == .granted
+            && microphonePermissionGranted()
         if isAuthorized {
             errorMessage = nil
         }
@@ -75,9 +74,23 @@ final class SpeechRecognizer: NSObject, ObservableObject {
 
     private func requestMicPermission() async -> Bool {
         await withCheckedContinuation { cont in
-            AVAudioSession.sharedInstance().requestRecordPermission { granted in
-                cont.resume(returning: granted)
+            if #available(iOS 17.0, *) {
+                AVAudioApplication.requestRecordPermission { granted in
+                    cont.resume(returning: granted)
+                }
+            } else {
+                AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                    cont.resume(returning: granted)
+                }
             }
+        }
+    }
+
+    private func microphonePermissionGranted() -> Bool {
+        if #available(iOS 17.0, *) {
+            return AVAudioApplication.shared.recordPermission == .granted
+        } else {
+            return AVAudioSession.sharedInstance().recordPermission == .granted
         }
     }
 
@@ -86,15 +99,11 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     func start(update: @escaping (String) -> Void) {
         guard !isRecording else { return }
         guard isAuthorized else {
-            DispatchQueue.main.async {
-                self.errorMessage = "Voice planning needs Speech Recognition and Microphone access."
-            }
+            errorMessage = "Voice planning needs Speech Recognition and Microphone access."
             return
         }
         guard let recognizer, recognizer.isAvailable else {
-            DispatchQueue.main.async {
-                self.errorMessage = "Speech Recognition is not available right now."
-            }
+            errorMessage = "Speech Recognition is not available right now."
             return
         }
 
@@ -117,37 +126,19 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         let format = inputNode.outputFormat(forBus: 0)
 
         inputNode.removeTap(onBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
-            self?.request?.append(buffer)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            audioRequest.append(buffer)
         }
 
         recognitionTask?.cancel()
         recognitionTask = recognizer.recognitionTask(with: audioRequest) { [weak self] result, error in
-            guard let self else { return }
+            let text = result?.bestTranscription.formattedString
+            let isFinal = result?.isFinal ?? false
+            let hadError = error != nil
 
-            if let result = result {
-                let text = result.bestTranscription.formattedString
-                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    DispatchQueue.main.async {
-                        self.transcript = trimmed
-                        self.updateHandler?(trimmed)   // only non-empty updates
-                    }
-                }
-            }
-
-            if error != nil || (result?.isFinal ?? false) {
-                // Stop audio without clearing transcript.
-                self.audioEngine.stop()
-                self.audioEngine.inputNode.removeTap(onBus: 0)
-                self.request?.endAudio()
-                try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-                DispatchQueue.main.async {
-                    self.isRecording = false
-                    if error != nil {
-                        self.errorMessage = "Speech Recognition stopped unexpectedly."
-                    }
-                }
+            Task { @MainActor in
+                guard let self else { return }
+                self.handleRecognitionUpdate(text: text, isFinal: isFinal, hadError: hadError)
             }
         }
 
@@ -155,11 +146,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         do {
             try audioEngine.start()
         } catch {
-            audioEngine.inputNode.removeTap(onBus: 0)
-            recognitionTask?.cancel()
-            recognitionTask = nil
-            request = nil
-            try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+            stopAudio(cancelTask: true, finishTask: false, clearTranscript: false)
             errorMessage = "Could not start recording."
             return
         }
@@ -167,35 +154,54 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         isRecording = true
     }
 
+    private func handleRecognitionUpdate(text: String?, isFinal: Bool, hadError: Bool) {
+        if let text {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                transcript = trimmed
+                updateHandler?(trimmed)
+            }
+        }
+
+        if hadError || isFinal {
+            stopAudio(cancelTask: false, finishTask: false, clearTranscript: false)
+            if hadError {
+                errorMessage = "Speech Recognition stopped unexpectedly."
+            }
+        }
+    }
+
     /// Stops recording. DOES NOT clear `transcript` or send an empty update.
     func stop() {
         guard isRecording else { return }
-        request?.endAudio()
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionTask?.finish()
-        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        isRecording = false
-        // Do NOT wipe transcript here.
+        stopAudio(cancelTask: false, finishTask: true, clearTranscript: false)
     }
 
     /// Stops any active recognition and clears local speech state so a new planning pass starts cleanly.
     func resetForFreshInput() {
-        if isRecording {
-            request?.endAudio()
-        }
+        stopAudio(cancelTask: true, finishTask: false, clearTranscript: true)
+        errorMessage = nil
+    }
+
+    private func stopAudio(cancelTask: Bool, finishTask: Bool, clearTranscript: Bool) {
+        request?.endAudio()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
-        recognitionTask?.cancel()
+
+        if cancelTask {
+            recognitionTask?.cancel()
+        } else if finishTask {
+            recognitionTask?.finish()
+        }
+
         recognitionTask = nil
         request = nil
         updateHandler = nil
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        isRecording = false
 
-        DispatchQueue.main.async {
-            self.transcript = ""
-            self.errorMessage = nil
-            self.isRecording = false
+        if clearTranscript {
+            transcript = ""
         }
     }
 
