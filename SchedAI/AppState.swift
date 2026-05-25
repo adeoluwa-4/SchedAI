@@ -17,6 +17,7 @@ final class AppState: ObservableObject {
 
     private var midnightTimer: Timer? = nil
     private var completionCleanupTimer: Timer? = nil
+    private var isValidatingWorkWindow = false
     private let completedTaskRetention: TimeInterval = 24 * 60 * 60
 
     private enum DefaultsKey {
@@ -60,6 +61,8 @@ final class AppState: ObservableObject {
     @Published var calendarSyncMessage: String? = nil
     /// Toast feedback for successful calendar connect.
     @Published var calendarSyncToast: String? = nil
+    /// User-facing persistence feedback for save/load problems.
+    @Published var persistenceMessage: String? = nil
 
     /// Current calendar connection state (non-prompting).
     @Published var calendarConnectionStatus: CalendarManager.ConnectionStatus = .notConnected
@@ -220,6 +223,8 @@ final class AppState: ObservableObject {
     // MARK: - Work Window Validation
 
     private func validateWorkWindow() {
+        guard !isValidatingWorkWindow else { return }
+
         let cal = Calendar.current
         let startComps = cal.dateComponents([.hour, .minute], from: workStart)
         let endComps = cal.dateComponents([.hour, .minute], from: workEnd)
@@ -227,15 +232,30 @@ final class AppState: ObservableObject {
         let startMinutes = (startComps.hour ?? 0) * 60 + (startComps.minute ?? 0)
         let endMinutes = (endComps.hour ?? 0) * 60 + (endComps.minute ?? 0)
 
-        if endMinutes <= startMinutes {
-            let adjustedMinutes = startMinutes + 60
-            let newHour = adjustedMinutes / 60
-            let newMinute = adjustedMinutes % 60
+        guard endMinutes <= startMinutes else { return }
 
-            if let adjusted = cal.date(bySettingHour: newHour, minute: newMinute, second: 0, of: Date()) {
-                workEnd = adjusted
-            }
+        isValidatingWorkWindow = true
+        defer { isValidatingWorkWindow = false }
+
+        let latestEndMinutes = (23 * 60) + 59
+        let adjustedEndMinutes = min(startMinutes + 60, latestEndMinutes)
+
+        if adjustedEndMinutes > startMinutes {
+            workEnd = dateForTime(minutesFromStartOfDay: adjustedEndMinutes) ?? workEnd
+        } else {
+            workStart = dateForTime(minutesFromStartOfDay: latestEndMinutes - 60) ?? workStart
+            workEnd = dateForTime(minutesFromStartOfDay: latestEndMinutes) ?? workEnd
         }
+    }
+
+    private func dateForTime(minutesFromStartOfDay minutes: Int) -> Date? {
+        let clamped = min(max(0, minutes), (23 * 60) + 59)
+        return Calendar.current.date(
+            bySettingHour: clamped / 60,
+            minute: clamped % 60,
+            second: 0,
+            of: Date()
+        )
     }
 
     func schedulingWindow(for day: Date) -> (start: Date, end: Date) {
@@ -261,7 +281,16 @@ final class AppState: ObservableObject {
             return (start, end)
         }
 
-        return (combine(workStart), combine(workEnd))
+        let start = combine(workStart)
+        let end = combine(workEnd)
+        if end > start {
+            return (start, end)
+        }
+
+        let dayEnd = cal.date(byAdding: .day, value: 1, to: baseDay)?.addingTimeInterval(-60)
+            ?? baseDay.addingTimeInterval((24 * 60 * 60) - 60)
+        let adjustedEnd = min(cal.date(byAdding: .hour, value: 1, to: start) ?? dayEnd, dayEnd)
+        return (min(start, adjustedEnd.addingTimeInterval(-300)), adjustedEnd)
     }
 
     // MARK: - Permissions / feature hydration
@@ -270,12 +299,14 @@ final class AppState: ObservableObject {
         // Notifications
         if remindersEnabled {
             NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
-                guard let self else { return }
-                switch status {
-                case .authorized:
-                    self.rescheduleRemindersWithoutPrompt()
-                case .denied, .notDetermined:
-                    Task { @MainActor in self.remindersEnabled = false }
+                Task { @MainActor in
+                    guard let self else { return }
+                    switch status {
+                    case .authorized:
+                        self.rescheduleRemindersWithoutPrompt()
+                    case .denied, .notDetermined:
+                        self.remindersEnabled = false
+                    }
                 }
             }
         }
@@ -311,7 +342,6 @@ final class AppState: ObservableObject {
             calendarSyncMessage = "Calendar is unavailable on this device."
 
         case .notConnected:
-            calendarSyncEnabled = true
             CalendarManager.shared.requestAccessAndEnsureCalendar { [weak self] status, message in
                 guard let self else { return }
                 self.calendarConnectionStatus = status
@@ -336,25 +366,29 @@ final class AppState: ObservableObject {
         let lead = reminderLeadMinutes
 
         NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
-            guard let self else { return }
+            Task { @MainActor in
+                guard let self else { return }
 
-            switch status {
-            case .authorized:
-                NotificationManager.clearAll(delivered: true, pending: true)
-                NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
-
-            case .notDetermined:
-                NotificationManager.requestPermission { granted in
-                    guard granted else {
-                        Task { @MainActor in self.remindersEnabled = false }
-                        return
-                    }
+                switch status {
+                case .authorized:
                     NotificationManager.clearAll(delivered: true, pending: true)
                     NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
-                }
 
-            case .denied:
-                Task { @MainActor in self.remindersEnabled = false }
+                case .notDetermined:
+                    NotificationManager.requestPermission { granted in
+                        Task { @MainActor in
+                            guard granted else {
+                                self.remindersEnabled = false
+                                return
+                            }
+                            NotificationManager.clearAll(delivered: true, pending: true)
+                            NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
+                        }
+                    }
+
+                case .denied:
+                    self.remindersEnabled = false
+                }
             }
         }
     }
@@ -407,9 +441,7 @@ final class AppState: ObservableObject {
     func deleteTask(id: UUID) {
         tasks.removeAll { $0.id == id }
         NotificationManager.cancelReminder(for: id)
-        if calendarSyncEnabled {
-            CalendarManager.shared.deleteEvent(for: id)
-        }
+        CalendarManager.shared.deleteEvent(for: id)
     }
 
     func toggleComplete(id: UUID) {
@@ -580,21 +612,18 @@ final class AppState: ObservableObject {
     private func calendarSyncIfEnabled(days: [Date], showSuccessMessage: Bool) {
         let cal = Calendar.current
         let normalizedDays = Array(Set(days.map { cal.startOfDay(for: $0) })).sorted()
-        guard !normalizedDays.isEmpty else { return }
+        guard calendarSyncEnabled, !normalizedDays.isEmpty else { return }
 
         var totalSynced = 0
         for day in normalizedDays {
-            let previousMessage = calendarSyncMessage
-            calendarSyncIfEnabled(day: day, showSuccessMessage: false)
-            if calendarSyncMessage != previousMessage {
+            let result = CalendarManager.shared.upsertTodayEvents(from: tasks, day: day)
+            refreshCalendarConnectionStatus()
+            guard handleCalendarSyncResult(result, showSuccessMessage: false) else {
                 return
             }
-
-            let count = tasks.filter { task in
-                guard !task.isCompleted, let start = task.scheduledStart else { return false }
-                return cal.isDate(start, inSameDayAs: day)
-            }.count
-            totalSynced += count
+            if case .success(let syncedCount) = result {
+                totalSynced += syncedCount
+            }
         }
 
         if showSuccessMessage {
@@ -610,20 +639,30 @@ final class AppState: ObservableObject {
         let result = CalendarManager.shared.upsertTodayEvents(from: tasks, day: targetDay)
         refreshCalendarConnectionStatus()
 
+        _ = handleCalendarSyncResult(result, showSuccessMessage: showSuccessMessage)
+    }
+
+    @discardableResult
+    private func handleCalendarSyncResult(_ result: CalendarManager.SyncResult, showSuccessMessage: Bool) -> Bool {
         switch result {
         case .success(let syncedCount):
             if showSuccessMessage {
                 let destination = CalendarManager.shared.selectedDestinationName()
                 calendarSyncMessage = "Synced \(syncedCount) task\(syncedCount == 1 ? "" : "s") to \(destination)."
             }
+            return true
         case .notConnected:
             calendarSyncMessage = "Calendar is not connected. Go to Settings → Calendar → Connect Calendar."
+            return false
         case .denied:
             calendarSyncMessage = "Calendar access is denied. Enable it in iOS Settings → Privacy & Security → Calendars."
+            return false
         case .unavailable:
             calendarSyncMessage = "Calendar is unavailable on this device."
+            return false
         case .failed(let reason):
             calendarSyncMessage = "Calendar sync failed: \(reason)"
+            return false
         }
     }
 
@@ -635,9 +674,11 @@ final class AppState: ObservableObject {
         let lead = reminderLeadMinutes
 
         NotificationManager.authorizationStatus { (status: NotificationManager.AuthorizationState) in
-            guard status == .authorized else { return }
-            NotificationManager.clearAll(delivered: true, pending: true)
-            NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
+            Task { @MainActor in
+                guard status == .authorized else { return }
+                NotificationManager.clearAll(delivered: true, pending: true)
+                NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
+            }
         }
     }
 
@@ -648,9 +689,11 @@ final class AppState: ObservableObject {
             .filter { $0.scheduledStart != nil }
 
         NotificationManager.authorizationStatus { (status: NotificationManager.AuthorizationState) in
-            guard status == .authorized else { return }
-            NotificationManager.clearAll(delivered: true, pending: true)
-            NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: self.reminderLeadMinutes)
+            Task { @MainActor in
+                guard status == .authorized else { return }
+                NotificationManager.clearAll(delivered: true, pending: true)
+                NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: self.reminderLeadMinutes)
+            }
         }
     }
 
@@ -661,6 +704,14 @@ final class AppState: ObservableObject {
         let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SchedAI", isDirectory: true)
         try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir.appendingPathComponent("tasks.json")
+    }
+
+    private func writableSaveURL() throws -> URL {
+        let fm = FileManager.default
+        let dir = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("SchedAI", isDirectory: true)
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir.appendingPathComponent("tasks.json")
     }
 
@@ -678,26 +729,44 @@ final class AppState: ObservableObject {
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(tasks) else { return }
-        try? data.write(to: saveURL, options: protectedWriteOptions)
+        do {
+            let data = try JSONEncoder().encode(tasks)
+            try data.write(to: writableSaveURL(), options: protectedWriteOptions)
+            persistenceMessage = nil
+        } catch {
+            persistenceMessage = "SchedAI could not save your latest task changes. Please try again before closing the app."
+        }
         persistWidgetData()
     }
 
     @discardableResult
     private func restore() -> Bool {
-        if let data = try? Data(contentsOf: saveURL),
-           let decoded = try? JSONDecoder().decode([TaskItem].self, from: data) {
-            tasks = decoded
-            return true
+        let fm = FileManager.default
+        let primaryURL = saveURL
+
+        if fm.fileExists(atPath: primaryURL.path) {
+            do {
+                let data = try Data(contentsOf: primaryURL)
+                tasks = try JSONDecoder().decode([TaskItem].self, from: data)
+                persistenceMessage = nil
+                return true
+            } catch {
+                persistenceMessage = "SchedAI could not load your saved tasks. The saved file was left untouched."
+                return false
+            }
         }
 
-        guard let legacyData = try? Data(contentsOf: legacySaveURL),
-              let legacyDecoded = try? JSONDecoder().decode([TaskItem].self, from: legacyData)
-        else { return false }
+        guard fm.fileExists(atPath: legacySaveURL.path) else { return false }
 
-        tasks = legacyDecoded
-        persist()
-        return true
+        do {
+            let legacyData = try Data(contentsOf: legacySaveURL)
+            tasks = try JSONDecoder().decode([TaskItem].self, from: legacyData)
+            persist()
+            return true
+        } catch {
+            persistenceMessage = "SchedAI could not import your older saved tasks."
+            return false
+        }
     }
 
     // MARK: - Daily rollover (reset at midnight)
@@ -768,9 +837,7 @@ final class AppState: ObservableObject {
 
         for id in expiredIDs {
             NotificationManager.cancelReminder(for: id)
-            if calendarSyncEnabled {
-                CalendarManager.shared.deleteEvent(for: id)
-            }
+            CalendarManager.shared.deleteEvent(for: id)
         }
     }
 
@@ -814,17 +881,13 @@ final class AppState: ObservableObject {
                 case .autoClear:
                     changed = true
                     NotificationManager.cancelReminder(for: t.id)
-                    if calendarSyncEnabled {
-                        CalendarManager.shared.deleteEvent(for: t.id)
-                    }
+                    CalendarManager.shared.deleteEvent(for: t.id)
                     continue
                 }
             } else if wasCreatedYesterday && wasScheduledYesterday && unfinishedTaskPolicy == .autoClear {
                 changed = true
                 NotificationManager.cancelReminder(for: t.id)
-                if calendarSyncEnabled {
-                    CalendarManager.shared.deleteEvent(for: t.id)
-                }
+                CalendarManager.shared.deleteEvent(for: t.id)
                 continue
             }
 
