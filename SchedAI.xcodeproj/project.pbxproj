@@ -65,27 +65,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		6A02603A2F34F0E300FDF50D /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6A1FA3262F92F81B00B1B49C /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6A1FA3982F92FE7600B1B49C /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6A4D68A82EFE4F110071CDD2 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6A90AE012F1D67570070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6A90AF642F1EDDA80070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6A90AFB32F218DC00070B3F0 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6AA3ABCB2F44B9DC003693DD /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		6AA3AC062F44BB5B003693DD /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
-		6AAB2DEE2EFFAD700065F401 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		6AEC16DA2F92BE9C00FC61A5 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "SchedAI-WidgetExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 		6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		CF2075E82EFB4263005862CC /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 		CF2DEE2E2EF4EB1B00F2998C /* SchedAI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SchedAI.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF2DEE3B2EF4EB1E00F2998C /* SchedAITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SchedAITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		CF2DEE452EF4EB1E00F2998C /* SchedAIUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SchedAIUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		CF495E3D2EF52C74005D448B /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		CF495E792EF62A8D005D448B /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
-		CF95BAC12EF654990031A149 /* SchedAI.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; path = SchedAI.xcodeproj; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -168,46 +154,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		6A0260492F34F0E300FDF50D /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6A1FA3352F92F81B00B1B49C /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6A1FA3A72F92FE7600B1B49C /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6A4D68B52EFE4F110071CDD2 /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6A90AE0F2F1D67570070B3F0 /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6A90AF722F1EDDA80070B3F0 /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6A90AFC22F218DC00070B3F0 /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6AA3ABDA2F44B9DC003693DD /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
 		6AA3AC052F44BB5B003693DD /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -216,21 +162,6 @@
 				6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */,
 			);
 			name = Frameworks;
-			sourceTree = "<group>";
-		};
-		6AAB2DFB2EFFAD700065F401 /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		6AEC16E92F92BE9C00FC61A5 /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		CF2075F52EFB4263005862CC /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
 			sourceTree = "<group>";
 		};
 		CF2DEE252EF4EB1B00F2998C = {
@@ -255,21 +186,6 @@
 				CF2DEE452EF4EB1E00F2998C /* SchedAIUITests.xctest */,
 				6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */,
 			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		CF495E4A2EF52C74005D448B /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		CF495E862EF62A8D005D448B /* Products */ = {
-			isa = PBXGroup;
-			name = Products;
-			sourceTree = "<group>";
-		};
-		CF95BACE2EF654990031A149 /* Products */ = {
-			isa = PBXGroup;
 			name = Products;
 			sourceTree = "<group>";
 		};
@@ -407,8 +323,6 @@
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CF2DEE2F2EF4EB1B00F2998C /* Products */;
 			projectDirPath = "";
-			projectReferences = (
-			);
 			projectRoot = "";
 			targets = (
 				CF2DEE2D2EF4EB1B00F2998C /* SchedAI */,
