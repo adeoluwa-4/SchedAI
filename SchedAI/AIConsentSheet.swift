@@ -14,13 +14,14 @@ struct AIConsentSheet: View {
                         Text("Before using hosted AI")
                             .font(.title2.weight(.bold))
 
-                        Text("Offline preview stays on your device. If you continue with AI Improve, SchedAI sends the task text you typed or spoke, your planning date, locale, time zone, and an offline preview to SchedAI's hosted parser, which uses OpenAI to return structured tasks.")
+                        Text("Offline preview stays on your device. If you continue with AI Improve, SchedAI sends the task text you typed or spoke, your planning date, locale, time zone, an offline preview, and a random SchedAI client id to SchedAI's hosted parser, which uses OpenAI to return structured tasks.")
                             .foregroundStyle(.secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 10) {
                         consentRow(title: "Optional", detail: "You can keep using offline preview without turning this on.")
                         consentRow(title: "Limited purpose", detail: "This is only used to improve task parsing.")
+                        consentRow(title: "Voice input", detail: "Speech recognition uses Apple's speech and microphone permission before SchedAI receives text.")
                         consentRow(title: "Your choice", detail: "You can turn hosted AI back off any time in Settings.")
                     }
 
