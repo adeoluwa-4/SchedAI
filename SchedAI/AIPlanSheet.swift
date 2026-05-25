@@ -423,7 +423,12 @@ struct AIPlanSheet: View {
             animateLoader = false
         }
 
-        let result = await AIService.improveTasksWithAI(from: text, now: Date(), planningDate: app.planningDate)
+        let result = await AIService.improveTasksWithAI(
+            from: text,
+            now: Date(),
+            planningDate: app.planningDate,
+            allowsHostedAI: app.hostedAIConsent
+        )
         applyParseResult(result, for: text)
     }
 
