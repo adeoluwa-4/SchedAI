@@ -2,13 +2,19 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 
 const WINDOW_MS = Number(process.env.AI_RATE_LIMIT_WINDOW_MS || 60_000);
 const MAX_REQUESTS = Number(process.env.AI_RATE_LIMIT_MAX_REQUESTS || 30);
+const MAX_IP_REQUESTS = Number(process.env.AI_IP_RATE_LIMIT_MAX_REQUESTS || 90);
 const MAX_INPUT_CHARS = Number(process.env.AI_MAX_INPUT_CHARS || 4_000);
+const MAX_BUCKETS = Number(process.env.AI_RATE_LIMIT_MAX_BUCKETS || 2_000);
+const ALLOWED_ORIGINS = String(process.env.AI_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const buckets = new Map();
 
-const jsonHeaders = {
-  'Access-Control-Allow-Origin': '*',
+const baseHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-SchedAI-Client-ID, Authorization, X-SchedAI-API-Token',
+  'Vary': 'Origin',
   'Content-Type': 'application/json',
 };
 
@@ -49,9 +55,17 @@ const taskSchema = {
   required: ['tasks', 'needsClarification', 'clarificationQuestion'],
 };
 
-function send(res, status, body, extraHeaders = {}) {
+function corsHeaders(req) {
+  const origin = String(req.headers.origin || '');
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return { ...baseHeaders, 'Access-Control-Allow-Origin': origin };
+  }
+  return baseHeaders;
+}
+
+function send(req, res, status, body, extraHeaders = {}) {
   res.status(status);
-  Object.entries({ ...jsonHeaders, ...extraHeaders }).forEach(([key, value]) => {
+  Object.entries({ ...corsHeaders(req), ...extraHeaders }).forEach(([key, value]) => {
     res.setHeader(key, value);
   });
   res.end(JSON.stringify(body));
@@ -73,27 +87,61 @@ function clientKey(req) {
   return firstIp || req.socket?.remoteAddress || 'unknown';
 }
 
-function checkRateLimit(req) {
-  const key = clientKey(req);
+function appClientID(req) {
+  return String(req.headers['x-schedai-client-id'] || '').trim();
+}
+
+function isValidClientID(value) {
+  return /^schedai\.[a-z0-9]{32}$/i.test(value);
+}
+
+function isAuthorizedRequest(req) {
+  const requiredToken = process.env.SCHEDAI_API_TOKEN;
+  if (!requiredToken) return true;
+
+  const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
+  const explicit = String(req.headers['x-schedai-api-token'] || '').trim();
+  return bearer === requiredToken || explicit === requiredToken;
+}
+
+function pruneBuckets(now) {
+  for (const [key, value] of buckets) {
+    if (value.resetAt <= now) buckets.delete(key);
+  }
+
+  if (buckets.size <= MAX_BUCKETS) return;
+
+  const overflow = buckets.size - MAX_BUCKETS;
+  let removed = 0;
+  for (const key of buckets.keys()) {
+    buckets.delete(key);
+    removed += 1;
+    if (removed >= overflow) break;
+  }
+}
+
+function checkRateLimit(key, maxRequests) {
   const now = Date.now();
+  pruneBuckets(now);
+
   const current = buckets.get(key);
 
   if (!current || current.resetAt <= now) {
     buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return { allowed: true, remaining: Math.max(0, MAX_REQUESTS - 1), resetAt: now + WINDOW_MS };
+    return { allowed: true, remaining: Math.max(0, maxRequests - 1), resetAt: now + WINDOW_MS, limit: maxRequests };
   }
 
-  if (current.count >= MAX_REQUESTS) {
-    return { allowed: false, remaining: 0, resetAt: current.resetAt };
+  if (current.count >= maxRequests) {
+    return { allowed: false, remaining: 0, resetAt: current.resetAt, limit: maxRequests };
   }
 
   current.count += 1;
-  return { allowed: true, remaining: Math.max(0, MAX_REQUESTS - current.count), resetAt: current.resetAt };
+  return { allowed: true, remaining: Math.max(0, maxRequests - current.count), resetAt: current.resetAt, limit: maxRequests };
 }
 
 function rateLimitHeaders(result) {
   return {
-    'X-RateLimit-Limit': String(MAX_REQUESTS),
+    'X-RateLimit-Limit': String(result.limit),
     'X-RateLimit-Remaining': String(result.remaining),
     'X-RateLimit-Reset': String(Math.ceil(result.resetAt / 1000)),
   };
@@ -128,7 +176,7 @@ function systemPrompt() {
 }
 
 module.exports = async function handler(req, res) {
-  Object.entries(jsonHeaders).forEach(([key, value]) => res.setHeader(key, value));
+  Object.entries(corsHeaders(req)).forEach(([key, value]) => res.setHeader(key, value));
 
   if (req.method === 'OPTIONS') {
     res.status(204).end();
@@ -136,19 +184,31 @@ module.exports = async function handler(req, res) {
   }
 
   if (req.method !== 'POST') {
-    send(res, 405, { error: 'Method not allowed' });
+    send(req, res, 405, { error: 'Method not allowed' });
     return;
   }
 
-  const rateLimit = checkRateLimit(req);
-  const headers = rateLimitHeaders(rateLimit);
-  if (!rateLimit.allowed) {
-    send(res, 429, { error: 'Too many requests. Please try again later.' }, headers);
+  if (!isAuthorizedRequest(req)) {
+    send(req, res, 403, { error: 'AI parser access is disabled for this request.' });
+    return;
+  }
+
+  const clientID = appClientID(req);
+  if (!isValidClientID(clientID)) {
+    send(req, res, 400, { error: 'Missing or invalid SchedAI client id.' });
+    return;
+  }
+
+  const clientRateLimit = checkRateLimit(`client:${clientID}`, MAX_REQUESTS);
+  const ipRateLimit = checkRateLimit(`ip:${clientKey(req)}`, MAX_IP_REQUESTS);
+  const headers = rateLimitHeaders(clientRateLimit);
+  if (!clientRateLimit.allowed || !ipRateLimit.allowed) {
+    send(req, res, 429, { error: 'Too many requests. Please try again later.' }, headers);
     return;
   }
 
   if (!process.env.OPENAI_API_KEY) {
-    send(res, 503, { error: 'AI parser is not configured' }, headers);
+    send(req, res, 503, { error: 'AI parser is not configured' }, headers);
     return;
   }
 
@@ -156,12 +216,12 @@ module.exports = async function handler(req, res) {
   const input = String(body.input || '').trim();
 
   if (!input) {
-    send(res, 400, { error: 'Missing input' }, headers);
+    send(req, res, 400, { error: 'Missing input' }, headers);
     return;
   }
 
   if (input.length > MAX_INPUT_CHARS) {
-    send(res, 413, { error: 'Input is too long' }, headers);
+    send(req, res, 413, { error: 'Input is too long' }, headers);
     return;
   }
 
@@ -203,27 +263,24 @@ module.exports = async function handler(req, res) {
     });
     data = await openaiResponse.json().catch(() => null);
   } catch {
-    send(res, 502, { error: 'AI parser request failed' }, headers);
+    send(req, res, 502, { error: 'AI parser request failed' }, headers);
     return;
   }
 
   if (!openaiResponse.ok) {
-    send(res, openaiResponse.status, {
-      error: 'OpenAI request failed',
-      detail: data?.error?.message || null,
-    }, headers);
+    send(req, res, openaiResponse.status, { error: 'AI parser request failed' }, headers);
     return;
   }
 
   const outputText = extractOutputText(data);
   if (!outputText) {
-    send(res, 502, { error: 'AI parser returned no text' }, headers);
+    send(req, res, 502, { error: 'AI parser returned no text' }, headers);
     return;
   }
 
   try {
-    send(res, 200, JSON.parse(outputText), headers);
+    send(req, res, 200, JSON.parse(outputText), headers);
   } catch {
-    send(res, 502, { error: 'AI parser returned invalid JSON' }, headers);
+    send(req, res, 502, { error: 'AI parser returned invalid JSON' }, headers);
   }
 };
