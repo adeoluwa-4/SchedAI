@@ -93,9 +93,6 @@ struct BigCalendarSheet: View {
             .onAppear {
                 selectedDate = app.planningDate
             }
-            .onChange(of: selectedDate) { _, newValue in
-                app.setPlanningDate(newValue)
-            }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
