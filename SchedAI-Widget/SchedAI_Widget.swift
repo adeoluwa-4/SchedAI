@@ -687,7 +687,12 @@ private struct LargeSchedAIWidget: View {
             HStack(spacing: 8) {
                 MicPillButton(title: "Ask SchedAI", compact: true)
 
-                StaticActionPill(title: "Replan Today (\(snapshot.remainingCount))", systemName: "arrow.clockwise")
+                Text("Open app to replan")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(WidgetPalette.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(maxWidth: .infinity)
             }
             .frame(height: 38)
 
@@ -724,27 +729,6 @@ private struct LargeComingUpRow: View {
             DurationPill(minutes: task.durationMinutes, compact: true)
         }
         .frame(height: 21)
-    }
-}
-
-private struct StaticActionPill: View {
-    let title: String
-    let systemName: String
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: systemName)
-            Text(title)
-                .lineLimit(1)
-                .minimumScaleFactor(0.55)
-                .allowsTightening(true)
-        }
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(WidgetPalette.blue)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity)
-        .background(WidgetPalette.blueSoft.opacity(0.55), in: Capsule())
     }
 }
 
