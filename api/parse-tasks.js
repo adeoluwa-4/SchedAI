@@ -13,7 +13,7 @@ const buckets = new Map();
 
 const baseHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-SchedAI-Client-ID, Authorization, X-SchedAI-API-Token',
+  'Access-Control-Allow-Headers': 'Content-Type, X-SchedAI-Client-ID',
   'Vary': 'Origin',
   'Content-Type': 'application/json',
 };
@@ -93,15 +93,6 @@ function appClientID(req) {
 
 function isValidClientID(value) {
   return /^schedai\.[a-z0-9]{32}$/i.test(value);
-}
-
-function isAuthorizedRequest(req) {
-  const requiredToken = process.env.SCHEDAI_API_TOKEN;
-  if (!requiredToken) return true;
-
-  const bearer = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
-  const explicit = String(req.headers['x-schedai-api-token'] || '').trim();
-  return bearer === requiredToken || explicit === requiredToken;
 }
 
 function pruneBuckets(now) {
@@ -185,11 +176,6 @@ module.exports = async function handler(req, res) {
 
   if (req.method !== 'POST') {
     send(req, res, 405, { error: 'Method not allowed' });
-    return;
-  }
-
-  if (!isAuthorizedRequest(req)) {
-    send(req, res, 403, { error: 'AI parser access is disabled for this request.' });
     return;
   }
 
