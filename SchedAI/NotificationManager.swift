@@ -26,6 +26,14 @@ enum NotificationManager {
         let queued: Int
         let skippedPast: Int
         let skippedLimit: Int
+        let failed: Int
+        let firstErrorMessage: String?
+    }
+
+    private struct ReminderPlan {
+        let requests: [UNNotificationRequest]
+        let skippedPast: Int
+        let skippedLimit: Int
     }
 
     /// Read current notification authorization status without prompting.
@@ -78,6 +86,57 @@ enum NotificationManager {
     @discardableResult
     static func scheduleReminders(for tasks: [TaskItem], minutesBefore: Int) -> ScheduleResult {
         let center = UNUserNotificationCenter.current()
+        let plan = reminderPlan(for: tasks, minutesBefore: minutesBefore)
+        for request in plan.requests {
+            center.add(request) { error in
+                #if DEBUG
+                if let error {
+                    print("SchedAI reminder scheduling failed: \(error.localizedDescription)")
+                }
+                #endif
+            }
+        }
+        return ScheduleResult(
+            queued: plan.requests.count,
+            skippedPast: plan.skippedPast,
+            skippedLimit: plan.skippedLimit,
+            failed: 0,
+            firstErrorMessage: nil
+        )
+    }
+
+    /// Schedule reminders and wait for UserNotifications to report add failures.
+    @discardableResult
+    static func scheduleRemindersReportingFailures(for tasks: [TaskItem], minutesBefore: Int) async -> ScheduleResult {
+        let center = UNUserNotificationCenter.current()
+        let plan = reminderPlan(for: tasks, minutesBefore: minutesBefore)
+        var queued = 0
+        var failed = 0
+        var firstErrorMessage: String? = nil
+
+        for request in plan.requests {
+            let error = await add(request, to: center)
+            if let error {
+                failed += 1
+                firstErrorMessage = firstErrorMessage ?? error.localizedDescription
+                #if DEBUG
+                print("SchedAI reminder scheduling failed: \(error.localizedDescription)")
+                #endif
+            } else {
+                queued += 1
+            }
+        }
+
+        return ScheduleResult(
+            queued: queued,
+            skippedPast: plan.skippedPast,
+            skippedLimit: plan.skippedLimit,
+            failed: failed,
+            firstErrorMessage: firstErrorMessage
+        )
+    }
+
+    private static func reminderPlan(for tasks: [TaskItem], minutesBefore: Int) -> ReminderPlan {
         let now = Date()
         let candidates = tasks
             .compactMap { task -> (task: TaskItem, triggerDate: Date)? in
@@ -92,9 +151,9 @@ enum NotificationManager {
         let skippedPast = max(0, tasks.filter { $0.scheduledStart != nil }.count - candidates.count)
         let skippedLimit = max(0, candidates.count - scheduleableTasks.count)
 
-        for item in scheduleableTasks {
+        let requests = scheduleableTasks.compactMap { item -> UNNotificationRequest? in
             let t = item.task
-            guard let start = t.scheduledStart else { continue }
+            guard let start = t.scheduledStart else { return nil }
 
             let comps = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute, .second],
@@ -118,22 +177,22 @@ enum NotificationManager {
             content.sound = .default
             content.interruptionLevel = .active
 
-            let req = UNNotificationRequest(
+            return UNNotificationRequest(
                 identifier: reminderIdentifier(for: t.id),
                 content: content,
                 trigger: trigger
             )
-
-            center.add(req) { error in
-                #if DEBUG
-                if let error {
-                    print("SchedAI reminder scheduling failed: \(error.localizedDescription)")
-                }
-                #endif
-            }
         }
 
-        return ScheduleResult(queued: scheduleableTasks.count, skippedPast: skippedPast, skippedLimit: skippedLimit)
+        return ReminderPlan(requests: requests, skippedPast: skippedPast, skippedLimit: skippedLimit)
+    }
+
+    private static func add(_ request: UNNotificationRequest, to center: UNUserNotificationCenter) async -> Error? {
+        await withCheckedContinuation { continuation in
+            center.add(request) { error in
+                continuation.resume(returning: error)
+            }
+        }
     }
 
     private static func reminderIdentifier(for id: UUID) -> String {
