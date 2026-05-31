@@ -186,20 +186,33 @@ private struct OnboardingView: View {
             }
 
             if needsNameEntry {
-                Button {
-                    saveManualFirstName()
-                } label: {
-                    HStack(spacing: 10) {
-                        Text("Continue")
-                        Image(systemName: "arrow.right")
+                VStack(spacing: 10) {
+                    Button {
+                        saveManualFirstName()
+                    } label: {
+                        HStack(spacing: 10) {
+                            Text("Continue")
+                            Image(systemName: "arrow.right")
+                        }
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
                     }
-                    .font(.headline.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 54)
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandBlue)
+                    .disabled(firstNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                    Button {
+                        skipManualName()
+                    } label: {
+                        Text("Skip")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(Color.brandBlue)
-                .disabled(firstNameInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             } else if hasCompletedAppleSignIn {
                 Button {
                     if page == pages.count - 1 {
@@ -314,7 +327,10 @@ private struct OnboardingView: View {
 
     private func continueWithoutApple() {
         withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
-            needsNameEntry = true
+            firstNameInput = ""
+            needsNameEntry = false
+            hasCompletedAppleSignIn = true
+            page = 0
         }
     }
 
@@ -323,6 +339,15 @@ private struct OnboardingView: View {
         guard !name.isEmpty else { return }
 
         app.userDisplayName = name
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+            needsNameEntry = false
+            hasCompletedAppleSignIn = true
+            page = 0
+        }
+    }
+
+    private func skipManualName() {
+        firstNameInput = ""
         withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
             needsNameEntry = false
             hasCompletedAppleSignIn = true
@@ -912,7 +937,7 @@ private struct SignInOnboardingScreen: View {
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.primary)
 
-                    Text("Use Apple to fill your name, or continue without it.")
+                    Text("Use Apple to fill your name, enter one yourself, or skip personalization.")
                         .font(.system(size: 17, weight: .medium, design: .rounded))
                         .lineSpacing(3)
                         .multilineTextAlignment(.center)
