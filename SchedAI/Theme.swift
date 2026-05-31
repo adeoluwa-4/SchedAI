@@ -37,7 +37,7 @@ enum AppTheme: String, CaseIterable, Identifiable, Codable, Hashable {
 }
 
 extension Color {
-    // ✅ Theme colors that won’t crash if an asset is missing
+    // Theme colors that won’t crash if an asset is missing
     struct theme {
         static var background: Color {
             #if canImport(UIKit)
