@@ -165,6 +165,15 @@ struct NLPTestRunner {
                 ]
             ),
             Case(
+                name: "Trailing tonight applies to siblings",
+                input: "gym and laundry tonight",
+                expectedCount: 2,
+                expected: [
+                    .init(title: "Gym", minutes: nil, hasTime: false),
+                    .init(title: "Laundry", minutes: nil, hasTime: false),
+                ]
+            ),
+            Case(
                 name: "Weekly workout",
                 input: "every monday workout at 7",
                 expectedCount: 12,
