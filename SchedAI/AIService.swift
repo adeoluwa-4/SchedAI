@@ -257,8 +257,8 @@ struct AIService {
     }
 
     private static func isValidClientID(_ value: String) -> Bool {
-        let pattern = #"^[A-Za-z0-9._-]{8,128}$"#
-        return value.range(of: pattern, options: .regularExpression) != nil
+        let pattern = #"^schedai\.[a-z0-9]{32}$"#
+        return value.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     private static func priority(from raw: String?) -> TaskPriority {
