@@ -193,7 +193,7 @@ struct TodayView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This removes \"\(taskPendingSkip?.title ?? "this task")\" from SchedAI and your synced calendar.")
+            Text(skipTaskMessage)
         }
         .overlay(alignment: .top) {
             if let planMessage {
@@ -203,6 +203,14 @@ struct TodayView: View {
                     .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
+    }
+
+    private var skipTaskMessage: String {
+        let title = taskPendingSkip?.title ?? "this task"
+        if app.calendarSyncEnabled {
+            return "This removes \"\(title)\" from SchedAI and your synced calendar."
+        }
+        return "This removes \"\(title)\" from SchedAI."
     }
 
     // MARK: - Header Section
