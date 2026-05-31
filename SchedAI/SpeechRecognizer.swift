@@ -19,6 +19,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
+    private var recognitionSessionID = UUID()
 
     /// UI update callback for live transcript updates.
     private var updateHandler: ((String) -> Void)?
@@ -121,6 +122,8 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         let audioRequest = SFSpeechAudioBufferRecognitionRequest()
         audioRequest.shouldReportPartialResults = true
         request = audioRequest
+        let sessionID = UUID()
+        recognitionSessionID = sessionID
 
         let inputNode = audioEngine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
@@ -138,7 +141,12 @@ final class SpeechRecognizer: NSObject, ObservableObject {
 
             Task { @MainActor in
                 guard let self else { return }
-                self.handleRecognitionUpdate(text: text, isFinal: isFinal, hadError: hadError)
+                self.handleRecognitionUpdate(
+                    text: text,
+                    isFinal: isFinal,
+                    hadError: hadError,
+                    sessionID: sessionID
+                )
             }
         }
 
@@ -154,7 +162,9 @@ final class SpeechRecognizer: NSObject, ObservableObject {
         isRecording = true
     }
 
-    private func handleRecognitionUpdate(text: String?, isFinal: Bool, hadError: Bool) {
+    private func handleRecognitionUpdate(text: String?, isFinal: Bool, hadError: Bool, sessionID: UUID) {
+        guard recognitionSessionID == sessionID else { return }
+
         if let text {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
@@ -184,6 +194,7 @@ final class SpeechRecognizer: NSObject, ObservableObject {
     }
 
     private func stopAudio(cancelTask: Bool, finishTask: Bool, clearTranscript: Bool) {
+        recognitionSessionID = UUID()
         request?.endAudio()
         audioEngine.stop()
         audioEngine.inputNode.removeTap(onBus: 0)
