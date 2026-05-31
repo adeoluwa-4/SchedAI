@@ -35,6 +35,22 @@ struct ContentView: View {
             consumeWidgetVoiceRequestIfNeeded()
         }
         #endif
+        .alert("Storage", isPresented: Binding(
+            get: { app.persistenceMessage != nil },
+            set: { if !$0 { app.persistenceMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(app.persistenceMessage ?? "")
+        }
+        .alert("Reminders", isPresented: Binding(
+            get: { app.reminderMessage != nil },
+            set: { if !$0 { app.reminderMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(app.reminderMessage ?? "")
+        }
     }
 
     private func consumeWidgetVoiceRequestIfNeeded() {
