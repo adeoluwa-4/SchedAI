@@ -437,6 +437,36 @@ struct SchedAITests {
         #expect(thirdDay == tomorrow)
     }
 
+    @Test func offlineNlpAppliesTrailingTonightContextToSiblingTasks() async throws {
+        let now = fixedDate(2026, 5, 28, 12, 0)
+        let tasks = OfflineNLP.parseSafely("Gym and laundry tonight", now: now)
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        #expect(tasks.map(\.title) == ["Gym", "Laundry"])
+
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        #expect(tasks[0].targetDay.map { cal.startOfDay(for: $0) } == today)
+        #expect(tasks[1].targetDay.map { cal.startOfDay(for: $0) } == today)
+        #expect(tasks[0].scheduledStart == nil)
+        #expect(tasks[1].scheduledStart == nil)
+    }
+
+    @Test func offlineNlpDoesNotBleedGlobalDayContextAcrossMixedDayPlan() async throws {
+        let now = fixedDate(2026, 5, 28, 12, 0)
+        let tasks = OfflineNLP.parseSafely("today gym then tomorrow laundry", now: now)
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+
+        let cal = Calendar.current
+        let today = cal.startOfDay(for: now)
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: today)!
+
+        #expect(tasks[0].targetDay.map { cal.startOfDay(for: $0) } == today)
+        #expect(tasks[1].targetDay.map { cal.startOfDay(for: $0) } == tomorrow)
+    }
+
     @Test func offlineNlpParsesRelativeWeeksFromNowWithTypo() async throws {
         let now = fixedDate(2026, 3, 21, 10, 0)
         let tasks = OfflineNLP.parseSafely("meeting 2 weeks from noe at 6 pm", now: now)
