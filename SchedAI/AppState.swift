@@ -64,6 +64,8 @@ final class AppState: ObservableObject {
     @Published var calendarSyncToast: String? = nil
     /// User-facing persistence feedback for save/load problems.
     @Published var persistenceMessage: String? = nil
+    /// User-facing reminder feedback for notification scheduling problems.
+    @Published var reminderMessage: String? = nil
 
     /// Current calendar connection state (non-prompting).
     @Published var calendarConnectionStatus: CalendarManager.ConnectionStatus = .notConnected
@@ -383,22 +385,26 @@ final class AppState: ObservableObject {
                 switch status {
                 case .authorized:
                     NotificationManager.clearAll(delivered: true, pending: true)
-                    NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
+                    let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: lead)
+                    self.handleReminderScheduleResult(result)
 
                 case .notDetermined:
                     NotificationManager.requestPermission { granted in
                         Task { @MainActor in
                             guard granted else {
                                 self.remindersEnabled = false
+                                self.reminderMessage = "Notifications were not enabled. You can turn reminders on later in Settings."
                                 return
                             }
                             NotificationManager.clearAll(delivered: true, pending: true)
-                            NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
+                            let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: lead)
+                            self.handleReminderScheduleResult(result)
                         }
                     }
 
                 case .denied:
                     self.remindersEnabled = false
+                    self.reminderMessage = "Notifications are disabled for SchedAI. Enable them in iOS Settings to use reminders."
                 }
             }
         }
@@ -452,7 +458,9 @@ final class AppState: ObservableObject {
     func deleteTask(id: UUID) {
         tasks.removeAll { $0.id == id }
         NotificationManager.cancelReminder(for: id)
-        CalendarManager.shared.deleteEvent(for: id)
+        if calendarSyncEnabled {
+            CalendarManager.shared.deleteEvent(for: id)
+        }
     }
 
     func toggleComplete(id: UUID) {
@@ -684,11 +692,19 @@ final class AppState: ObservableObject {
 
         let lead = reminderLeadMinutes
 
-        NotificationManager.authorizationStatus { (status: NotificationManager.AuthorizationState) in
+        NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
             Task { @MainActor in
-                guard status == .authorized else { return }
+                guard let self else { return }
+                guard status == .authorized else {
+                    if status == .denied {
+                        self.remindersEnabled = false
+                        self.reminderMessage = "Notifications are disabled for SchedAI. Enable them in iOS Settings to use reminders."
+                    }
+                    return
+                }
                 NotificationManager.clearAll(delivered: true, pending: true)
-                NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: lead)
+                let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: lead)
+                self.handleReminderScheduleResult(result)
             }
         }
     }
@@ -699,12 +715,31 @@ final class AppState: ObservableObject {
             .filter { !$0.isCompleted }
             .filter { $0.scheduledStart != nil }
 
-        NotificationManager.authorizationStatus { (status: NotificationManager.AuthorizationState) in
+        NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
             Task { @MainActor in
-                guard status == .authorized else { return }
+                guard let self else { return }
+                guard status == .authorized else {
+                    if status == .denied {
+                        self.remindersEnabled = false
+                        self.reminderMessage = "Notifications are disabled for SchedAI. Enable them in iOS Settings to use reminders."
+                    }
+                    return
+                }
                 NotificationManager.clearAll(delivered: true, pending: true)
-                NotificationManager.scheduleReminders(for: tasksSnapshot, minutesBefore: self.reminderLeadMinutes)
+                let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: self.reminderLeadMinutes)
+                self.handleReminderScheduleResult(result)
             }
+        }
+    }
+
+    private func handleReminderScheduleResult(_ result: NotificationManager.ScheduleResult) {
+        if result.failed > 0 {
+            let detail = result.firstErrorMessage.map { ": \($0)" } ?? "."
+            reminderMessage = "Some reminders could not be scheduled\(detail)"
+        } else if result.skippedLimit > 0 {
+            reminderMessage = "Only the next \(result.queued) reminders were scheduled. iOS limits how many pending notifications SchedAI can queue."
+        } else {
+            reminderMessage = nil
         }
     }
 
@@ -848,7 +883,9 @@ final class AppState: ObservableObject {
 
         for id in expiredIDs {
             NotificationManager.cancelReminder(for: id)
-            CalendarManager.shared.deleteEvent(for: id)
+            if calendarSyncEnabled {
+                CalendarManager.shared.deleteEvent(for: id)
+            }
         }
     }
 
@@ -892,13 +929,17 @@ final class AppState: ObservableObject {
                 case .autoClear:
                     changed = true
                     NotificationManager.cancelReminder(for: t.id)
-                    CalendarManager.shared.deleteEvent(for: t.id)
+                    if calendarSyncEnabled {
+                        CalendarManager.shared.deleteEvent(for: t.id)
+                    }
                     continue
                 }
             } else if wasCreatedYesterday && wasScheduledYesterday && unfinishedTaskPolicy == .autoClear {
                 changed = true
                 NotificationManager.cancelReminder(for: t.id)
-                CalendarManager.shared.deleteEvent(for: t.id)
+                if calendarSyncEnabled {
+                    CalendarManager.shared.deleteEvent(for: t.id)
+                }
                 continue
             }
 
