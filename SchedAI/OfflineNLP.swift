@@ -84,6 +84,7 @@ struct OfflineNLP {
         static let weekdayOrdinalRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+(\d{1,2})(?:st|nd|rd|th)?\b"#)
         static let weekdayOrdinalWordRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+("# + ordinalDayWordPattern + #")\b"#)
         static let tomorrowVariantsRegex = try! NSRegularExpression(pattern: #"(?i)\b(tomorrow|tommorow|tomorow|tmrw|tommorrow|tommporw)\b"#)
+        static let todayTonightRegex = try! NSRegularExpression(pattern: #"(?i)\b(today|tonight)\b"#)
         static let nextMonthRegex = try! NSRegularExpression(pattern: #"(?i)\bnext\s+month\b"#)
 
         // Relative time
@@ -142,7 +143,7 @@ struct OfflineNLP {
         let chunks = splitIntoChunks(text)
 
         var tasks: [TaskItem] = []
-        var dayContext: Date? = nil
+        var dayContext = globalDayContextIfUnambiguous(in: text, now: now)
 
         for rawChunk in chunks {
             let recResult = detectRecurrence(in: rawChunk)
@@ -196,7 +197,7 @@ struct OfflineNLP {
             pattern: #"(?i)\bin\s+(\d+(?:\.\d+)?)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)\b"#
         )
         static let relativeDatePhraseRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b(?:today|tomorrow|tommorow|tomorow|tommorrow|tmrw|tommporw|next\s+month|next\s+week|next\s+year|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|coming\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|\d+\s*(?:day|days|week|weeks)\s+from\s+now|in\s+\d+\s*(?:day|days|week|weeks)|(?:on\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|(?:on\s+)?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+\d{1,2}(?:st|nd|rd|th)?)\b"#
+            pattern: #"(?i)\b(?:today|tonight|tomorrow|tommorow|tomorow|tommorrow|tmrw|tommporw|next\s+month|next\s+week|next\s+year|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|coming\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|\d+\s*(?:day|days|week|weeks)\s+from\s+now|in\s+\d+\s*(?:day|days|week|weeks)|(?:on\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|(?:on\s+)?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+\d{1,2}(?:st|nd|rd|th)?)\b"#
         )
         static let relativeWeekdayOrdinalWordPhraseRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s+the\s+("# + Cache.ordinalDayWordPattern + #")\b"#
@@ -250,6 +251,17 @@ struct OfflineNLP {
         return (result.start, result.end, result.duration)
     }
 
+    private static func globalDayContextIfUnambiguous(in rawText: String, now: Date) -> Date? {
+        let normalized = normalizeInput(rawText)
+        let first = extractBaseDay(from: normalized, now: now)
+        guard first.hasExplicitDay, let baseDay = first.baseDay else { return nil }
+
+        let second = extractBaseDay(from: first.cleaned, now: now)
+        guard !second.hasExplicitDay else { return nil }
+
+        return Calendar.current.startOfDay(for: baseDay)
+    }
+
     private static func shouldUseStepPipeline(_ rawText: String) -> Bool {
         rawText.range(
             of: #"(?i)\b(and|then|after\s+that|afterwards?|later|also|plus|next)\b|\b\d{1,2}(?::\d{2})?\s*(?:till|to|-)\s*\d{1,2}(?::\d{2})?\b|\bmidnight\b|\bnoon\b|\b(?:breakfast|lunch|dinner|supper|bed|sleep|study|homework|laundry|gym|workout|play|meeting|practice|appointment|class|game|call|email|text|pick\s+up|drop\s+off)\b.*\b(?:at|around|about|near|by)\s+\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b"#,
@@ -264,7 +276,7 @@ struct OfflineNLP {
         var tasks: [TaskItem] = []
         var previousTaskStart: Date? = nil
         var previousTaskTitle: String? = nil
-        var dayContext: Date? = nil
+        var dayContext = globalDayContextIfUnambiguous(in: rawText, now: now)
         let globalContext = normalizeInput(rawText)
 
         for chunk in chunks {
@@ -1637,6 +1649,17 @@ struct OfflineNLP {
             let range = NSRange(location: 0, length: ns.length)
             if let match = regex.firstMatch(in: working, range: range) {
                 baseDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))
+                explicitDay = true
+                removeMatch(match.range)
+            }
+        }
+
+        if baseDay == nil {
+            let regex = Cache.todayTonightRegex
+            let ns = working as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            if let match = regex.firstMatch(in: working, range: range) {
+                baseDay = calendar.startOfDay(for: now)
                 explicitDay = true
                 removeMatch(match.range)
             }
