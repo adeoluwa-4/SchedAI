@@ -1193,6 +1193,17 @@ struct OfflineNLP {
             ) != nil
         }
 
+        func isObjectPhraseBoundary(_ word: String, before location: Int) -> Bool {
+            let objectLikeActions = Set(["email", "call", "review"])
+            guard objectLikeActions.contains(word) else { return false }
+
+            let prefix = ns.substring(with: NSRange(location: 0, length: max(0, location)))
+            return prefix.range(
+                of: #"(?i)\b(?:send|write|draft|make)\s+(?:[a-z0-9]+\s+){0,4}$"#,
+                options: .regularExpression
+            ) != nil
+        }
+
         // Collect verb starts that look like true action boundaries.
         var starts: [Int] = []
         for match in matches {
@@ -1203,6 +1214,7 @@ struct OfflineNLP {
             }
             let word = ns.substring(with: match.range).lowercased()
             if isDestinationPhraseBoundary(word, before: start) { continue }
+            if isObjectPhraseBoundary(word, before: start) { continue }
             if let prev = previousToken(before: start) {
                 if noBoundaryBefore.contains(prev) { continue }
                 if prev.unicodeScalars.allSatisfy({ CharacterSet.decimalDigits.contains($0) }) { continue }
