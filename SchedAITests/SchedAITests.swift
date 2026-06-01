@@ -566,6 +566,14 @@ struct SchedAITests {
         #expect(hour == 20)
     }
 
+    @Test func offlineNlpKeepsEmailObjectWithSendAction() async throws {
+        let tasks = OfflineNLP.parseSafely("send investor email 20m")
+        #expect(tasks.count == 1)
+        guard tasks.count == 1 else { return }
+        #expect(tasks[0].title == "Send investor email")
+        #expect(tasks[0].estimatedMinutes == 20)
+    }
+
     @Test func offlineNlpSplitsSpeechNoiseVariant() async throws {
         let tasks = OfflineNLP.parseSafely("take text from headshot get get ai to the app store and have dinner at eight")
         #expect(tasks.count == 3)
