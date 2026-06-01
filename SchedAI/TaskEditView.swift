@@ -10,6 +10,8 @@ struct TaskEditView: View {
     @State private var title: String
     @State private var priority: TaskPriority
     @State private var estimatedMinutes: Int
+    @State private var planState: TaskPlanState
+    @State private var isCompleted: Bool
     @State private var hasScheduledTime: Bool
     @State private var scheduledStart: Date
     @State private var scheduledEnd: Date
@@ -21,6 +23,8 @@ struct TaskEditView: View {
         _title = State(initialValue: task.title)
         _priority = State(initialValue: task.priority)
         _estimatedMinutes = State(initialValue: task.estimatedMinutes)
+        _planState = State(initialValue: task.planState)
+        _isCompleted = State(initialValue: task.isCompleted)
         _hasScheduledTime = State(initialValue: task.scheduledStart != nil)
         let start = task.scheduledStart ?? originalTargetDay ?? Date()
         _scheduledStart = State(initialValue: start)
@@ -53,6 +57,15 @@ struct TaskEditView: View {
                             Text("\(estimatedMinutes)m").foregroundStyle(.secondary)
                         }
                     }
+
+                    Picker("Plan State", selection: $planState) {
+                        ForEach(TaskPlanState.allCases) { state in
+                            Label(state.displayName, systemImage: state.systemImage)
+                                .tag(state)
+                        }
+                    }
+
+                    Toggle("Done", isOn: $isCompleted)
                 }
 
                 Section("Schedule") {
@@ -74,8 +87,9 @@ struct TaskEditView: View {
                             }
                         )
                     )
+                    .disabled(isCompleted || !planStateAllowsSchedule)
 
-                    if hasScheduledTime {
+                    if hasScheduledTime && planStateAllowsSchedule && !isCompleted {
                         DatePicker(
                             "Start",
                             selection: Binding(
@@ -115,6 +129,12 @@ struct TaskEditView: View {
                         }
                     }
                 }
+
+                Section("What this means") {
+                    Text(planState.subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
             }
             .onChange(of: estimatedMinutes) { _, newValue in
                 guard hasScheduledTime else { return }
@@ -124,6 +144,16 @@ struct TaskEditView: View {
                     value: safe,
                     to: scheduledStart
                 ) ?? minimumEnd(for: scheduledStart)
+            }
+            .onChange(of: planState) { _, newValue in
+                if newValue == .blocked || newValue == .skippedToday {
+                    hasScheduledTime = false
+                }
+            }
+            .onChange(of: isCompleted) { _, done in
+                if done {
+                    hasScheduledTime = false
+                }
             }
             .navigationTitle("Edit Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -146,7 +176,13 @@ struct TaskEditView: View {
         var updated = item
         updated.title = trimmed
         updated.priority = priority
-        if hasScheduledTime {
+        updated.isCompleted = isCompleted
+        updated.planState = isCompleted ? .ready : planState
+        updated.planStateUpdatedAt = updated.planState == .ready
+            ? nil
+            : (item.planState == updated.planState ? item.planStateUpdatedAt ?? Date() : Date())
+
+        if hasScheduledTime && planStateAllowsSchedule && !isCompleted {
             let normalizedEnd = max(scheduledEnd, minimumEnd(for: scheduledStart))
             let duration = durationMinutes(start: scheduledStart, end: normalizedEnd)
             updated.estimatedMinutes = duration
@@ -157,7 +193,11 @@ struct TaskEditView: View {
         } else {
             updated.estimatedMinutes = max(5, estimatedMinutes)
             updated.isPinned = false
-            updated.targetDay = originalTargetDay.map { Calendar.current.startOfDay(for: $0) }
+            if planState == .skippedToday {
+                updated.targetDay = Calendar.current.startOfDay(for: Date())
+            } else {
+                updated.targetDay = originalTargetDay.map { Calendar.current.startOfDay(for: $0) }
+            }
             updated.scheduledStart = nil
             updated.scheduledEnd = nil
         }
@@ -172,5 +212,9 @@ struct TaskEditView: View {
 
     private func durationMinutes(start: Date, end: Date) -> Int {
         max(5, Int(end.timeIntervalSince(start) / 60))
+    }
+
+    private var planStateAllowsSchedule: Bool {
+        planState == .ready || planState == .later
     }
 }
