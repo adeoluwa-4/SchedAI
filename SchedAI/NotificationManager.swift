@@ -141,6 +141,7 @@ enum NotificationManager {
         let candidates = tasks
             .compactMap { task -> (task: TaskItem, triggerDate: Date)? in
                 guard let start = task.scheduledStart else { return nil }
+                guard task.canAutoSchedule(on: start) else { return nil }
                 let triggerDate = start.addingTimeInterval(TimeInterval(-minutesBefore * 60))
                 guard triggerDate > now else { return nil }
                 return (task, triggerDate)
@@ -148,7 +149,11 @@ enum NotificationManager {
             .sorted { $0.triggerDate < $1.triggerDate }
 
         let scheduleableTasks = Array(candidates.prefix(maximumScheduledReminders))
-        let skippedPast = max(0, tasks.filter { $0.scheduledStart != nil }.count - candidates.count)
+        let eligibleScheduledCount = tasks.filter { task in
+            guard let start = task.scheduledStart else { return false }
+            return task.canAutoSchedule(on: start)
+        }.count
+        let skippedPast = max(0, eligibleScheduledCount - candidates.count)
         let skippedLimit = max(0, candidates.count - scheduleableTasks.count)
 
         let requests = scheduleableTasks.compactMap { item -> UNNotificationRequest? in
