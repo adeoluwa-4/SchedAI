@@ -234,7 +234,7 @@ final class CalendarManager: ObservableObject {
 
         let (start, end) = dayBounds(day)
         let scheduled = tasks
-            .filter { !$0.isCompleted }
+            .filter { $0.canAutoSchedule(on: day) }
             .filter { t in
                 guard let s = t.scheduledStart else { return false }
                 return Calendar.current.isDate(s, inSameDayAs: day)
