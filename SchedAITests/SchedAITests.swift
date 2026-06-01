@@ -659,6 +659,27 @@ struct SchedAITests {
         #expect(start >= fixedDate(2026, 5, 6, 17, 21))
     }
 
+    @Test func schedulerLeavesBlockedAndSkippedTodayTasksUnscheduled() async throws {
+        let day = fixedDate(2026, 5, 6, 0, 0)
+        var tasks: [TaskItem] = [
+            TaskItem(title: "Ready", estimatedMinutes: 30, priority: .medium, targetDay: day),
+            TaskItem(title: "Blocked", estimatedMinutes: 30, priority: .medium, planState: .blocked, planStateUpdatedAt: day, targetDay: day),
+            TaskItem(title: "Skipped", estimatedMinutes: 30, priority: .medium, planState: .skippedToday, planStateUpdatedAt: day, targetDay: day)
+        ]
+
+        _ = Scheduler.planToday(
+            tasks: &tasks,
+            workStart: fixedDate(2026, 5, 6, 9, 0),
+            workEnd: fixedDate(2026, 5, 6, 17, 0),
+            day: day,
+            bufferMinutes: 0
+        )
+
+        #expect(tasks.first(where: { $0.title == "Ready" })?.scheduledStart != nil)
+        #expect(tasks.first(where: { $0.title == "Blocked" })?.scheduledStart == nil)
+        #expect(tasks.first(where: { $0.title == "Skipped" })?.scheduledStart == nil)
+    }
+
     @Test func schedulerRespectsTargetDayAssignments() async throws {
         let cal = Calendar.current
         let today = fixedDate(2026, 4, 17, 0, 0)
