@@ -52,7 +52,7 @@ struct Scheduler {
 
         // Keep pinned tasks. Clear any previously auto-scheduled tasks so re-planning can reshuffle.
         for i in tasks.indices {
-            guard !tasks[i].isCompleted else { continue }
+            guard tasks[i].canAutoSchedule(on: planningDay, calendar: cal) else { continue }
             guard appliesToPlanningDay(tasks[i]) else { continue }
             if tasks[i].isPinned {
                 if let s = tasks[i].scheduledStart {
@@ -70,7 +70,7 @@ struct Scheduler {
         var pinned: [(id: UUID, start: Date, end: Date)] = []
         var flexible: [TaskItem] = []
 
-        for t in tasks where !t.isCompleted && appliesToPlanningDay(t) {
+        for t in tasks where t.canAutoSchedule(on: planningDay, calendar: cal) && appliesToPlanningDay(t) {
             if t.isPinned, let s = t.scheduledStart {
                 let e = t.scheduledEnd ?? s.addingTimeInterval(TimeInterval(max(5, t.estimatedMinutes) * 60))
                 pinned.append((t.id, s, e))
