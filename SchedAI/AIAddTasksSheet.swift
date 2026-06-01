@@ -7,6 +7,7 @@ struct AIAddTasksSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var app: AppState
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let initialInput: String
     let navigationTitle: String
@@ -29,97 +30,36 @@ struct AIAddTasksSheet: View {
         self.onAddComplete = onAddComplete
     }
 
+    private var usesAccessibilityLayout: Bool {
+        dynamicTypeSize.isAccessibilitySize
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 14) {
-                typingInputCard
-                    .padding(.horizontal, 16)
-                    .padding(.top, 10)
-
-                HStack(spacing: 12) {
-                    Button {
-                        Task { await parsePreview() }
-                    } label: {
-                        Label("Preview", systemImage: "eye")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isParsing || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    Button {
-                        requestHostedAIImprove()
-                    } label: {
-                        Label(isParsing ? "Using AI…" : "Improve", systemImage: "sparkles")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isParsing || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    Button {
-                        addAllAndDismiss()
-                    } label: {
-                        Label("Add All", systemImage: "plus.circle.fill")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(parsedPreview.isEmpty)
-                }
-                .padding(.horizontal, 16)
-
-                if let parseStatusMessage {
-                    Text(parseStatusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 14) {
+                    typingInputCard
                         .padding(.horizontal, 16)
-                } else {
-                    Text("Preview stays on device. AI Improve is optional and asks before sending task text off device.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .padding(.top, 10)
+
+                    quickAddActions
                         .padding(.horizontal, 16)
-                }
 
-                if parsedPreview.isEmpty {
-                    VStack(spacing: 6) {
-                        Text("Tip: one task per line.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        Text("Example: “finish essay 60m urgent”")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                    statusText
+                        .padding(.horizontal, 16)
+
+                    if parsedPreview.isEmpty {
+                        quickAddTips
+                    } else {
+                        previewSection
+                            .padding(.horizontal, 16)
                     }
-                    .padding(.top, 10)
-                } else {
-                    List {
-                        Section("Preview") {
-                            ForEach(parsedPreview) { t in
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(t.title).font(.body)
 
-                                    HStack(spacing: 10) {
-                                        Text("\(t.estimatedMinutes)m")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-
-                                        Text(t.priority.displayName)
-                                            .font(.caption)
-                                            .fontWeight(.semibold)
-                                            .foregroundStyle(.secondary)
-
-                                        if let s = t.scheduledStart, let e = t.scheduledEnd {
-                                            Text("\(time(s))–\(time(e))")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                }
-                                .padding(.vertical, 4)
-                            }
-                        }
-                    }
+                    Spacer(minLength: 24)
                 }
-
-                Spacer(minLength: 10)
+                .padding(.bottom, 24)
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .onAppear {
@@ -145,6 +85,102 @@ struct AIAddTasksSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var quickAddActions: some View {
+        let inputIsEmpty = input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        if usesAccessibilityLayout {
+            VStack(spacing: 10) {
+                previewButton(disabled: isParsing || inputIsEmpty)
+                improveButton(disabled: isParsing || inputIsEmpty)
+                addAllButton
+            }
+        } else {
+            VStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    previewButton(disabled: isParsing || inputIsEmpty)
+                    improveButton(disabled: isParsing || inputIsEmpty)
+                }
+                addAllButton
+            }
+        }
+    }
+
+    private func previewButton(disabled: Bool) -> some View {
+        Button {
+            Task { await parsePreview() }
+        } label: {
+            Label("Preview", systemImage: "eye")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(disabled)
+    }
+
+    private func improveButton(disabled: Bool) -> some View {
+        Button {
+            requestHostedAIImprove()
+        } label: {
+            Label(isParsing ? "Using AI" : "Improve", systemImage: "sparkles")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(disabled)
+    }
+
+    private var addAllButton: some View {
+        Button {
+            addAllAndDismiss()
+        } label: {
+            Label("Add All", systemImage: "plus.circle.fill")
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(parsedPreview.isEmpty)
+    }
+
+    private var statusText: some View {
+        Text(parseStatusMessage ?? "Preview stays on device. AI Improve asks before sending task text off device.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var quickAddTips: some View {
+        VStack(spacing: 6) {
+            Text("Tip: one task per line.")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text("Example: “finish essay 60m urgent”")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+    }
+
+    private var previewSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Preview")
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            VStack(spacing: 10) {
+                ForEach(parsedPreview) { task in
+                    QuickAddPreviewRow(task: task, timeFormatter: time)
+                }
+            }
+        }
+    }
+
     private var typingInputCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 10) {
@@ -164,6 +200,7 @@ struct AIAddTasksSheet: View {
                     Text("Type tasks, then preview before adding")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
@@ -184,7 +221,7 @@ struct AIAddTasksSheet: View {
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .padding(10)
-                    .frame(minHeight: 172)
+                    .frame(minHeight: usesAccessibilityLayout ? 150 : 172)
 
                 if input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Finish essay 60m urgent\nWorkout 45m\nCall mom today")
@@ -193,6 +230,7 @@ struct AIAddTasksSheet: View {
                         .padding(.horizontal, 16)
                         .padding(.vertical, 18)
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
             .background(
@@ -265,5 +303,56 @@ struct AIAddTasksSheet: View {
         let df = DateFormatter()
         df.dateFormat = "h:mm a"
         return df.string(from: d)
+    }
+}
+
+private struct QuickAddPreviewRow: View {
+    let task: TaskItem
+    let timeFormatter: (Date) -> String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(task.title)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    metadata
+                }
+
+                VStack(alignment: .leading, spacing: 6) {
+                    metadata
+                }
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(.quaternary, lineWidth: 1)
+                )
+        )
+    }
+
+    @ViewBuilder
+    private var metadata: some View {
+        Text("\(task.estimatedMinutes)m")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+        Text(task.priority.displayName)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+
+        if let start = task.scheduledStart, let end = task.scheduledEnd {
+            Text("\(timeFormatter(start))-\(timeFormatter(end))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 }
