@@ -19,6 +19,8 @@ final class AppState: ObservableObject {
     private var completionCleanupTimer: Timer? = nil
     private var isValidatingWorkWindow = false
     private let completedTaskRetention: TimeInterval = 24 * 60 * 60
+    private let defaultDayStartHour = 8
+    private let defaultDayEndHour = 22
 
     private enum DefaultsKey {
         static let remindersEnabled = "remindersEnabled"
@@ -289,8 +291,8 @@ final class AppState: ObservableObject {
         }
 
         guard workWindowEnabled else {
-            let start = combine(cal.date(bySettingHour: 0, minute: 0, second: 0, of: baseDay) ?? baseDay)
-            let end = combine(cal.date(bySettingHour: 23, minute: 59, second: 0, of: baseDay) ?? baseDay)
+            let start = combine(cal.date(bySettingHour: defaultDayStartHour, minute: 0, second: 0, of: baseDay) ?? baseDay)
+            let end = combine(cal.date(bySettingHour: defaultDayEndHour, minute: 0, second: 0, of: baseDay) ?? baseDay)
             return (start, end)
         }
 
