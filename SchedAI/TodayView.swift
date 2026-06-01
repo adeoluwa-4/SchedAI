@@ -26,10 +26,14 @@ struct TodayView: View {
         activeTasksForPlanningDay.count
     }
 
-    private var activeTasksForPlanningDay: [TaskItem] {
+    private var openTasksForPlanningDay: [TaskItem] {
         app.tasks
             .filter { !$0.isCompleted }
             .filter { taskAppliesToPlanningDay($0) }
+    }
+
+    private var activeTasksForPlanningDay: [TaskItem] {
+        openTasksForPlanningDay.filter { $0.canAutoSchedule(on: planningDay) }
     }
 
     private var completedTasksForPlanningDay: [TaskItem] {
@@ -45,7 +49,7 @@ struct TodayView: View {
     private var scheduledToday: [TaskItem] {
         let cal = Calendar.current
         return app.tasks
-            .filter { !$0.isCompleted }
+            .filter { $0.canAutoSchedule(on: planningDay) }
             .filter { t in
                 guard let s = t.scheduledStart, t.scheduledEnd != nil else { return false }
                 return cal.isDate(s, inSameDayAs: planningDay)
@@ -57,7 +61,7 @@ struct TodayView: View {
         guard isPlanningToday else { return [] }
         let cal = Calendar.current
         return app.tasks
-            .filter { !$0.isCompleted }
+            .filter { $0.canAutoSchedule(on: planningDay) }
             .filter { task in
                 guard let end = task.scheduledEnd else { return false }
                 return end < planningDay && !cal.isDate(end, inSameDayAs: planningDay)
@@ -180,14 +184,14 @@ struct TodayView: View {
         } message: {
             Text(app.calendarSyncMessage ?? "")
         }
-        .alert("Skip Task?", isPresented: Binding(
+        .alert("Skip Today?", isPresented: Binding(
             get: { taskPendingSkip != nil },
             set: { if !$0 { taskPendingSkip = nil } }
         )) {
-            Button("Skip", role: .destructive) {
+            Button("Skip Today", role: .destructive) {
                 guard let task = taskPendingSkip else { return }
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    app.deleteTask(id: task.id)
+                    app.skipTaskForToday(id: task.id, from: planningDay)
                 }
                 taskPendingSkip = nil
             }
@@ -208,9 +212,9 @@ struct TodayView: View {
     private var skipTaskMessage: String {
         let title = taskPendingSkip?.title ?? "this task"
         if app.calendarSyncEnabled {
-            return "This removes \"\(title)\" from SchedAI and your synced calendar."
+            return "This removes \"\(title)\" from today's plan and your synced calendar, but keeps the task."
         }
-        return "This removes \"\(title)\" from SchedAI."
+        return "This removes \"\(title)\" from today's plan, but keeps the task."
     }
 
     // MARK: - Header Section
@@ -340,11 +344,11 @@ struct TodayView: View {
                         }
                         
                         VStack(spacing: 8) {
-                            Text("Start Your Day")
+                            Text(openTasksForPlanningDay.isEmpty ? "Start Your Day" : "Nothing Ready")
                                 .font(.title2)
                                 .fontWeight(.bold)
                             
-                            Text("Add your first tasks and let AI schedule them perfectly")
+                            Text(openTasksForPlanningDay.isEmpty ? "Add your first tasks and let AI schedule them perfectly" : "Blocked or skipped tasks are waiting in Tasks")
                                 .font(.subheadline)
                                 .foregroundStyle(.secondary)
                                 .multilineTextAlignment(.center)
@@ -1061,6 +1065,7 @@ private struct ModernTaskCard: View {
                                 .foregroundStyle(.secondary)
                             
                             priorityBadge(task.priority)
+                            PlanStateBadge(state: task.displayPlanState(on: task.scheduledStart ?? Date()))
                         }
                     }
                     
@@ -1149,7 +1154,7 @@ private struct MissedTaskCard: View {
                     Button("Reschedule", action: onReschedule)
                         .buttonStyle(MissedActionButtonStyle(color: .blue))
 
-                    Button("Skip", action: onSkip)
+                    Button("Skip Today", action: onSkip)
                         .buttonStyle(MissedActionButtonStyle(color: .secondary))
                 }
             }
