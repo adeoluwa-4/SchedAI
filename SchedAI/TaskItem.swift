@@ -22,6 +22,76 @@ enum TaskPriority: String, CaseIterable, Codable, Hashable {
     }
 }
 
+enum TaskPlanState: String, CaseIterable, Codable, Hashable, Identifiable {
+    case ready
+    case later
+    case skippedToday
+    case blocked
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .ready: return "Ready"
+        case .later: return "Later"
+        case .skippedToday: return "Skipped Today"
+        case .blocked: return "Blocked"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .ready: return "SchedAI can place this in your day"
+        case .later: return "Keep it open and move it later"
+        case .skippedToday: return "Keep it, but leave it out today"
+        case .blocked: return "Do not schedule until unblocked"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .ready: return "wand.and.stars"
+        case .later: return "clock.arrow.circlepath"
+        case .skippedToday: return "forward.end.fill"
+        case .blocked: return "exclamationmark.octagon.fill"
+        }
+    }
+}
+
+enum TaskPlanDisplayState: String, Hashable {
+    case unplanned
+    case planned
+    case pinned
+    case later
+    case skippedToday
+    case blocked
+    case done
+
+    var displayName: String {
+        switch self {
+        case .unplanned: return "Unplanned"
+        case .planned: return "Planned"
+        case .pinned: return "Pinned"
+        case .later: return "Later"
+        case .skippedToday: return "Skipped Today"
+        case .blocked: return "Blocked"
+        case .done: return "Done"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .unplanned: return "calendar.badge.plus"
+        case .planned: return "calendar.badge.clock"
+        case .pinned: return "pin.fill"
+        case .later: return "clock.arrow.circlepath"
+        case .skippedToday: return "forward.end.fill"
+        case .blocked: return "exclamationmark.octagon.fill"
+        case .done: return "checkmark.circle.fill"
+        }
+    }
+}
+
 enum UnfinishedTaskPolicy: String, CaseIterable, Codable, Hashable, Identifiable {
     case askMe
     case carryOver
@@ -55,6 +125,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var isCompleted: Bool = false
     var completedAt: Date? = nil
     var createdAt: Date = Date()
+    var planState: TaskPlanState = .ready
+    var planStateUpdatedAt: Date? = nil
 
     /// If true, the user (or NLP) explicitly chose the time and the scheduler should not move it.
     /// If false, the scheduler is free to place this task anywhere in the work window.
@@ -72,6 +144,41 @@ struct TaskItem: Identifiable, Codable, Hashable {
         return end < now
     }
 
+    func canAutoSchedule(on day: Date = Date(), calendar: Calendar = .current) -> Bool {
+        guard !isCompleted else { return false }
+
+        switch planState {
+        case .ready, .later:
+            return true
+        case .blocked:
+            return false
+        case .skippedToday:
+            guard let skippedAt = planStateUpdatedAt else { return false }
+            return !calendar.isDate(day, inSameDayAs: skippedAt)
+        }
+    }
+
+    func displayPlanState(on day: Date = Date(), calendar: Calendar = .current) -> TaskPlanDisplayState {
+        if isCompleted { return .done }
+
+        switch planState {
+        case .blocked:
+            return .blocked
+        case .skippedToday:
+            if let skippedAt = planStateUpdatedAt, calendar.isDate(day, inSameDayAs: skippedAt) {
+                return .skippedToday
+            }
+        case .later:
+            return .later
+        case .ready:
+            break
+        }
+
+        if isPinned, scheduledStart != nil { return .pinned }
+        if scheduledStart != nil { return .planned }
+        return .unplanned
+    }
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -80,6 +187,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         isCompleted: Bool = false,
         completedAt: Date? = nil,
         createdAt: Date = Date(),
+        planState: TaskPlanState = .ready,
+        planStateUpdatedAt: Date? = nil,
         isPinned: Bool = false,
         targetDay: Date? = nil,
         scheduledStart: Date? = nil,
@@ -92,6 +201,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.isCompleted = isCompleted
         self.completedAt = completedAt
         self.createdAt = createdAt
+        self.planState = planState
+        self.planStateUpdatedAt = planStateUpdatedAt
         self.isPinned = isPinned
         self.targetDay = targetDay
         self.scheduledStart = scheduledStart
@@ -108,6 +219,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case isCompleted
         case completedAt
         case createdAt
+        case planState
+        case planStateUpdatedAt
         case isPinned
         case targetDay
         case scheduledStart
@@ -123,6 +236,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.isCompleted = try container.decodeIfPresent(Bool.self, forKey: .isCompleted) ?? false
         self.completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
         self.createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        self.planState = try container.decodeIfPresent(TaskPlanState.self, forKey: .planState) ?? .ready
+        self.planStateUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .planStateUpdatedAt)
         self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
         self.targetDay = try container.decodeIfPresent(Date.self, forKey: .targetDay)
         self.scheduledStart = try container.decodeIfPresent(Date.self, forKey: .scheduledStart)
@@ -138,6 +253,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         try container.encode(isCompleted, forKey: .isCompleted)
         try container.encodeIfPresent(completedAt, forKey: .completedAt)
         try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(planState, forKey: .planState)
+        try container.encodeIfPresent(planStateUpdatedAt, forKey: .planStateUpdatedAt)
         try container.encode(isPinned, forKey: .isPinned)
         try container.encodeIfPresent(targetDay, forKey: .targetDay)
         try container.encodeIfPresent(scheduledStart, forKey: .scheduledStart)
