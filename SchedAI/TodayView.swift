@@ -7,6 +7,7 @@ import UIKit
 struct TodayView: View {
     @EnvironmentObject private var app: AppState
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showAI = false
     @State private var showQuickAdd = false
     @State private var autoStartOfflineNLPFromWidget = false
@@ -71,6 +72,10 @@ struct TodayView: View {
 
     private var workWindowBounds: (start: Date, end: Date) {
         app.schedulingWindow(for: planningDay)
+    }
+
+    private var usesAccessibilityLayout: Bool {
+        dynamicTypeSize.isAccessibilitySize
     }
 
     private var scheduledInWorkWindow: [TaskItem] {
@@ -138,7 +143,7 @@ struct TodayView: View {
                         .padding(.horizontal, 20)
                         .padding(.top, 8)
 
-                    Spacer(minLength: 32)
+                    Spacer(minLength: 132)
                 }
                 .padding(.top, 8)
             }
@@ -199,12 +204,12 @@ struct TodayView: View {
         } message: {
             Text(skipTaskMessage)
         }
-        .overlay(alignment: .top) {
+        .overlay(alignment: .bottom) {
             if let planMessage {
                 planToast(planMessage)
-                    .padding(.top, 10)
+                    .padding(.bottom, 106)
                     .padding(.horizontal, 20)
-                    .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
     }
@@ -221,33 +226,21 @@ struct TodayView: View {
     
     private var headerSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(isPlanningToday ? "Today" : "Planner")
-                        .font(.system(size: 38, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                    
-                    Text(formattedDate())
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundStyle(.secondary)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top) {
+                    titleBlock
+
+                    Spacer()
+
+                    headerActions
                 }
-                
-                Spacer()
-                
-                HStack(spacing: 12) {
-                    ModernIconButton(icon: "calendar", action: {
-                        Haptics.medium()
-                        showCalendar.toggle()
-                    })
-                    
-                    ModernPrimaryButton(title: "Plan", icon: "sparkles", action: {
-                        Haptics.medium()
-                        openOfflineNLPSheet(autoStartRecording: false)
-                    })
+
+                VStack(alignment: .leading, spacing: 14) {
+                    titleBlock
+                    headerActions
                 }
             }
-            
+
             // Stats Cards
             HStack(spacing: 12) {
                 StatsCard(
@@ -271,7 +264,7 @@ struct TodayView: View {
                     color: .green
                 )
             }
-            
+
             // Progress Bar
             let totalRemaining = activeTaskCount
             let completedCount = completedTasksForPlanningDay.count
@@ -313,7 +306,36 @@ struct TodayView: View {
             .padding(.top, 4)
         }
     }
-    
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(isPlanningToday ? "Today" : "Planner")
+                .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(formattedDate())
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var headerActions: some View {
+        HStack(spacing: 12) {
+            ModernIconButton(icon: "calendar", accessibilityLabel: "Open calendar") {
+                Haptics.medium()
+                showCalendar.toggle()
+            }
+
+            ModernPrimaryButton(title: "Plan", icon: "sparkles", action: {
+                Haptics.medium()
+                openOfflineNLPSheet(autoStartRecording: false)
+            })
+        }
+    }
+
     // MARK: - Empty State
     
     private var emptyStateView: some View {
@@ -587,7 +609,7 @@ struct TodayView: View {
                 .buttonStyle(ModernSecondaryButtonStyle())
             }
             
-            if activeTaskCount > 0 {
+            if !scheduledToday.isEmpty && activeTaskCount > 0 {
                 Button {
                     Haptics.medium()
                     withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -629,6 +651,7 @@ struct TodayView: View {
             return
         }
 
+        let hadScheduledTasks = !scheduledToday.isEmpty
         app.planToday(for: planningDay)
         updateOverflowBanner()
 
@@ -636,7 +659,7 @@ struct TodayView: View {
             let suffix = app.lastPlanOverflow == 1 ? "" : "s"
             showPlanMessage("\(app.lastPlanOverflow) task\(suffix) could not fit.")
         } else {
-            showPlanMessage(isPlanningToday ? "Today has been replanned." : "Plan updated.")
+            showPlanMessage(hadScheduledTasks ? (isPlanningToday ? "Today has been replanned." : "Plan updated.") : (isPlanningToday ? "Today is planned." : "Plan created."))
         }
     }
 
@@ -788,6 +811,7 @@ private struct StatsCard: View {
 
 private struct ModernIconButton: View {
     let icon: String
+    let accessibilityLabel: String
     let action: () -> Void
     
     var body: some View {
@@ -805,6 +829,7 @@ private struct ModernIconButton: View {
                         )
                 )
         }
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 
@@ -1053,19 +1078,21 @@ private struct ModernTaskCard: View {
                             }
                         }
                         
-                        HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
                             if let start = task.scheduledStart, let end = task.scheduledEnd {
                                 Label(timeRange(start, end), systemImage: "clock")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
-                            
-                            Label("\(task.estimatedMinutes)m", systemImage: "timer")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            
-                            priorityBadge(task.priority)
-                            PlanStateBadge(state: task.displayPlanState(on: task.scheduledStart ?? Date()))
+
+                            HStack(spacing: 8) {
+                                Label("\(task.estimatedMinutes)m", systemImage: "timer")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+
+                                priorityBadge(task.priority)
+                                PlanStateBadge(state: task.displayPlanState(on: task.scheduledStart ?? Date()))
+                            }
                         }
                     }
                     
