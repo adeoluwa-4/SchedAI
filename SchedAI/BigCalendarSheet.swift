@@ -7,8 +7,9 @@ struct BigCalendarSheet: View {
     @State private var selectedDate: Date = Date()
 
     private var hasPlannableTasksForSelectedDate: Bool {
-        app.tasks.contains { task in
-            guard !task.isCompleted else { return false }
+        let planningDay = Calendar.current.startOfDay(for: selectedDate)
+        return app.tasks.contains { task in
+            guard task.canAutoSchedule(on: planningDay) else { return false }
             let cal = Calendar.current
             if let start = task.scheduledStart {
                 return cal.isDate(start, inSameDayAs: selectedDate)
@@ -54,7 +55,7 @@ struct BigCalendarSheet: View {
                 List {
                     Section("Scheduled") {
                         let scheduled = app.tasks
-                            .filter { !$0.isCompleted }
+                            .filter { $0.canAutoSchedule(on: selectedDate) }
                             .filter {
                                 guard let s = $0.scheduledStart else { return false }
                                 return Calendar.current.isDate(s, inSameDayAs: selectedDate)
