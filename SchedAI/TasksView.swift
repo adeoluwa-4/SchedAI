@@ -117,29 +117,18 @@ struct TasksView: View {
                             completedTasksSection
                                 .padding(.horizontal, 20)
                         }
+
+                        if schedulableTasksForPlanningDay.count > 0 {
+                            planButton
+                                .padding(.horizontal, 20)
+                                .padding(.top, 4)
+                        }
                         
-                        Spacer(minLength: 80)
+                        Spacer(minLength: 132)
                     }
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .bottom) {
-                if schedulableTasksForPlanningDay.count > 0 {
-                    planButton
-                        .padding(.horizontal, 20)
-                        .padding(.vertical, 12)
-                        .background(
-                            LinearGradient(
-                                colors: scheme == .dark
-                                    ? [Color(white: 0.1), Color.black]
-                                    : [Color.white.opacity(0.95), Color(red: 0.96, green: 0.97, blue: 0.98)],
-                                startPoint: .top,
-                                endPoint: .bottom
-                            )
-                            .ignoresSafeArea()
-                        )
-                }
-            }
             .sheet(item: $editingTask) { task in
                 TaskEditView(task: task)
                     .environmentObject(app)
@@ -189,6 +178,7 @@ struct TasksView: View {
                     Image(systemName: "keyboard.fill")
                         .font(.headline)
                         .foregroundStyle(.blue)
+                        .accessibilityHidden(true)
                 }
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -217,6 +207,8 @@ struct TasksView: View {
                     .textFieldStyle(.plain)
                     .submitLabel(.done)
                     .onSubmit(openQuickAddPreview)
+                    .accessibilityLabel("Quick add task")
+                    .accessibilityValue(newTitle.isEmpty ? "Empty" : newTitle)
 
                 if !newTitle.isEmpty {
                     Button(action: { newTitle = "" }) {
@@ -225,6 +217,7 @@ struct TasksView: View {
                             .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Clear quick add")
                 }
 
                 Button(action: openQuickAddPreview) {
@@ -234,6 +227,7 @@ struct TasksView: View {
                 }
                 .disabled(newTitle.isEmpty)
                 .buttonStyle(.plain)
+                .accessibilityLabel("Preview quick add")
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 13)
@@ -247,7 +241,7 @@ struct TasksView: View {
             )
 
             // Helper chips
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: 8) {
                     QuickChip(icon: "clock", label: "15m") { appendToQuickAdd("15m") }
                     QuickChip(icon: "clock", label: "30m") { appendToQuickAdd("30m") }
@@ -273,7 +267,7 @@ struct TasksView: View {
     
     private var filterSection: some View {
         VStack(spacing: 12) {
-            ScrollView(.horizontal, showsIndicators: false) {
+            ScrollView(.horizontal, showsIndicators: true) {
                 HStack(spacing: 10) {
                     ForEach(TaskFilter.allCases, id: \.self) { filterOption in
                         FilterChip(
@@ -648,19 +642,21 @@ private struct ModernTaskRow: View {
                     .fontWeight(.semibold)
                     .lineLimit(2)
                 
-                HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
                     if let start = task.scheduledStart, let end = task.scheduledEnd {
                         Label(timeRange(start, end), systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    
-                    Label("\(task.estimatedMinutes)m", systemImage: "timer")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    
-                    PriorityBadge(priority: task.priority)
-                    PlanStateBadge(state: task.displayPlanState())
+
+                    HStack(spacing: 8) {
+                        Label("\(task.estimatedMinutes)m", systemImage: "timer")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        PriorityBadge(priority: task.priority)
+                        PlanStateBadge(state: task.displayPlanState())
+                    }
                 }
             }
             
@@ -752,18 +748,20 @@ private struct CompletedTaskRow: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 
-                HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 6) {
                     if let start = task.scheduledStart, let end = task.scheduledEnd {
                         Label(timeRange(start, end), systemImage: "clock")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
-                    
-                    Label("\(task.estimatedMinutes)m", systemImage: "timer")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
 
-                    PlanStateBadge(state: .done)
+                    HStack(spacing: 8) {
+                        Label("\(task.estimatedMinutes)m", systemImage: "timer")
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+
+                        PlanStateBadge(state: .done)
+                    }
                 }
             }
             
