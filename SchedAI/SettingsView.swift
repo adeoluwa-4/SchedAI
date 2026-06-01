@@ -140,9 +140,10 @@ struct SettingsView: View {
                         .font(.system(size: 21, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                     
-                    Text("Tasks stay local unless you enable hosted AI, calendar sync, widgets, voice input, or reminders.")
+                    Text("Local by default. AI, calendar, widgets, voice, and reminders only use data when you enable them.")
                         .font(.system(size: 15, weight: .medium, design: .rounded))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                     
 #if canImport(AuthenticationServices)
                     if (app.userDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
@@ -218,13 +219,13 @@ struct SettingsView: View {
 
             SettingsDivider()
 
-            SettingsToggleRow(
-                icon: "clock.badge.checkmark",
-                title: "Use Work Window",
-                subtitle: app.workWindowEnabled ? "Auto-schedule inside selected hours" : "Auto-schedule across the full day",
-                isOn: $app.workWindowEnabled,
-                color: .indigo
-            )
+                SettingsToggleRow(
+                    icon: "clock.badge.checkmark",
+                    title: "Use Work Window",
+                    subtitle: app.workWindowEnabled ? "Auto-schedule inside selected hours" : "Auto-schedule across daytime hours",
+                    isOn: $app.workWindowEnabled,
+                    color: .indigo
+                )
 
             SettingsDivider()
 
@@ -439,7 +440,7 @@ struct SettingsView: View {
     // MARK: - Helpers
     
     private var workWindowText: String {
-        guard app.workWindowEnabled else { return "Off - full-day scheduling" }
+        guard app.workWindowEnabled else { return "Off - daytime scheduling" }
         return "\(app.workStart.formatted(date: .omitted, time: .shortened)) – \(app.workEnd.formatted(date: .omitted, time: .shortened))"
     }
     
