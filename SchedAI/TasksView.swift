@@ -13,15 +13,18 @@ struct TasksView: View {
     @State private var showQuickAddPreview: Bool = false
     
     private enum TaskFilter: String, CaseIterable {
-        case all, unscheduled, scheduled, high
+        case all, unscheduled, scheduled, later, blocked, skippedToday, high
         
         var label: String {
             switch self {
             case .all: return "All"
             case .unscheduled: return "Unscheduled"
             case .scheduled: return "Scheduled"
+            case .later: return "Later"
+            case .blocked: return "Blocked"
+            case .skippedToday: return "Skipped"
             case .high: return "High Priority"
-                        }
+            }
         }
         
         var icon: String {
@@ -29,6 +32,9 @@ struct TasksView: View {
             case .all: return "list.bullet"
             case .unscheduled: return "clock.badge.questionmark"
             case .scheduled: return "calendar.badge.clock"
+            case .later: return "clock.arrow.circlepath"
+            case .blocked: return "exclamationmark.octagon.fill"
+            case .skippedToday: return "forward.end.fill"
             case .high: return "exclamationmark.triangle.fill"
             }
         }
@@ -43,8 +49,11 @@ struct TasksView: View {
     private var activeTasksForPlanningDay: [TaskItem] {
         activeTasks.filter { taskAppliesToPlanningDay($0) }
     }
+    private var schedulableTasksForPlanningDay: [TaskItem] {
+        activeTasksForPlanningDay.filter { $0.canAutoSchedule(on: planningDay) }
+    }
     private var unscheduledActiveCount: Int {
-        activeTasksForPlanningDay.filter { $0.scheduledStart == nil || $0.scheduledEnd == nil }.count
+        schedulableTasksForPlanningDay.filter { $0.scheduledStart == nil || $0.scheduledEnd == nil }.count
     }
     
     private var displayedActiveTasks: [TaskItem] {
@@ -55,6 +64,12 @@ struct TasksView: View {
             return activeTasks.filter { $0.scheduledStart == nil || $0.scheduledEnd == nil }
         case .scheduled:
             return activeTasks.filter { $0.scheduledStart != nil && $0.scheduledEnd != nil }
+        case .later:
+            return activeTasks.filter { $0.planState == .later }
+        case .blocked:
+            return activeTasks.filter { $0.planState == .blocked }
+        case .skippedToday:
+            return activeTasks.filter { $0.displayPlanState(on: planningDay) == .skippedToday }
         case .high:
             return activeTasks.filter { $0.priority == .high }
         }
@@ -109,7 +124,7 @@ struct TasksView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .safeAreaInset(edge: .bottom) {
-                if activeTasksForPlanningDay.count > 0 {
+                if schedulableTasksForPlanningDay.count > 0 {
                     planButton
                         .padding(.horizontal, 20)
                         .padding(.vertical, 12)
@@ -448,13 +463,13 @@ struct TasksView: View {
         if unscheduledActiveCount > 0 {
             return "Schedule \(planningDayLabel) (\(unscheduledActiveCount))"
         }
-        return "Replan \(planningDayLabel) (\(activeTasksForPlanningDay.count))"
+        return "Replan \(planningDayLabel) (\(schedulableTasksForPlanningDay.count))"
     }
     
     // MARK: - Helpers
 
     private func planActiveTasks() {
-        guard !activeTasksForPlanningDay.isEmpty else {
+        guard !schedulableTasksForPlanningDay.isEmpty else {
             showPlanMessage("Add a task before planning.")
             return
         }
@@ -645,6 +660,7 @@ private struct ModernTaskRow: View {
                         .foregroundStyle(.secondary)
                     
                     PriorityBadge(priority: task.priority)
+                    PlanStateBadge(state: task.displayPlanState())
                 }
             }
             
@@ -746,6 +762,8 @@ private struct CompletedTaskRow: View {
                     Label("\(task.estimatedMinutes)m", systemImage: "timer")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
+
+                    PlanStateBadge(state: .done)
                 }
             }
             
