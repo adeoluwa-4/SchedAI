@@ -46,6 +46,14 @@ struct NLPTestRunner {
                 ]
             ),
             Case(
+                name: "Send email object",
+                input: "send investor email 20m",
+                expectedCount: 1,
+                expected: [
+                    .init(title: "Send investor email", minutes: 20, hasTime: nil),
+                ]
+            ),
+            Case(
                 name: "Multiple time markers (prefix)",
                 input: "at 9 breakfast at 10 study at 1 gym",
                 expectedCount: 3,
