@@ -3,6 +3,7 @@ import SwiftUI
 struct AIPlanSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var app: AppState
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let autoStartRecording: Bool
 
@@ -26,6 +27,10 @@ struct AIPlanSheet: View {
         self.autoStartRecording = autoStartRecording
     }
 
+    private var usesAccessibilityLayout: Bool {
+        dynamicTypeSize.isAccessibilitySize
+    }
+
     var body: some View {
         ZStack {
             VStack(spacing: 0) {
@@ -35,50 +40,20 @@ struct AIPlanSheet: View {
                     VStack(spacing: 16) {
                         inputCard
 
-                        HStack(spacing: 12) {
-                            Button {
-                                clearPlanInput()
-                            } label: {
-                                Label("Clear", systemImage: "trash")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.bordered)
-                            .disabled((transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && parsedPreview.isEmpty && !speech.isRecording) || isPlanning)
-
-                            Button {
-                                Task { await buildPreview() }
-                            } label: {
-                                Label("Preview", systemImage: "wand.and.stars")
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlanning)
-                        }
+                        planInputActions
 
                         if !parsedPreview.isEmpty {
                             previewCard
+                            confirmPlanButton
                         }
 
-                        Spacer(minLength: parsedPreview.isEmpty ? 14 : 108)
+                        Spacer(minLength: parsedPreview.isEmpty ? 24 : 36)
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
+                    .padding(.bottom, 24)
                 }
                 .scrollDismissesKeyboard(.interactively)
-                .safeAreaInset(edge: .bottom) {
-                    if !parsedPreview.isEmpty {
-                        Button(action: confirmPlan) {
-                            Text("Confirm Plan")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(isPlanning)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 10)
-                        .padding(.bottom, 8)
-                        .background(.bar)
-                    }
-                }
             }
             .background(Color(uiColor: .systemBackground).ignoresSafeArea())
             .task { await setupSheetState() }
@@ -118,17 +93,35 @@ struct AIPlanSheet: View {
     }
 
     private var sheetHeader: some View {
-        ZStack {
-            Text("Plan")
-                .font(.headline.weight(.semibold))
-                .frame(maxWidth: .infinity)
+        Group {
+            if usesAccessibilityLayout {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button("Close") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .disabled(isPlanning)
 
-            HStack {
-                Button("Close") { dismiss() }
-                    .buttonStyle(.bordered)
-                    .disabled(isPlanning)
+                    Text("Plan")
+                        .font(.title.weight(.bold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack {
+                    Button("Close") { dismiss() }
+                        .buttonStyle(.bordered)
+                        .disabled(isPlanning)
 
-                Spacer()
+                    Spacer(minLength: 12)
+
+                    Text("Plan")
+                        .font(.headline.weight(.semibold))
+                        .lineLimit(1)
+
+                    Spacer(minLength: 12)
+
+                    Color.clear.frame(width: 58, height: 1)
+                }
             }
         }
         .padding(.horizontal, 16)
@@ -142,12 +135,17 @@ struct AIPlanSheet: View {
             Text("Speak or type your tasks, then preview the plan.")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $transcript)
                     .font(.body)
                     .scrollContentBackground(.hidden)
                     .padding(8)
+                    .frame(
+                        minHeight: usesAccessibilityLayout ? 180 : nil,
+                        idealHeight: usesAccessibilityLayout ? 240 : nil
+                    )
 
                 if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Say or type: 'finish essay 60m urgent, then gym 1h'")
@@ -155,35 +153,12 @@ struct AIPlanSheet: View {
                         .foregroundStyle(.secondary)
                         .padding(16)
                         .allowsHitTesting(false)
+                        .accessibilityHidden(true)
                 }
             }
-            .frame(height: parsedPreview.isEmpty ? 210 : 112)
+            .frame(height: usesAccessibilityLayout ? nil : (parsedPreview.isEmpty ? 210 : 72))
 
-            HStack(spacing: 12) {
-                Button(action: toggleRecord) {
-                    ZStack {
-                        Circle().fill(speech.isRecording ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
-                            .frame(width: 58, height: 58)
-                        Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(speech.isRecording ? .red : .blue)
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(speech.isRecording ? "Stop recording" : "Start recording")
-                .disabled(isPlanning)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(speech.isRecording ? "Listening" : (isAuthorized ? "Voice ready" : "Tap mic to enable voice"))
-                        .font(.subheadline.weight(.semibold))
-                    Text(speech.errorMessage ?? (isAuthorized ? "You can also type above." : "Permissions are requested only when needed."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                }
-
-                Spacer()
-            }
+            voiceControl
         }
         .padding(14)
         .background(
@@ -196,26 +171,118 @@ struct AIPlanSheet: View {
         )
     }
 
-    private var previewCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("\(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s") detected")
-                    .font(.headline.weight(.semibold))
+    @ViewBuilder
+    private var planInputActions: some View {
+        let clearDisabled = (transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && parsedPreview.isEmpty && !speech.isRecording) || isPlanning
+        let previewDisabled = transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isPlanning
+
+        if usesAccessibilityLayout {
+            VStack(spacing: 10) {
+                clearButton(disabled: clearDisabled)
+                previewButton(disabled: previewDisabled)
+            }
+        } else {
+            HStack(spacing: 12) {
+                clearButton(disabled: clearDisabled)
+                previewButton(disabled: previewDisabled)
+            }
+        }
+    }
+
+    private func clearButton(disabled: Bool) -> some View {
+        Button {
+            clearPlanInput()
+        } label: {
+            Label("Clear", systemImage: "trash")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.bordered)
+        .disabled(disabled)
+    }
+
+    private func previewButton(disabled: Bool) -> some View {
+        Button {
+            Task { await buildPreview() }
+        } label: {
+            Label("Preview", systemImage: "wand.and.stars")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(disabled)
+    }
+
+    private var confirmPlanButton: some View {
+        Button(action: confirmPlan) {
+            Text("Confirm Plan")
+                .font(.headline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(isPlanning)
+        .padding(.top, 2)
+    }
+
+    @ViewBuilder
+    private var voiceControl: some View {
+        let label = speech.isRecording ? "Listening" : (isAuthorized ? "Voice ready" : "Tap mic to enable voice")
+        let detail = speech.errorMessage ?? (isAuthorized ? "You can also type above." : "Permissions are requested only when needed.")
+
+        if usesAccessibilityLayout {
+            VStack(alignment: .leading, spacing: 12) {
+                micButton
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label)
+                        .font(.headline.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(detail)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        } else {
+            HStack(spacing: 12) {
+                micButton
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label)
+                        .font(.subheadline.weight(.semibold))
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
 
                 Spacer()
-
-                Text(previewUsedAI ? "AI improved" : "Offline")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(.quaternary))
             }
+        }
+    }
+
+    private var micButton: some View {
+        Button(action: toggleRecord) {
+            ZStack {
+                Circle().fill(speech.isRecording ? Color.red.opacity(0.15) : Color.blue.opacity(0.15))
+                    .frame(width: usesAccessibilityLayout ? 66 : 58, height: usesAccessibilityLayout ? 66 : 58)
+                Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                    .font(.system(size: usesAccessibilityLayout ? 26 : 22, weight: .bold))
+                    .foregroundStyle(speech.isRecording ? .red : .blue)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(speech.isRecording ? "Stop recording" : "Start recording")
+        .disabled(isPlanning)
+    }
+
+    private var previewCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            previewCardHeader
 
             if let parseStatusMessage {
                 Text(parseStatusMessage)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             if !previewUsedAI {
@@ -247,7 +314,7 @@ struct AIPlanSheet: View {
                 previewTaskRow(index: idx)
             }
         }
-        .padding(14)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.thinMaterial)
@@ -258,30 +325,51 @@ struct AIPlanSheet: View {
         )
     }
 
+    @ViewBuilder
+    private var previewCardHeader: some View {
+        let countText = "\(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s") detected"
+        let sourceText = previewUsedAI ? "AI improved" : "Offline"
+
+        if usesAccessibilityLayout {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(countText)
+                    .font(.headline.weight(.semibold))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(sourceText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(.quaternary))
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline) {
+                Text(countText)
+                    .font(.headline.weight(.semibold))
+
+                Spacer()
+
+                Text(sourceText)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(.quaternary))
+            }
+        }
+    }
+
     private func previewTaskRow(index idx: Int) -> some View {
         let task = parsedPreview[idx]
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.title)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text(scheduleSummary(task))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 6) {
+            ViewThatFits(in: .horizontal) {
+                previewTaskRowHeader(task: task, index: idx)
+                VStack(alignment: .leading, spacing: 8) {
+                    previewTaskText(task)
+                    previewEditButton(for: task, index: idx)
                 }
-
-                Button(expandedPreviewTaskIDs.contains(task.id) ? "Done" : "Edit") {
-                    if expandedPreviewTaskIDs.contains(task.id) {
-                        expandedPreviewTaskIDs.remove(task.id)
-                    } else {
-                        expandedPreviewTaskIDs.insert(task.id)
-                    }
-                }
-                .font(.caption.weight(.semibold))
-                .buttonStyle(.bordered)
             }
 
             if expandedPreviewTaskIDs.contains(task.id) {
@@ -316,7 +404,40 @@ struct AIPlanSheet: View {
                 .padding(.top, 4)
             }
         }
-        .padding(.vertical, 6)
+        .padding(.vertical, 4)
+    }
+
+    private func previewTaskRowHeader(task: TaskItem, index idx: Int) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            previewTaskText(task)
+            previewEditButton(for: task, index: idx)
+        }
+    }
+
+    private func previewTaskText(_ task: TaskItem) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(task.title)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(scheduleSummary(task))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func previewEditButton(for task: TaskItem, index idx: Int) -> some View {
+        Button(expandedPreviewTaskIDs.contains(task.id) ? "Done" : "Edit") {
+            if expandedPreviewTaskIDs.contains(task.id) {
+                expandedPreviewTaskIDs.remove(task.id)
+            } else {
+                expandedPreviewTaskIDs.insert(task.id)
+            }
+        }
+        .font(.caption.weight(.semibold))
+        .buttonStyle(.bordered)
     }
 
     private var planningOverlay: some View {
