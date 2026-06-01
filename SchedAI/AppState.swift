@@ -373,8 +373,10 @@ final class AppState: ObservableObject {
 
     private func enableRemindersUserDriven() {
         let tasksSnapshot = tasks
-            .filter { !$0.isCompleted }
-            .filter { $0.scheduledStart != nil }
+            .filter { task in
+                guard let start = task.scheduledStart else { return false }
+                return task.canAutoSchedule(on: start)
+            }
 
         let lead = reminderLeadMinutes
 
@@ -428,6 +430,7 @@ final class AppState: ObservableObject {
 
     func addTask(_ t: TaskItem) {
         var task = normalizedCompletionState(t)
+        normalizeScheduleForPlanState(&task)
         if let start = task.scheduledStart {
             task.targetDay = Calendar.current.startOfDay(for: start)
         }
@@ -444,13 +447,18 @@ final class AppState: ObservableObject {
 
     func updateTask(_ t: TaskItem) {
         guard let i = tasks.firstIndex(where: { $0.id == t.id }) else { return }
+        let previous = tasks[i]
         var task = normalizedCompletionState(t)
+        normalizeScheduleForPlanState(&task)
         if let start = task.scheduledStart {
             task.targetDay = Calendar.current.startOfDay(for: start)
         } else if let target = task.targetDay {
             task.targetDay = Calendar.current.startOfDay(for: target)
         }
         tasks[i] = task
+        if shouldRemoveScheduledArtifacts(previous: previous, updated: task) {
+            removeScheduledArtifacts(for: task.id)
+        }
         if remindersEnabled { rescheduleReminders() }
         scheduleCompletedTaskCleanup()
     }
@@ -466,7 +474,14 @@ final class AppState: ObservableObject {
     func toggleComplete(id: UUID) {
         guard let i = tasks.firstIndex(where: { $0.id == id }) else { return }
         tasks[i].isCompleted.toggle()
-        tasks[i].completedAt = tasks[i].isCompleted ? Date() : nil
+        if tasks[i].isCompleted {
+            tasks[i].completedAt = Date()
+            tasks[i].planState = .ready
+            tasks[i].planStateUpdatedAt = nil
+            removeScheduledArtifacts(for: id)
+        } else {
+            tasks[i].completedAt = nil
+        }
         if remindersEnabled { rescheduleReminders() }
         scheduleCompletedTaskCleanup()
     }
@@ -475,15 +490,59 @@ final class AppState: ObservableObject {
         var normalized = task
         if normalized.isCompleted {
             normalized.completedAt = normalized.completedAt ?? Date()
+            normalized.planState = .ready
+            normalized.planStateUpdatedAt = nil
         } else {
             normalized.completedAt = nil
+            normalized.planStateUpdatedAt = normalized.planState == .ready
+                ? nil
+                : (normalized.planStateUpdatedAt ?? Date())
         }
         return normalized
+    }
+
+    private func normalizeScheduleForPlanState(_ task: inout TaskItem) {
+        guard task.isCompleted || task.planState == .blocked || task.planState == .skippedToday else { return }
+        task.isPinned = false
+        task.scheduledStart = nil
+        task.scheduledEnd = nil
+    }
+
+    private func shouldRemoveScheduledArtifacts(previous: TaskItem, updated: TaskItem) -> Bool {
+        guard previous.scheduledStart != nil else { return false }
+        return updated.isCompleted
+            || updated.scheduledStart == nil
+            || updated.planState == .blocked
+            || updated.planState == .skippedToday
+    }
+
+    private func removeScheduledArtifacts(for id: UUID) {
+        NotificationManager.cancelReminder(for: id)
+        if calendarSyncEnabled {
+            CalendarManager.shared.deleteEvent(for: id)
+        }
+    }
+
+    func skipTaskForToday(id: UUID, from day: Date = Date()) {
+        guard let i = tasks.firstIndex(where: { $0.id == id }) else { return }
+        let targetDay = Calendar.current.startOfDay(for: day)
+        tasks[i].isCompleted = false
+        tasks[i].completedAt = nil
+        tasks[i].planState = .skippedToday
+        tasks[i].planStateUpdatedAt = targetDay
+        tasks[i].isPinned = false
+        tasks[i].targetDay = targetDay
+        tasks[i].scheduledStart = nil
+        tasks[i].scheduledEnd = nil
+        removeScheduledArtifacts(for: id)
+        if remindersEnabled { rescheduleReminders() }
     }
 
     func rescheduleTaskForLater(id: UUID, from now: Date = Date()) {
         guard let i = tasks.firstIndex(where: { $0.id == id }) else { return }
         let day = Calendar.current.startOfDay(for: now)
+        tasks[i].planState = .later
+        tasks[i].planStateUpdatedAt = now
         tasks[i].isPinned = false
         tasks[i].targetDay = day
         tasks[i].scheduledStart = nil
@@ -517,7 +576,7 @@ final class AppState: ObservableObject {
         let window = schedulingWindow(for: planningDate)
 
         var tempPinned: [UUID] = []
-        for i in tasks.indices where !tasks[i].isCompleted {
+        for i in tasks.indices where tasks[i].canAutoSchedule(on: planningDate) {
             if !tasks[i].isPinned, tasks[i].scheduledStart != nil {
                 tasks[i].isPinned = true
                 tempPinned.append(tasks[i].id)
@@ -687,8 +746,10 @@ final class AppState: ObservableObject {
 
     private func rescheduleReminders() {
         let tasksSnapshot = tasks
-            .filter { !$0.isCompleted }
-            .filter { $0.scheduledStart != nil }
+            .filter { task in
+                guard let start = task.scheduledStart else { return false }
+                return task.canAutoSchedule(on: start)
+            }
 
         let lead = reminderLeadMinutes
 
@@ -712,8 +773,10 @@ final class AppState: ObservableObject {
     private func rescheduleRemindersWithoutPrompt() {
         guard remindersEnabled else { return }
         let tasksSnapshot = tasks
-            .filter { !$0.isCompleted }
-            .filter { $0.scheduledStart != nil }
+            .filter { task in
+                guard let start = task.scheduledStart else { return false }
+                return task.canAutoSchedule(on: start)
+            }
 
         NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
             Task { @MainActor in
