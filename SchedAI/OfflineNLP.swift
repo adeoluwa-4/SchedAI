@@ -95,7 +95,7 @@ struct OfflineNLP {
         // Time ranges / single times
         static let timeRangeRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:(from|between)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|and|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#)
         static let untilRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:until|till)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#)
-        static let time24Regex = try! NSRegularExpression(pattern: #"(?i)\b([01]?\d|2[0-3])\s*:\s*([0-5]\d)\b"#)
+        static let time24Regex = try! NSRegularExpression(pattern: #"(?i)\b(0\d|1[3-9]|2[0-3])\s*:\s*([0-5]\d)\b"#)
         static let time12Regex = try! NSRegularExpression(pattern: #"(?i)\b(1[0-2]|0?[1-9])(?::\s*([0-5]\d))?\s*(am|pm)\b"#)
         static let timeColonNoMeridiemRegex = try! NSRegularExpression(pattern: #"(?i)\b(1[0-2]|0?[1-9])\s*:\s*([0-5]\d)\b"#)
         static let timeCompactRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|around|about|near|by|from|starting|start)\s*(\d{3,4})\b"#)
@@ -2074,7 +2074,8 @@ struct OfflineNLP {
                 if var date = buildDate(on: baseDay, hour24: parts.hour24, minute: parts.minute) {
                     if !hasExplicitDay, date < now { date = cal.date(byAdding: .day, value: 1, to: date) ?? date }
                     removeRange(match.range)
-                    return SingleTimeResult(date: date, cleaned: working, confidence: parts.confidence)
+                    let confidence: TimeConfidence = isReminderColonClockRequest(context) ? .high : parts.confidence
+                    return SingleTimeResult(date: date, cleaned: working, confidence: confidence)
                 }
             }
         }
@@ -2119,6 +2120,20 @@ struct OfflineNLP {
         }
 
         return nil
+    }
+
+    private static func isReminderColonClockRequest(_ context: String) -> Bool {
+        let normalized = normalizeInput(context)
+        let hasReminderLeadIn = normalized.range(
+            of: #"(?i)\b(?:remind me|reminder|(?:don't|dont|do not)\s+let\s+me\s+forget)\b"#,
+            options: .regularExpression
+        ) != nil
+        guard hasReminderLeadIn else { return false }
+
+        return normalized.range(
+            of: #"(?i)\b(?:at|around|about|near|by)\s*\d{1,2}\s*:\s*\d{2}\b"#,
+            options: .regularExpression
+        ) != nil
     }
 
     private struct KeywordTimeResult {
@@ -2494,6 +2509,10 @@ struct OfflineNLP {
     private static func cleanedTitle(from text: String) -> String {
         var t = text
         let originalTitleText = normalizeInput(text).lowercased()
+        let preserveScheduleAction = originalTitleText.range(
+            of: #"(?i)^\s*(?:remind me|reminder|(?:don't|dont|do not)\s+let\s+me\s+forget)\b.*\bto\s+schedule\b"#,
+            options: .regularExpression
+        ) != nil
 
         let fillers = [
             "i have to", "i need to", "i gotta", "gotta",
@@ -2507,22 +2526,30 @@ struct OfflineNLP {
         }
 
         // Remove common lead-ins (polite or planning phrases)
-        let leadingPatterns = [
+        var leadingPatterns = [
             #"(?i)^\s*(please|can you|could you|would you|lets|let's)\s+"#,
             #"(?i)^\s*(?:remind me|reminder)\s+(?:to|about|for)?\s*"#,
             #"(?i)^\s*(?:don't|dont|do not)\s+let\s+me\s+forget\s+(?:to|about|for)?\s*"#,
             #"(?i)^\s*make\s+sure\s+(?:that\s+)?(?:i\s+)?(?:to\s+)?"#,
-            #"(?i)^\s*(?:schedule|add|put|set up|set|create|book)\s+(?:a|an|the|my|this)?\s*"#,
             #"(?i)^\s*(i will|i'll|i am|i'm|i am going to|i'm going to|i plan to|plan to)\s+"#,
             #"(?i)^\s*(?:i've\s+got|ive\s+got|i\s+ve\s+got|i\s+have\s+got|im|i m|ill|i ll|i'm|i'll|ive|i ve|i've|i\s+am|i\s+will|i\s+should|i\s+need|i\s+have|i\s+got|i\s+want|i\s+wanna|i\s+am\s+supposed\s+to|i'm\s+supposed\s+to|im\s+supposed\s+to)\s+(?:to|a|an|the|my)?\s*"#,
             #"(?i)^\s*there(?:\s+is|'s|s)\s+(?:a|an|the)?\s*"#,
             #"(?i)^\s*there\s+are\s+(?:some|the)?\s*"#,
             #"(?i)^\s*(?:early\s+)?(?:morning|afternoon|evening|tonight|night)\s+"#,
             #"(?i)^\s*been\s+"#,
-            #"(?i)^\s*(to|for|from|and|then|next|after|after that|also|between|in|on)\s+"#
+            #"(?i)^\s*(?:(?:to|for|from|and|then|next|after|after that|also|between|in|on|at|by|around|about|near)\s+)+"#
         ]
-        for p in leadingPatterns {
-            t = t.replacingOccurrences(of: p, with: "", options: .regularExpression)
+        let commandPattern = preserveScheduleAction
+            ? #"(?i)^\s*(?:add|put|set up|set|create|book)\s+(?:a|an|the|my|this)?\s*"#
+            : #"(?i)^\s*(?:schedule|add|put|set up|set|create|book)\s+(?:a|an|the|my|this)?\s*"#
+        leadingPatterns.insert(commandPattern, at: 4)
+
+        for _ in 0..<4 {
+            let before = t
+            for p in leadingPatterns {
+                t = t.replacingOccurrences(of: p, with: "", options: .regularExpression)
+            }
+            if t == before { break }
         }
 
         let trailingPatterns = [
