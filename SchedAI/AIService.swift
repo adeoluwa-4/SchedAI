@@ -12,8 +12,13 @@ struct TaskDraft: Codable, Equatable {
 }
 
 enum TaskParseSource: Equatable {
+    case onDeviceAI
     case ai
     case offline
+
+    var isAIEnhanced: Bool {
+        self == .onDeviceAI || self == .ai
+    }
 }
 
 struct TaskParseResult: Equatable {
@@ -92,8 +97,35 @@ struct AIService {
     ) async -> TaskParseResult {
         let safeInput = remoteSafeInput(input)
         let offline = fallbackTasks(from: safeInput, now: now)
+        let offlineDrafts = drafts(from: offline)
+
+        if let drafts = await OnDeviceTaskParser.extractTasks(
+            from: safeInput,
+            now: now,
+            planningDate: planningDate,
+            offlinePreview: offlineDrafts
+        ) {
+            let onDevice = normalizedAIItems(
+                from: drafts,
+                fallback: offline,
+                input: safeInput,
+                now: now
+            )
+            if !onDevice.isEmpty {
+                return TaskParseResult(
+                    tasks: onDevice,
+                    source: .onDeviceAI,
+                    message: "Improved on device with Apple Intelligence."
+                )
+            }
+        }
+
         guard allowsHostedAI else {
-            return TaskParseResult(tasks: offline, source: .offline, message: "Hosted AI is off. Used offline parser.")
+            return TaskParseResult(
+                tasks: offline,
+                source: .offline,
+                message: "Apple Intelligence is unavailable. Used offline parser."
+            )
         }
 
         guard let endpoint = parseEndpoint else {
@@ -106,7 +138,7 @@ struct AIService {
                 endpoint: endpoint,
                 now: now,
                 planningDate: planningDate,
-                offlinePreview: drafts(from: offline)
+                offlinePreview: offlineDrafts
             )
             let remote = taskItems(from: drafts)
             guard !remote.isEmpty else {
@@ -216,6 +248,102 @@ struct AIService {
         }
     }
 
+    private static func normalizedAIItems(
+        from drafts: [TaskDraft],
+        fallback: [TaskItem],
+        input: String,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> [TaskItem] {
+        var items = taskItems(from: drafts, calendar: calendar)
+        guard !items.isEmpty else { return [] }
+
+        if items.count == fallback.count {
+            for index in items.indices {
+                let fallbackTask = fallback[index]
+
+                if items[index].scheduledStart == nil,
+                   let fallbackStart = fallbackTask.scheduledStart {
+                    items[index].isPinned = fallbackTask.isPinned
+                    items[index].targetDay = fallbackTask.targetDay
+                    items[index].scheduledStart = fallbackStart
+                    items[index].scheduledEnd = fallbackTask.scheduledEnd
+                }
+
+                if index < drafts.count,
+                   drafts[index].estimatedMinutes == nil,
+                   fallbackTask.estimatedMinutes != 30 {
+                    items[index].estimatedMinutes = fallbackTask.estimatedMinutes
+                }
+            }
+        }
+
+        normalizeDatesWithoutExplicitDay(
+            items: &items,
+            input: input,
+            now: now,
+            calendar: calendar
+        )
+        return items
+    }
+
+    private static func normalizeDatesWithoutExplicitDay(
+        items: inout [TaskItem],
+        input: String,
+        now: Date,
+        calendar: Calendar
+    ) {
+        guard !OfflineNLP.hasExplicitDayReference(input, now: now) else { return }
+
+        let hasExplicitMeridiem = input.range(
+            of: #"(?i)\b\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\b(?:noon|midnight)\b"#,
+            options: .regularExpression
+        ) != nil
+        let today = calendar.startOfDay(for: now)
+
+        for index in items.indices {
+            guard let start = items[index].scheduledStart else { continue }
+
+            let duration = items[index].scheduledEnd.map { max(5 * 60, $0.timeIntervalSince(start)) }
+            let components = calendar.dateComponents([.hour, .minute], from: start)
+            guard let hour = components.hour, let minute = components.minute else { continue }
+
+            if !calendar.isDate(start, inSameDayAs: now),
+               let todayCandidate = date(on: today, hour: hour, minute: minute, calendar: calendar),
+               todayCandidate >= now {
+                moveTask(&items[index], to: todayCandidate, duration: duration, calendar: calendar)
+                continue
+            }
+
+            if !hasExplicitMeridiem,
+               (1...11).contains(hour),
+               let pmCandidate = date(on: today, hour: hour + 12, minute: minute, calendar: calendar),
+               pmCandidate >= now {
+                moveTask(&items[index], to: pmCandidate, duration: duration, calendar: calendar)
+            }
+        }
+    }
+
+    private static func moveTask(
+        _ task: inout TaskItem,
+        to start: Date,
+        duration: TimeInterval?,
+        calendar: Calendar
+    ) {
+        task.scheduledStart = start
+        task.scheduledEnd = duration.map { start.addingTimeInterval($0) }
+        task.targetDay = calendar.startOfDay(for: start)
+        task.isPinned = true
+    }
+
+    private static func date(on day: Date, hour: Int, minute: Int, calendar: Calendar) -> Date? {
+        var components = calendar.dateComponents([.year, .month, .day], from: day)
+        components.hour = hour
+        components.minute = minute
+        components.second = 0
+        return calendar.date(from: components)
+    }
+
     private static func cleanURL(_ raw: String) -> URL? {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
@@ -294,13 +422,13 @@ struct AIService {
         return dateOnly.date(from: trimmed)
     }
 
-    private static func isoString(_ date: Date) -> String {
+    static func isoString(_ date: Date) -> String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: date)
     }
 
-    private static func dateOnlyString(_ date: Date) -> String {
+    static func dateOnlyString(_ date: Date) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar.current
         formatter.locale = Locale(identifier: "en_US_POSIX")
