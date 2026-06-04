@@ -597,6 +597,23 @@ struct SchedAITests {
         #expect(readyHour == 17)
     }
 
+    @Test func offlineNlpInfersPmForBareColonReminderAndKeepsToday() async throws {
+        let now = fixedDate(2026, 6, 3, 7, 46) // Wednesday morning
+        let tasks = OfflineNLP.parseSafely("Remind me at 2:30 to schedule a talk with Chris back on the east side", now: now)
+        #expect(tasks.count == 1)
+        let task = try #require(tasks.first)
+
+        #expect(task.title == "Schedule a talk with Chris back on the east side")
+
+        let start = try #require(task.scheduledStart)
+        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: start)
+        #expect(comps.year == 2026)
+        #expect(comps.month == 6)
+        #expect(comps.day == 3)
+        #expect(comps.hour == 14)
+        #expect(comps.minute == 30)
+    }
+
     @Test func offlineNlpWeeklyRecurrenceSkipsPastTimeToday() async throws {
         let now = fixedDate(2026, 4, 23, 22, 0) // Thursday 10 PM
         let tasks = OfflineNLP.parseSafely("every thursday workout at 7", now: now)
