@@ -367,8 +367,8 @@ struct SettingsView: View {
                 icon: "sparkles.rectangle.stack",
                 title: "Allow Hosted AI Improve",
                 subtitle: app.hostedAIConsent
-                    ? "Task text may be sent to SchedAI and OpenAI when you tap Improve."
-                    : "Off. Preview stays on device until you choose otherwise.",
+                    ? "If Apple Intelligence is unavailable, task text may be sent to SchedAI and OpenAI when you tap Improve."
+                    : "Off. Improve uses offline parsing and on-device Apple Intelligence when available.",
                 isOn: hostedAIBinding,
                 color: .teal
             )
