@@ -530,6 +530,9 @@ struct NLPTestRunner {
             if !safeModeCheck(now: now) {
                 exit(1)
             }
+            if !screenshotReminderCheck() {
+                exit(1)
+            }
             runBenchmarkIfRequested(now: now)
             exit(0)
         } else {
@@ -575,6 +578,18 @@ struct NLPTestRunner {
         return comps.date ?? Date(timeIntervalSince1970: 0)
     }
 
+    private static func fixedLocalDate(_ year: Int, _ month: Int, _ day: Int, _ hour: Int, _ minute: Int) -> Date {
+        var comps = DateComponents()
+        comps.calendar = Calendar.current
+        comps.year = year
+        comps.month = month
+        comps.day = day
+        comps.hour = hour
+        comps.minute = minute
+        comps.second = 0
+        return comps.date ?? Date(timeIntervalSince1970: 0)
+    }
+
     private static func normalizeTitle(_ title: String) -> String {
         let lowered = title.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
         let collapsed = lowered.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
@@ -589,6 +604,37 @@ struct NLPTestRunner {
             return false
         }
         print("✅ Safe mode check passed.")
+        return true
+    }
+
+    private static func screenshotReminderCheck() -> Bool {
+        let now = fixedLocalDate(2026, 6, 3, 7, 46)
+        let tasks = OfflineNLP.parseSafely("Remind me at 2:30 to schedule a talk with Chris back on the east side", now: now)
+        guard let task = tasks.first, tasks.count == 1 else {
+            print("❌ Screenshot reminder check failed: expected 1 task, got \(tasks.count).")
+            return false
+        }
+        guard normalizeTitle(task.title) == normalizeTitle("Schedule a talk with Chris back on the east side") else {
+            print("❌ Screenshot reminder check failed: title parsed as '\(task.title)'.")
+            return false
+        }
+        guard let start = task.scheduledStart else {
+            print("❌ Screenshot reminder check failed: no scheduled start.")
+            return false
+        }
+
+        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: start)
+        let isExpectedTime = comps.year == 2026
+            && comps.month == 6
+            && comps.day == 3
+            && comps.hour == 14
+            && comps.minute == 30
+        guard isExpectedTime else {
+            print("❌ Screenshot reminder check failed: parsed \(start), expected Jun 3 2026 2:30 PM.")
+            return false
+        }
+
+        print("✅ Screenshot reminder check passed.")
         return true
     }
 }
