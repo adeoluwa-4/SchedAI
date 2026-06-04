@@ -121,7 +121,7 @@ struct AIAddTasksSheet: View {
 
     private func improveButton(disabled: Bool) -> some View {
         Button {
-            requestHostedAIImprove()
+            requestAIImprove()
         } label: {
             Label(isParsing ? "Using AI" : "Improve", systemImage: "sparkles")
                 .font(.subheadline.weight(.semibold))
@@ -146,7 +146,7 @@ struct AIAddTasksSheet: View {
     }
 
     private var statusText: some View {
-        Text(parseStatusMessage ?? "Preview stays on device. AI Improve asks before sending task text off device.")
+        Text(parseStatusMessage ?? "Preview stays on device. AI Improve tries Apple Intelligence locally before hosted AI.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -263,7 +263,10 @@ struct AIAddTasksSheet: View {
         parseStatusMessage = "Offline preview. No credits used."
     }
 
-    private func improvePreviewWithAI() async {
+    private func improvePreviewWithAI(
+        allowsHostedAI: Bool? = nil,
+        promptForHostedFallback: Bool = false
+    ) async {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
@@ -274,17 +277,22 @@ struct AIAddTasksSheet: View {
             from: trimmed,
             now: Date(),
             planningDate: app.planningDate,
-            allowsHostedAI: app.hostedAIConsent
+            allowsHostedAI: allowsHostedAI ?? app.hostedAIConsent
         )
         parsedPreview = result.tasks
-        parseStatusMessage = result.message ?? (result.source == .ai ? "AI improved this preview." : "Offline preview. No credits used.")
+        parseStatusMessage = result.message ?? (result.source.isAIEnhanced ? "AI improved this preview." : "Offline preview. No credits used.")
+
+        if promptForHostedFallback, result.source == .offline {
+            showAIConsentSheet = true
+        }
     }
 
-    private func requestHostedAIImprove() {
-        if app.hostedAIConsent {
-            Task { await improvePreviewWithAI() }
-        } else {
-            showAIConsentSheet = true
+    private func requestAIImprove() {
+        Task {
+            await improvePreviewWithAI(
+                allowsHostedAI: app.hostedAIConsent,
+                promptForHostedFallback: !app.hostedAIConsent
+            )
         }
     }
 
