@@ -287,7 +287,7 @@ struct AIPlanSheet: View {
 
             if !previewUsedAI {
                 Button {
-                    requestHostedAIImprove()
+                    requestAIImprove()
                 } label: {
                     Label("Improve with AI", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
@@ -296,7 +296,7 @@ struct AIPlanSheet: View {
                 .buttonStyle(.bordered)
                 .disabled(isPlanning)
 
-                Text("Optional. SchedAI asks before sending task text off device.")
+                Text("Optional. Tries Apple Intelligence on device first; asks before hosted AI.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -533,7 +533,10 @@ struct AIPlanSheet: View {
         applyParseResult(AIService.parseTasksOffline(from: text, now: Date()), for: text)
     }
 
-    private func improvePreviewWithAI() async {
+    private func improvePreviewWithAI(
+        allowsHostedAI: Bool? = nil,
+        promptForHostedFallback: Bool = false
+    ) async {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
@@ -548,16 +551,21 @@ struct AIPlanSheet: View {
             from: text,
             now: Date(),
             planningDate: app.planningDate,
-            allowsHostedAI: app.hostedAIConsent
+            allowsHostedAI: allowsHostedAI ?? app.hostedAIConsent
         )
         applyParseResult(result, for: text)
+
+        if promptForHostedFallback, result.source == .offline {
+            showAIConsentSheet = true
+        }
     }
 
-    private func requestHostedAIImprove() {
-        if app.hostedAIConsent {
-            Task { await improvePreviewWithAI() }
-        } else {
-            showAIConsentSheet = true
+    private func requestAIImprove() {
+        Task {
+            await improvePreviewWithAI(
+                allowsHostedAI: app.hostedAIConsent,
+                promptForHostedFallback: !app.hostedAIConsent
+            )
         }
     }
 
@@ -588,7 +596,7 @@ struct AIPlanSheet: View {
         previewBase = base
         expandedPreviewTaskIDs.removeAll()
         hasManualPreviewEdits = false
-        previewUsedAI = result.source == .ai
+        previewUsedAI = result.source.isAIEnhanced
         parseStatusMessage = result.message ?? (previewUsedAI ? "AI improved this preview." : "Offline preview. No credits used.")
         parsedPreview = autoPlace(base, on: previewDay)
     }
