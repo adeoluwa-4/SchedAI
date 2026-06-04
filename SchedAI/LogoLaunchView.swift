@@ -7,7 +7,7 @@ import UIKit
 #endif
 
 struct LogoLaunchView: View {
-    private enum Phase { case logo, onboarding, notifications, main }
+    private enum Phase { case logo, onboarding, splash, notifications, main }
 
     @EnvironmentObject private var app: AppState
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -23,12 +23,8 @@ struct LogoLaunchView: View {
                     .transition(.opacity)
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + logoHoldSeconds) {
-                            if hasCompletedOnboarding {
-                                startMainExperience()
-                            } else {
-                                withAnimation(.easeOut(duration: 0.25)) {
-                                    phase = .onboarding
-                                }
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                phase = hasCompletedOnboarding ? .splash : .onboarding
                             }
                         }
                     }
@@ -36,6 +32,14 @@ struct LogoLaunchView: View {
             case .onboarding:
                 OnboardingView(onFinish: {
                     hasCompletedOnboarding = true
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        phase = .splash
+                    }
+                })
+                .transition(.opacity)
+
+            case .splash:
+                SplashView(onStart: {
                     startMainExperience()
                 })
                 .transition(.opacity)
