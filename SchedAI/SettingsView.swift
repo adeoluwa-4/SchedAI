@@ -7,6 +7,73 @@ import UIKit
 #endif
 
 struct SettingsView: View {
+    private enum SettingsDestination: String, CaseIterable, Identifiable {
+        case account
+        case appearance
+        case workWindow
+        case notifications
+        case calendar
+        case privacy
+        case support
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .account: return "Account"
+            case .appearance: return "Appearance"
+            case .workWindow: return "Work Window"
+            case .notifications: return "Notifications"
+            case .calendar: return "Calendar"
+            case .privacy: return "Privacy"
+            case .support: return "Support"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .account: return "person.circle"
+            case .appearance: return "paintbrush.pointed"
+            case .workWindow: return "clock.badge.checkmark"
+            case .notifications: return "bell"
+            case .calendar: return "calendar.badge.plus"
+            case .privacy: return "lock.shield"
+            case .support: return "questionmark.bubble"
+            }
+        }
+
+        var color: Color {
+            switch self {
+            case .account: return Color.brandBlue
+            case .appearance: return .pink
+            case .workWindow: return .indigo
+            case .notifications: return .orange
+            case .calendar: return .green
+            case .privacy: return .teal
+            case .support: return .gray
+            }
+        }
+
+        var detailDescription: String {
+            switch self {
+            case .account:
+                return "Manage the personal details SchedAI uses locally, including the optional Apple name shown in the app."
+            case .appearance:
+                return "Choose how SchedAI looks across the app. Theme changes stay on this device."
+            case .workWindow:
+                return "Control when SchedAI is allowed to place tasks and what happens to unfinished work."
+            case .notifications:
+                return "Set how reminders behave, when they arrive, and whether task names are shown in alerts."
+            case .calendar:
+                return "Connect SchedAI to your calendar so it can read busy time and write planned tasks when enabled."
+            case .privacy:
+                return "Review the choices that control AI, voice, widget data, calendar access, and what can leave the phone."
+            case .support:
+                return "Find version details, support links, legal pages, and product information."
+            }
+        }
+    }
+
     @EnvironmentObject private var app: AppState
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var scheme
@@ -25,8 +92,8 @@ struct SettingsView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 0) {
                         floatingHeader
-                            .padding(.top, 26)
-                            .padding(.bottom, 18)
+                            .padding(.top, 14)
+                            .padding(.bottom, 12)
 
                         settingsGroups
 
@@ -195,37 +262,117 @@ struct SettingsView: View {
     // MARK: - Groups
 
     private var settingsGroups: some View {
-        VStack(spacing: 16) {
-            profileCard
-            accountGroup
-            notificationsGroup
-            privacyGroup
-            aboutGroup
+        VStack(spacing: 0) {
+            SettingsPanel {
+                VStack(spacing: 0) {
+                    ForEach(SettingsDestination.allCases) { destination in
+                        NavigationLink {
+                            detailPage(for: destination)
+                        } label: {
+                            SettingsMenuRow(
+                                icon: destination.icon,
+                                title: destination.title,
+                                subtitle: subtitle(for: destination),
+                                color: destination.color
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        if destination.id != SettingsDestination.allCases.last?.id {
+                            SettingsDivider()
+                                .padding(.trailing, 16)
+                        }
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+            }
         }
     }
 
-    private var accountGroup: some View {
-        SettingsGroupCard(icon: "person.circle", title: "Account", color: Color.brandBlue) {
+    @ViewBuilder
+    private func detailPage(for destination: SettingsDestination) -> some View {
+        SettingsDetailPage(title: destination.title, background: settingsBackground) {
+            SettingsIntroCard(
+                icon: destination.icon,
+                title: destination.title,
+                description: destination.detailDescription,
+                color: destination.color
+            )
+
+            switch destination {
+            case .account:
+                accountDetail
+            case .appearance:
+                appearanceDetail
+            case .workWindow:
+                workWindowDetail
+            case .notifications:
+                notificationsDetail
+            case .calendar:
+                calendarDetail
+            case .privacy:
+                privacyDetail
+            case .support:
+                supportDetail
+            }
+        }
+    }
+
+    private var accountDetail: some View {
+        VStack(spacing: 22) {
+            profileCard
+
+            SettingsGroupCard(icon: "person.circle", title: "Profile", color: Color.brandBlue) {
+                SettingsInfoRow(
+                    icon: "person.text.rectangle",
+                    title: "Profile",
+                    subtitle: profileStatusText,
+                    color: Color.brandBlue
+                )
+
+#if canImport(AuthenticationServices)
+                if (app.userDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                    SettingsDivider()
+
+                    SettingsActionRow(
+                        icon: "person.badge.key",
+                        title: "Use Apple Name Locally",
+                        subtitle: "Optional local personalization only",
+                        color: Color.brandBlue
+                    ) {
+                        signInWithApple()
+                    }
+                }
+#endif
+            }
+        }
+    }
+
+    private var appearanceDetail: some View {
+        SettingsGroupCard(icon: "paintbrush.pointed", title: "Appearance", color: .pink) {
+            SettingsThemeRow(selected: $app.theme)
+        }
+    }
+
+    private var workWindowDetail: some View {
+        SettingsGroupCard(icon: "clock.badge.checkmark", title: "Work Window", color: .indigo) {
             SettingsInfoRow(
-                icon: "person.text.rectangle",
-                title: "Profile",
-                subtitle: profileStatusText,
-                color: Color.brandBlue
+                icon: "calendar.day.timeline.leading",
+                title: "Planning Boundary",
+                subtitle: "When enabled, SchedAI keeps auto-scheduled tasks inside your preferred daily window.",
+                color: .indigo
             )
 
             SettingsDivider()
 
-            SettingsThemeRow(selected: $app.theme)
-
-            SettingsDivider()
-
-                SettingsToggleRow(
-                    icon: "clock.badge.checkmark",
-                    title: "Use Work Window",
-                    subtitle: app.workWindowEnabled ? "Auto-schedule inside selected hours" : "Auto-schedule across daytime hours",
-                    isOn: $app.workWindowEnabled,
-                    color: .indigo
-                )
+            SettingsToggleRow(
+                icon: "clock.badge.checkmark",
+                title: "Use Work Window",
+                subtitle: app.workWindowEnabled ? "Auto-schedule inside selected hours" : "Auto-schedule across daytime hours",
+                isOn: $app.workWindowEnabled,
+                color: .indigo
+            )
 
             SettingsDivider()
 
@@ -249,11 +396,24 @@ struct SettingsView: View {
                     color: .indigo
                 )
             }
+
+            SettingsDivider()
+
+            SettingsUnfinishedTaskRow(selected: $app.unfinishedTaskPolicy)
         }
     }
 
-    private var notificationsGroup: some View {
+    private var notificationsDetail: some View {
         SettingsGroupCard(icon: "bell", title: "Notifications", color: .orange) {
+            SettingsInfoRow(
+                icon: "bell.and.waves.left.and.right",
+                title: "Reminder Behavior",
+                subtitle: "SchedAI schedules local alerts for planned tasks. You can keep alerts private by hiding titles.",
+                color: .orange
+            )
+
+            SettingsDivider()
+
             SettingsToggleRow(
                 icon: "bell.badge",
                 title: "Enable Reminders",
@@ -289,10 +449,17 @@ struct SettingsView: View {
                     color: .orange
                 )
             }
+        }
+    }
 
-            SettingsDivider()
-
-            SettingsUnfinishedTaskRow(selected: $app.unfinishedTaskPolicy)
+    private var calendarDetail: some View {
+        SettingsGroupCard(icon: "calendar.badge.plus", title: "Calendar", color: .green) {
+            SettingsInfoRow(
+                icon: "calendar",
+                title: "Calendar Sync",
+                subtitle: "SchedAI can read busy times and write planned tasks only after calendar permission is enabled.",
+                color: .green
+            )
 
             SettingsDivider()
 
@@ -341,8 +508,73 @@ struct SettingsView: View {
         }
     }
 
-    private var aboutGroup: some View {
-        SettingsGroupCard(icon: "info.circle", title: "About", color: .gray) {
+    private var privacyDetail: some View {
+        VStack(spacing: 22) {
+            SettingsGroupCard(icon: "lock.shield", title: "Privacy", color: .teal) {
+                SettingsInfoRow(
+                    icon: "iphone.and.arrow.forward",
+                    title: "Local First",
+                    subtitle: "Offline parsing and Apple Intelligence run on device when available. Hosted AI is optional.",
+                    color: .teal
+                )
+
+                SettingsDivider()
+
+                SettingsToggleRow(
+                    icon: "sparkles.rectangle.stack",
+                    title: "Allow Hosted AI Improve",
+                    subtitle: app.hostedAIConsent
+                        ? "If Apple Intelligence is unavailable, task text may be sent to SchedAI and OpenAI when you tap Improve."
+                        : "Off. Improve uses offline parsing and on-device Apple Intelligence when available.",
+                    isOn: hostedAIBinding,
+                    color: .teal
+                )
+
+                SettingsDivider()
+
+                SettingsInfoRow(
+                    icon: "mic",
+                    title: "Voice Planning",
+                    subtitle: "Apple speech and microphone access are used only when you start recording.",
+                    color: .teal
+                )
+
+                SettingsDivider()
+
+                SettingsInfoRow(
+                    icon: "rectangle.inset.filled",
+                    title: "Widget & Alerts",
+                    subtitle: "Widget data is shared with the extension. Alert titles stay hidden unless enabled.",
+                    color: .teal
+                )
+
+                SettingsDivider()
+
+                SettingsActionRow(
+                    icon: "slider.horizontal.3",
+                    title: "Privacy Choices",
+                    subtitle: "Review AI, calendar, voice, and reminder choices",
+                    color: .teal
+                ) {
+                    openURL(LegalLinks.privacyChoices)
+                }
+
+                SettingsDivider()
+
+                SettingsActionRow(
+                    icon: "hand.raised",
+                    title: "Privacy Policy",
+                    subtitle: "See what data stays local and what can leave the device",
+                    color: .teal
+                ) {
+                    openURL(LegalLinks.privacy)
+                }
+            }
+        }
+    }
+
+    private var supportDetail: some View {
+        SettingsGroupCard(icon: "questionmark.bubble", title: "Support", color: .gray) {
             SettingsInfoRow(
                 icon: "app.badge",
                 title: "Version",
@@ -352,65 +584,13 @@ struct SettingsView: View {
 
             SettingsDivider()
 
-            SettingsInfoRow(
-                icon: "person.badge.key",
-                title: "Apple Name",
-                subtitle: "Optional local personalization only",
+            SettingsActionRow(
+                icon: "questionmark.bubble",
+                title: "Support",
+                subtitle: "Contact support or review common setup answers",
                 color: .gray
-            )
-        }
-    }
-
-    private var privacyGroup: some View {
-        SettingsGroupCard(icon: "lock.shield", title: "Privacy & Support", color: .teal) {
-            SettingsToggleRow(
-                icon: "sparkles.rectangle.stack",
-                title: "Allow Hosted AI Improve",
-                subtitle: app.hostedAIConsent
-                    ? "If Apple Intelligence is unavailable, task text may be sent to SchedAI and OpenAI when you tap Improve."
-                    : "Off. Improve uses offline parsing and on-device Apple Intelligence when available.",
-                isOn: hostedAIBinding,
-                color: .teal
-            )
-
-            SettingsDivider()
-
-            SettingsInfoRow(
-                icon: "mic",
-                title: "Voice Planning",
-                subtitle: "Apple speech and microphone access are used only when you start recording.",
-                color: .teal
-            )
-
-            SettingsDivider()
-
-            SettingsInfoRow(
-                icon: "rectangle.inset.filled",
-                title: "Widget & Alerts",
-                subtitle: "Widget data is shared with the extension. Alert titles stay hidden unless enabled.",
-                color: .teal
-            )
-
-            SettingsDivider()
-
-            SettingsActionRow(
-                icon: "slider.horizontal.3",
-                title: "Privacy Choices",
-                subtitle: "Review AI, calendar, voice, and reminder choices",
-                color: .teal
             ) {
-                openURL(LegalLinks.privacyChoices)
-            }
-
-            SettingsDivider()
-
-            SettingsActionRow(
-                icon: "hand.raised",
-                title: "Privacy Policy",
-                subtitle: "See what data stays local and what can leave the device",
-                color: .teal
-            ) {
-                openURL(LegalLinks.privacy)
+                openURL(LegalLinks.support)
             }
 
             SettingsDivider()
@@ -419,21 +599,29 @@ struct SettingsView: View {
                 icon: "doc.text",
                 title: "Terms",
                 subtitle: "Read the product terms",
-                color: .teal
+                color: .gray
             ) {
                 openURL(LegalLinks.terms)
             }
+        }
+    }
 
-            SettingsDivider()
-
-            SettingsActionRow(
-                icon: "questionmark.bubble",
-                title: "Support",
-                subtitle: "Contact support or review common setup answers",
-                color: .teal
-            ) {
-                openURL(LegalLinks.support)
-            }
+    private func subtitle(for destination: SettingsDestination) -> String {
+        switch destination {
+        case .account:
+            return profileStatusText
+        case .appearance:
+            return app.theme.title
+        case .workWindow:
+            return app.workWindowEnabled ? workWindowText : "Off - daytime scheduling"
+        case .notifications:
+            return app.remindersEnabled ? "Reminders on - \(app.reminderLeadMinutes) min before" : "Reminders off"
+        case .calendar:
+            return app.calendarSyncEnabled ? "\(calendarStatusText) - \(calendarDestinationName)" : calendarStatusText
+        case .privacy:
+            return app.hostedAIConsent ? "Hosted AI allowed, voice and widget controls" : "Local-first controls"
+        case .support:
+            return "\(shortVersionString), legal, and help"
         }
     }
 
@@ -609,7 +797,7 @@ private struct SettingsGroupCard<Content: View>: View {
 
     var body: some View {
         SettingsPanel {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
                     SettingsSectionIcon(systemName: icon, color: color)
 
@@ -620,15 +808,110 @@ private struct SettingsGroupCard<Content: View>: View {
                     Spacer()
                 }
                 .padding(.horizontal, 16)
-                .padding(.top, 16)
+                .padding(.top, 18)
 
                 VStack(spacing: 0) {
                     content
                 }
                 .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+                .padding(.bottom, 14)
             }
         }
+    }
+}
+
+private struct SettingsIntroCard: View {
+    let icon: String
+    let title: String
+    let description: String
+    let color: Color
+
+    var body: some View {
+        SettingsPanel {
+            HStack(alignment: .top, spacing: 14) {
+                SettingsIcon(systemName: icon, color: color)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(title)
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(description)
+                        .font(.system(size: 15, weight: .medium, design: .rounded))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
+        }
+    }
+}
+
+private struct SettingsDetailPage<Background: View, Content: View>: View {
+    let title: String
+    let background: Background
+    let content: Content
+
+    init(title: String, background: Background, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.background = background
+        self.content = content()
+    }
+
+    var body: some View {
+        ZStack {
+            background
+
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 22) {
+                    content
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
+                .padding(.bottom, 54)
+            }
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+private struct SettingsMenuRow: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+    let color: Color
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 14) {
+            SettingsIcon(systemName: icon, color: color, size: 50)
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(title)
+                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(subtitle)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 20)
+        .contentShape(Rectangle())
     }
 }
 
@@ -652,15 +935,16 @@ private struct SettingsSectionIcon: View {
 private struct SettingsIcon: View {
     let systemName: String
     let color: Color
+    var size: CGFloat = 42
 
     var body: some View {
         ZStack {
             Circle()
                 .fill(color.opacity(0.16))
-                .frame(width: 42, height: 42)
+                .frame(width: size, height: size)
 
             Image(systemName: systemName)
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: size * 0.4, weight: .semibold))
                 .foregroundStyle(color)
         }
     }
