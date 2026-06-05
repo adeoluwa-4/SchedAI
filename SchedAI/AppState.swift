@@ -207,7 +207,8 @@ final class AppState: ObservableObject {
         self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? false
         let unfinishedRaw = defaults.string(forKey: DefaultsKey.unfinishedTaskPolicy) ?? UnfinishedTaskPolicy.askMe.rawValue
         self.unfinishedTaskPolicy = UnfinishedTaskPolicy(rawValue: unfinishedRaw) ?? .askMe
-        self.hostedAIConsent = (defaults.object(forKey: DefaultsKey.hostedAIConsent) as? Bool) ?? false
+        // Default ON for first-run so Improve can use hosted AI when local options are unavailable.
+        self.hostedAIConsent = (defaults.object(forKey: DefaultsKey.hostedAIConsent) as? Bool) ?? true
         self.workStart = (defaults.object(forKey: DefaultsKey.workStart) as? Date) ?? workStart
         self.workEnd = (defaults.object(forKey: DefaultsKey.workEnd) as? Date) ?? workEnd
         validateWorkWindow()
