@@ -87,7 +87,17 @@ private enum FoundationModelsTaskParser {
         planningDate: Date,
         offlinePreview: [TaskDraft]
     ) -> String {
-        let offlineJSON = jsonString(OnDeviceTaskEnvelope(tasks: offlinePreview))
+        let offlinePreviewText: String
+        if offlinePreview.isEmpty {
+            offlinePreviewText = "Offline parser preview: not provided yet."
+        } else {
+            let offlineJSON = jsonString(OnDeviceTaskEnvelope(tasks: offlinePreview))
+            offlinePreviewText = """
+            Offline parser preview:
+            \(offlineJSON)
+            """
+        }
+
         return """
         Current time: \(AIService.isoString(now))
         Planning date: \(AIService.dateOnlyString(planningDate))
@@ -97,8 +107,7 @@ private enum FoundationModelsTaskParser {
         User input:
         \(input)
 
-        Offline parser preview:
-        \(offlineJSON)
+        \(offlinePreviewText)
 
         Return JSON matching exactly this shape:
         {
@@ -122,7 +131,7 @@ private enum FoundationModelsTaskParser {
         - If there is no explicit clock time, leave scheduledStartISO8601 and scheduledEndISO8601 null.
         - If a bare time like "2:30" is still ahead today, interpret it as today PM unless the user clearly meant AM.
         - If a bare time is already past today, use the next plausible future occurrence.
-        - Use the offline preview for date math when it looks reasonable.
+        - Use the offline preview for date math only when it is provided and looks reasonable.
         - Default estimatedMinutes to 30 when unknown.
         - Default priority to medium when unknown.
         """
