@@ -96,18 +96,17 @@ struct AIService {
         allowsHostedAI: Bool = false
     ) async -> TaskParseResult {
         let safeInput = remoteSafeInput(input)
-        let offline = fallbackTasks(from: safeInput, now: now)
-        let offlineDrafts = drafts(from: offline)
 
         if let drafts = await OnDeviceTaskParser.extractTasks(
             from: safeInput,
             now: now,
             planningDate: planningDate,
-            offlinePreview: offlineDrafts
+            offlinePreview: []
         ) {
+            let validationFallback = fallbackTasks(from: safeInput, now: now)
             let onDevice = normalizedAIItems(
                 from: drafts,
-                fallback: offline,
+                fallback: validationFallback,
                 input: safeInput,
                 now: now
             )
@@ -119,6 +118,9 @@ struct AIService {
                 )
             }
         }
+
+        let offline = fallbackTasks(from: safeInput, now: now)
+        let offlineDrafts = drafts(from: offline)
 
         guard allowsHostedAI else {
             return TaskParseResult(
