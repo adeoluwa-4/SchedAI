@@ -232,6 +232,9 @@ struct SchedAITests {
     }
 
     @Test func offlineNlpTurnsLaterTodayIntoPreferredWindow() async throws {
+        SchedulingPreferenceStore.resetForTesting()
+        defer { SchedulingPreferenceStore.resetForTesting() }
+
         let now = fixedDate(2026, 6, 5, 10, 24)
         let tasks = OfflineNLP.parseSafely("Remind me to add Face ID to scan AI later today", now: now)
 
@@ -295,6 +298,28 @@ struct SchedAITests {
         #expect(overflow == 0)
         #expect(tasks[0].scheduledStart == seven)
         #expect(tasks[0].isPinned)
+    }
+
+    @Test func offlineNlpUsesLearnedLaterTodayCorrection() async throws {
+        SchedulingPreferenceStore.resetForTesting()
+        defer { SchedulingPreferenceStore.resetForTesting() }
+
+        let now = fixedDate(2026, 6, 5, 10, 24)
+        SchedulingPreferenceStore.recordCorrection(
+            from: "Remind me to ask dad about George's number later today",
+            correctedStart: fixedDate(2026, 6, 5, 18, 0),
+            durationMinutes: 30
+        )
+
+        let tasks = OfflineNLP.parseSafely("Remind me to add Face ID later today", now: now)
+
+        #expect(tasks.count == 1)
+        guard let task = tasks.first else { return }
+
+        let cal = Calendar.current
+        #expect(task.scheduledStart == nil)
+        #expect(task.preferredStart.map { cal.component(.hour, from: $0) } == 18)
+        #expect(task.preferredEnd.map { cal.component(.hour, from: $0) } == 20)
     }
 
     @Test func offlineNlpKeepsClubMeetingTogether() async throws {
