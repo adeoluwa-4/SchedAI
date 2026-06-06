@@ -770,6 +770,13 @@ struct AIPlanSheet: View {
                 comps.second = 0
 
                 let start = cal.date(from: comps) ?? newTime
+                if parsedPreview[index].preferredStart != nil {
+                    SchedulingPreferenceStore.recordCorrection(
+                        from: transcript,
+                        correctedStart: start,
+                        durationMinutes: parsedPreview[index].estimatedMinutes
+                    )
+                }
                 parsedPreview[index].isPinned = true
                 parsedPreview[index].targetDay = cal.startOfDay(for: day)
                 parsedPreview[index].scheduledStart = start
