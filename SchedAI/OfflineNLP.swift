@@ -1405,6 +1405,10 @@ struct OfflineNLP {
     }
 
     private static func preferredWindowIfVague(in text: String, targetDay: Date?, now: Date) -> (start: Date, end: Date)? {
+        if let learned = SchedulingPreferenceStore.learnedWindow(for: text, targetDay: targetDay, now: now) {
+            return learned
+        }
+
         let lower = normalizeInput(text).lowercased()
         let hasVagueTime = lower.range(
             of: #"(?i)\b(later today|later|this afternoon|afternoon|this evening|evening|tonight|before bed|before sleep)\b"#,
