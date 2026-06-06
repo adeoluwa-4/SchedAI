@@ -197,6 +197,8 @@ struct SchedAITests {
                 targetDayISO8601: "2026-05-04",
                 scheduledStartISO8601: nil,
                 scheduledEndISO8601: nil,
+                preferredStartISO8601: nil,
+                preferredEndISO8601: nil,
                 isPinned: false,
                 notes: nil
             ),
@@ -207,6 +209,8 @@ struct SchedAITests {
                 targetDayISO8601: nil,
                 scheduledStartISO8601: "2026-05-04T20:00:00.000Z",
                 scheduledEndISO8601: nil,
+                preferredStartISO8601: nil,
+                preferredEndISO8601: nil,
                 isPinned: true,
                 notes: nil
             )
@@ -225,6 +229,72 @@ struct SchedAITests {
         #expect(tasks[1].scheduledStart != nil)
         #expect(tasks[1].scheduledEnd != nil)
         #expect(tasks[1].isPinned)
+    }
+
+    @Test func offlineNlpTurnsLaterTodayIntoPreferredWindow() async throws {
+        let now = fixedDate(2026, 6, 5, 10, 24)
+        let tasks = OfflineNLP.parseSafely("Remind me to add Face ID to scan AI later today", now: now)
+
+        #expect(tasks.count == 1)
+        guard let task = tasks.first else { return }
+
+        let cal = Calendar.current
+        #expect(task.scheduledStart == nil)
+        #expect(task.preferredStart != nil)
+        #expect(task.preferredEnd != nil)
+        #expect(task.preferredStart.map { cal.component(.hour, from: $0) } == 15)
+        #expect(task.targetDay.map { cal.isDate($0, inSameDayAs: now) } == true)
+        #expect(!task.isPinned)
+    }
+
+    @Test func schedulerRespectsLaterTodayPreferredWindow() async throws {
+        let now = fixedDate(2026, 6, 5, 10, 24)
+        let preferredStart = fixedDate(2026, 6, 5, 15, 0)
+        let preferredEnd = fixedDate(2026, 6, 5, 20, 0)
+        var tasks = [
+            TaskItem(
+                title: "Ask dad about George's number",
+                preferredStart: preferredStart,
+                preferredEnd: preferredEnd
+            )
+        ]
+
+        let overflow = Scheduler.planToday(
+            tasks: &tasks,
+            workStart: fixedDate(2026, 6, 5, 8, 0),
+            workEnd: fixedDate(2026, 6, 5, 22, 0),
+            day: now,
+            now: now
+        )
+
+        #expect(overflow == 0)
+        #expect(tasks[0].scheduledStart == preferredStart)
+    }
+
+    @Test func schedulerKeepsExplicitClockTimesPinned() async throws {
+        let now = fixedDate(2026, 6, 5, 10, 24)
+        let seven = fixedDate(2026, 6, 5, 19, 0)
+        var tasks = [
+            TaskItem(
+                title: "Fix screenshot timing",
+                isPinned: true,
+                targetDay: now,
+                scheduledStart: seven,
+                scheduledEnd: fixedDate(2026, 6, 5, 19, 30)
+            )
+        ]
+
+        let overflow = Scheduler.planToday(
+            tasks: &tasks,
+            workStart: fixedDate(2026, 6, 5, 8, 0),
+            workEnd: fixedDate(2026, 6, 5, 22, 0),
+            day: now,
+            now: now
+        )
+
+        #expect(overflow == 0)
+        #expect(tasks[0].scheduledStart == seven)
+        #expect(tasks[0].isPinned)
     }
 
     @Test func offlineNlpKeepsClubMeetingTogether() async throws {
