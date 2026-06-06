@@ -138,6 +138,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
 
     var scheduledStart: Date? = nil
     var scheduledEnd: Date? = nil
+    var preferredStart: Date? = nil
+    var preferredEnd: Date? = nil
 
     func isMissed(now: Date = Date()) -> Bool {
         guard !isCompleted, let end = scheduledEnd else { return false }
@@ -192,7 +194,9 @@ struct TaskItem: Identifiable, Codable, Hashable {
         isPinned: Bool = false,
         targetDay: Date? = nil,
         scheduledStart: Date? = nil,
-        scheduledEnd: Date? = nil
+        scheduledEnd: Date? = nil,
+        preferredStart: Date? = nil,
+        preferredEnd: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -207,6 +211,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.targetDay = targetDay
         self.scheduledStart = scheduledStart
         self.scheduledEnd = scheduledEnd
+        self.preferredStart = preferredStart
+        self.preferredEnd = preferredEnd
     }
 
     // MARK: - Codable
@@ -225,6 +231,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case targetDay
         case scheduledStart
         case scheduledEnd
+        case preferredStart
+        case preferredEnd
     }
 
     init(from decoder: Decoder) throws {
@@ -242,6 +250,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.targetDay = try container.decodeIfPresent(Date.self, forKey: .targetDay)
         self.scheduledStart = try container.decodeIfPresent(Date.self, forKey: .scheduledStart)
         self.scheduledEnd = try container.decodeIfPresent(Date.self, forKey: .scheduledEnd)
+        self.preferredStart = try container.decodeIfPresent(Date.self, forKey: .preferredStart)
+        self.preferredEnd = try container.decodeIfPresent(Date.self, forKey: .preferredEnd)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -259,5 +269,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         try container.encodeIfPresent(targetDay, forKey: .targetDay)
         try container.encodeIfPresent(scheduledStart, forKey: .scheduledStart)
         try container.encodeIfPresent(scheduledEnd, forKey: .scheduledEnd)
+        try container.encodeIfPresent(preferredStart, forKey: .preferredStart)
+        try container.encodeIfPresent(preferredEnd, forKey: .preferredEnd)
     }
 }
