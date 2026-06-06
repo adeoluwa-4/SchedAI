@@ -1370,6 +1370,12 @@ struct OfflineNLP {
         let title = cleanedTitle(from: text)
         guard !title.isEmpty else { return nil }
 
+        let preferredWindow = preferredWindowIfVague(
+            in: chunk,
+            targetDay: timeResult.targetDay ?? inheritedTargetDay,
+            now: now
+        )
+
         // Map parsed time info to TaskItem's scheduling fields.
         // If we have an explicit clock time or a time range, set scheduledStart and scheduledEnd.
         let scheduledStart: Date?
@@ -1389,10 +1395,76 @@ struct OfflineNLP {
             isPinned: scheduledStart != nil && timeResult.isExplicit,
             targetDay: timeResult.targetDay
                 ?? scheduledStart.map { Calendar.current.startOfDay(for: $0) }
+                ?? preferredWindow.map { Calendar.current.startOfDay(for: $0.start) }
                 ?? inheritedTargetDay,
             scheduledStart: scheduledStart,
-            scheduledEnd: scheduledEnd
+            scheduledEnd: scheduledEnd,
+            preferredStart: scheduledStart == nil ? preferredWindow?.start : nil,
+            preferredEnd: scheduledStart == nil ? preferredWindow?.end : nil
         )
+    }
+
+    private static func preferredWindowIfVague(in text: String, targetDay: Date?, now: Date) -> (start: Date, end: Date)? {
+        let lower = normalizeInput(text).lowercased()
+        let hasVagueTime = lower.range(
+            of: #"(?i)\b(later today|later|this afternoon|afternoon|this evening|evening|tonight|before bed|before sleep)\b"#,
+            options: .regularExpression
+        ) != nil
+        guard hasVagueTime else { return nil }
+
+        let calendar = Calendar.current
+        let day = calendar.startOfDay(for: targetDay ?? now)
+
+        func date(hour: Int, minute: Int = 0) -> Date? {
+            var comps = calendar.dateComponents([.year, .month, .day], from: day)
+            comps.hour = hour
+            comps.minute = minute
+            comps.second = 0
+            return calendar.date(from: comps)
+        }
+
+        func roundedFuture(minutesFromNow: Int) -> Date {
+            let raw = calendar.date(byAdding: .minute, value: minutesFromNow, to: now) ?? now.addingTimeInterval(TimeInterval(minutesFromNow * 60))
+            return roundUp(raw, toMinutes: 5, calendar: calendar)
+        }
+
+        let start: Date?
+        let end: Date?
+
+        if lower.contains("tonight") || lower.contains("before bed") || lower.contains("before sleep") {
+            start = date(hour: 19)
+            end = date(hour: 22)
+        } else if lower.contains("evening") {
+            start = date(hour: 17)
+            end = date(hour: 21)
+        } else if lower.contains("afternoon") {
+            start = date(hour: 13)
+            end = date(hour: 17)
+        } else {
+            let nowHour = calendar.component(.hour, from: now)
+            if !calendar.isDate(day, inSameDayAs: now) {
+                start = date(hour: 15)
+                end = date(hour: 20)
+            } else if nowHour < 12 {
+                start = date(hour: 15)
+                end = date(hour: 20)
+            } else if nowHour < 15 {
+                start = date(hour: 17)
+                end = date(hour: 21)
+            } else {
+                start = roundedFuture(minutesFromNow: 90)
+                end = date(hour: 22)
+            }
+        }
+
+        guard var windowStart = start, var windowEnd = end else { return nil }
+        if calendar.isDate(day, inSameDayAs: now), windowStart <= now {
+            windowStart = roundedFuture(minutesFromNow: 60)
+        }
+        if windowEnd <= windowStart {
+            windowEnd = calendar.date(byAdding: .hour, value: 2, to: windowStart) ?? windowStart.addingTimeInterval(7200)
+        }
+        return (windowStart, windowEnd)
     }
 
     // MARK: - Time parsing
