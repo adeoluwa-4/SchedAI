@@ -119,6 +119,8 @@ private enum FoundationModelsTaskParser {
               "targetDayISO8601": "yyyy-MM-dd or null",
               "scheduledStartISO8601": "ISO-8601 date-time or null",
               "scheduledEndISO8601": "ISO-8601 date-time or null",
+              "preferredStartISO8601": "ISO-8601 date-time or null",
+              "preferredEndISO8601": "ISO-8601 date-time or null",
               "isPinned": true,
               "notes": null
             }
@@ -127,8 +129,10 @@ private enum FoundationModelsTaskParser {
 
         Rules:
         - Split multiple clear actions into multiple tasks.
-        - If the user gives an explicit clock time, set scheduledStartISO8601 and scheduledEndISO8601.
+        - If the user gives an explicit clock time, set scheduledStartISO8601 and scheduledEndISO8601, and set isPinned true.
         - If there is no explicit clock time, leave scheduledStartISO8601 and scheduledEndISO8601 null.
+        - If the user gives a vague time like "later today", "this afternoon", "this evening", or "tonight", set preferredStartISO8601 and preferredEndISO8601 instead of scheduledStartISO8601, and set isPinned false.
+        - "Later today" should mean meaningfully later than now, not 5-15 minutes from now.
         - If a bare time like "2:30" is still ahead today, interpret it as today PM unless the user clearly meant AM.
         - If a bare time is already past today, use the next plausible future occurrence.
         - Use the offline preview for date math only when it is provided and looks reasonable.
