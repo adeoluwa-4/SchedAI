@@ -98,6 +98,8 @@ private enum FoundationModelsTaskParser {
             """
         }
 
+        let preferenceText = SchedulingPreferenceStore.promptContext(for: input, now: now) ?? "Local user timing preference: none yet."
+
         return """
         Current time: \(AIService.isoString(now))
         Planning date: \(AIService.dateOnlyString(planningDate))
@@ -106,6 +108,8 @@ private enum FoundationModelsTaskParser {
 
         User input:
         \(input)
+
+        \(preferenceText)
 
         \(offlinePreviewText)
 
