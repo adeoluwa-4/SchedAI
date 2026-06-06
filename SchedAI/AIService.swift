@@ -7,6 +7,8 @@ struct TaskDraft: Codable, Equatable {
     let targetDayISO8601: String?
     let scheduledStartISO8601: String?
     let scheduledEndISO8601: String?
+    let preferredStartISO8601: String?
+    let preferredEndISO8601: String?
     let isPinned: Bool?
     let notes: String?
 }
@@ -180,7 +182,10 @@ struct AIService {
             let scheduledStart = parseDate(draft.scheduledStartISO8601, calendar: calendar)
             let scheduledEnd = parseDate(draft.scheduledEndISO8601, calendar: calendar)
                 ?? scheduledStart.flatMap { calendar.date(byAdding: .minute, value: estimatedMinutes, to: $0) }
+            let preferredStart = parseDate(draft.preferredStartISO8601, calendar: calendar)
+            let preferredEnd = parseDate(draft.preferredEndISO8601, calendar: calendar)
             let targetDay = scheduledStart.map { calendar.startOfDay(for: $0) }
+                ?? preferredStart.map { calendar.startOfDay(for: $0) }
                 ?? parseDate(draft.targetDayISO8601, calendar: calendar).map { calendar.startOfDay(for: $0) }
 
             return TaskItem(
@@ -190,7 +195,9 @@ struct AIService {
                 isPinned: scheduledStart != nil ? (draft.isPinned ?? true) : false,
                 targetDay: targetDay,
                 scheduledStart: scheduledStart,
-                scheduledEnd: scheduledEnd
+                scheduledEnd: scheduledEnd,
+                preferredStart: preferredStart,
+                preferredEnd: preferredEnd
             )
         }
     }
@@ -244,6 +251,8 @@ struct AIService {
                 targetDayISO8601: item.targetDay.map { dateOnlyString($0) },
                 scheduledStartISO8601: item.scheduledStart.map { isoString($0) },
                 scheduledEndISO8601: item.scheduledEnd.map { isoString($0) },
+                preferredStartISO8601: item.preferredStart.map { isoString($0) },
+                preferredEndISO8601: item.preferredEnd.map { isoString($0) },
                 isPinned: item.isPinned,
                 notes: nil
             )
@@ -270,6 +279,13 @@ struct AIService {
                     items[index].targetDay = fallbackTask.targetDay
                     items[index].scheduledStart = fallbackStart
                     items[index].scheduledEnd = fallbackTask.scheduledEnd
+                }
+
+                if items[index].preferredStart == nil,
+                   let fallbackPreferredStart = fallbackTask.preferredStart {
+                    items[index].targetDay = fallbackTask.targetDay
+                    items[index].preferredStart = fallbackPreferredStart
+                    items[index].preferredEnd = fallbackTask.preferredEnd
                 }
 
                 if index < drafts.count,
