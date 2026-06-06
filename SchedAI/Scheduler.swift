@@ -117,13 +117,14 @@ struct Scheduler {
             busy = normalizeBusy(busy)
         }
 
-        func findSlot(startingAt candidateStart: Date, durationMinutes: Int) -> Date? {
+        func findSlot(startingAt candidateStart: Date, endingBy preferredEnd: Date?, durationMinutes: Int) -> Date? {
             var candidate = max(candidateStart, startOfWindow)
             let duration = TimeInterval(max(5, durationMinutes) * 60)
+            let latestEnd = preferredEnd.map { min($0, endOfWindow) } ?? endOfWindow
 
             while true {
                 let end = candidate.addingTimeInterval(duration)
-                if end > endOfWindow { return nil }
+                if end > latestEnd { return nil }
 
                 if let block = busy.first(where: { $0.start < end && $0.end > candidate }) {
                     candidate = block.end.addingTimeInterval(TimeInterval(bufferMinutes * 60))
@@ -144,7 +145,18 @@ struct Scheduler {
 
         var overflow = 0
         for t in flexible {
-            guard let slotStart = findSlot(startingAt: startOfWindow, durationMinutes: t.estimatedMinutes) else {
+            let preferredStart = t.preferredStart.map { max($0, startOfWindow) } ?? startOfWindow
+            let slotStart = findSlot(
+                startingAt: preferredStart,
+                endingBy: t.preferredEnd,
+                durationMinutes: t.estimatedMinutes
+            ) ?? findSlot(
+                startingAt: preferredStart,
+                endingBy: nil,
+                durationMinutes: t.estimatedMinutes
+            )
+
+            guard let slotStart else {
                 overflow += 1
                 continue
             }
