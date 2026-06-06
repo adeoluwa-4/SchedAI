@@ -711,6 +711,12 @@ struct AIPlanSheet: View {
                         to: newStart
                     )
                 }
+                if let preferredStart = parsedPreview[index].preferredStart {
+                    parsedPreview[index].preferredStart = moveTime(preferredStart, to: selectedDay, calendar: cal)
+                }
+                if let preferredEnd = parsedPreview[index].preferredEnd {
+                    parsedPreview[index].preferredEnd = moveTime(preferredEnd, to: selectedDay, calendar: cal)
+                }
 
                 hasManualPreviewEdits = true
             }
@@ -734,6 +740,8 @@ struct AIPlanSheet: View {
                         value: max(5, parsedPreview[index].estimatedMinutes),
                         to: start
                     )
+                    parsedPreview[index].preferredStart = nil
+                    parsedPreview[index].preferredEnd = nil
                 } else {
                     parsedPreview[index].isPinned = false
                     parsedPreview[index].targetDay = cal.startOfDay(for: day)
@@ -770,6 +778,8 @@ struct AIPlanSheet: View {
                     value: max(5, parsedPreview[index].estimatedMinutes),
                     to: start
                 )
+                parsedPreview[index].preferredStart = nil
+                parsedPreview[index].preferredEnd = nil
                 hasManualPreviewEdits = true
             }
         )
@@ -793,6 +803,15 @@ struct AIPlanSheet: View {
         comps.minute = minute
         comps.second = 0
         return cal.date(from: comps) ?? day
+    }
+
+    private func moveTime(_ time: Date, to day: Date, calendar: Calendar) -> Date {
+        let timeComps = calendar.dateComponents([.hour, .minute, .second], from: time)
+        var dayComps = calendar.dateComponents([.year, .month, .day], from: day)
+        dayComps.hour = timeComps.hour
+        dayComps.minute = timeComps.minute
+        dayComps.second = timeComps.second ?? 0
+        return calendar.date(from: dayComps) ?? time
     }
 
     private func scheduleSummary(_ task: TaskItem) -> String {
