@@ -26,6 +26,7 @@ final class AppState: ObservableObject {
         static let remindersEnabled = "remindersEnabled"
         static let reminderLeadMinutes = "reminderLeadMinutes"
         static let showTaskTitlesInNotifications = "showTaskTitlesInNotifications"
+        static let showTaskTitlesInWidget = "showTaskTitlesInWidget"
         static let theme = "appThemePreference"
         static let lastResetDay = "lastResetDay"
         static let calendarSyncEnabled = "calendarSyncEnabled"
@@ -35,6 +36,7 @@ final class AppState: ObservableObject {
         static let workEnd = "workEnd"
         static let unfinishedTaskPolicy = "unfinishedTaskPolicy"
         static let hostedAIConsent = "hostedAIConsent"
+        static let faceIDEnabled = "faceIDEnabled"
     }
 
     private enum WidgetBridge {
@@ -129,6 +131,12 @@ final class AppState: ObservableObject {
         }
     }
 
+    @Published var faceIDEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(faceIDEnabled, forKey: DefaultsKey.faceIDEnabled)
+        }
+    }
+
     @Published var theme: AppTheme {
         didSet {
             UserDefaults.standard.set(theme.rawValue, forKey: DefaultsKey.theme)
@@ -172,6 +180,14 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Whether the widget may show task titles on the Home Screen / Lock Screen.
+    @Published var showTaskTitlesInWidget: Bool {
+        didSet {
+            UserDefaults.standard.set(showTaskTitlesInWidget, forKey: DefaultsKey.showTaskTitlesInWidget)
+            persistWidgetData()
+        }
+    }
+
     /// Whether to sync scheduled tasks into Apple Calendar.
     @Published var calendarSyncEnabled: Bool {
         didSet {
@@ -201,14 +217,16 @@ final class AppState: ObservableObject {
         self.remindersEnabled = (defaults.object(forKey: DefaultsKey.remindersEnabled) as? Bool) ?? false
         self.reminderLeadMinutes = (defaults.object(forKey: DefaultsKey.reminderLeadMinutes) as? Int) ?? 5
         self.showTaskTitlesInNotifications = (defaults.object(forKey: DefaultsKey.showTaskTitlesInNotifications) as? Bool) ?? false
+        self.showTaskTitlesInWidget = (defaults.object(forKey: DefaultsKey.showTaskTitlesInWidget) as? Bool) ?? true
         self.calendarSyncEnabled = (defaults.object(forKey: DefaultsKey.calendarSyncEnabled) as? Bool) ?? false
         self.selectedCalendarDestinationID = CalendarManager.shared.selectedDestinationID()
         self.userDisplayName = defaults.string(forKey: DefaultsKey.userDisplayName)
         self.workWindowEnabled = (defaults.object(forKey: DefaultsKey.workWindowEnabled) as? Bool) ?? false
         let unfinishedRaw = defaults.string(forKey: DefaultsKey.unfinishedTaskPolicy) ?? UnfinishedTaskPolicy.askMe.rawValue
         self.unfinishedTaskPolicy = UnfinishedTaskPolicy(rawValue: unfinishedRaw) ?? .askMe
-        // Default ON for first-run so Improve can use hosted AI when local options are unavailable.
+        // Default ON so Improve can use hosted AI immediately when local options need help.
         self.hostedAIConsent = (defaults.object(forKey: DefaultsKey.hostedAIConsent) as? Bool) ?? true
+        self.faceIDEnabled = (defaults.object(forKey: DefaultsKey.faceIDEnabled) as? Bool) ?? false
         self.workStart = (defaults.object(forKey: DefaultsKey.workStart) as? Date) ?? workStart
         self.workEnd = (defaults.object(forKey: DefaultsKey.workEnd) as? Date) ?? workEnd
         validateWorkWindow()
@@ -432,12 +450,25 @@ final class AppState: ObservableObject {
     // MARK: - CRUD
 
     func addTask(_ t: TaskItem) {
-        var task = normalizedCompletionState(t)
-        normalizeScheduleForPlanState(&task)
-        if let start = task.scheduledStart {
-            task.targetDay = Calendar.current.startOfDay(for: start)
+        addTasks([t])
+    }
+
+    func addTasks(_ newTasks: [TaskItem]) {
+        guard !newTasks.isEmpty else { return }
+
+        let normalized = newTasks.compactMap { original -> TaskItem? in
+            var task = normalizedCompletionState(original)
+            task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !task.title.isEmpty else { return nil }
+            normalizeScheduleForPlanState(&task)
+            if let start = task.scheduledStart {
+                task.targetDay = Calendar.current.startOfDay(for: start)
+            }
+            return task
         }
-        tasks.insert(task, at: 0)
+
+        guard !normalized.isEmpty else { return }
+        tasks.insert(contentsOf: normalized.reversed(), at: 0)
         if remindersEnabled { rescheduleReminders() }
         scheduleCompletedTaskCleanup()
     }
@@ -1058,7 +1089,7 @@ final class AppState: ObservableObject {
         let sharedTasks = tasks.map { task in
             WidgetSharedTask(
                 id: task.id,
-                title: task.title,
+                title: showTaskTitlesInWidget ? task.title : "Task",
                 priorityRaw: task.priority.rawValue,
                 estimatedMinutes: task.estimatedMinutes,
                 isCompleted: task.isCompleted,
