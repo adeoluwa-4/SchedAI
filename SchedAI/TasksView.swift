@@ -184,7 +184,7 @@ struct TasksView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Quick Add")
                         .font(.headline.weight(.bold))
-                    Text("Type a task, duration, or priority")
+                    Text("Type tasks, then preview before adding")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
