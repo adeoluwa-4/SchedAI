@@ -246,17 +246,20 @@ final class CalendarManager: ObservableObject {
 
         var map = loadEventMap()
         let wantedIDs = Set(scheduled.map { $0.id.uuidString })
+        let allowNoteOwnershipFallback = selectedDestinationID() == Self.defaultDestinationID
 
         var failure: String? = nil
 
         // Delete events that no longer correspond to scheduled tasks for this day
         for ev in existing {
-            if let uid = extractTaskID(from: ev), !wantedIDs.contains(uid) {
+            if let uid = ownedTaskID(
+                from: ev,
+                map: map,
+                allowNoteFallback: allowNoteOwnershipFallback
+            ), !wantedIDs.contains(uid) {
                 do {
                     try store.remove(ev, span: .thisEvent, commit: false)
-                    if let (taskID, _) = map.first(where: { $0.value == ev.eventIdentifier }) {
-                        map.removeValue(forKey: taskID)
-                    }
+                    map.removeValue(forKey: uid)
                 } catch {
                     failure = error.localizedDescription
                     break
@@ -270,7 +273,12 @@ final class CalendarManager: ObservableObject {
                 guard let s = t.scheduledStart else { continue }
                 let e = t.scheduledEnd ?? s.addingTimeInterval(TimeInterval(max(5, t.estimatedMinutes) * 60))
 
-                if let existingEvent = fetchEvent(for: t.id, from: existing, map: map) {
+                if let existingEvent = fetchEvent(
+                    for: t.id,
+                    from: existing,
+                    map: map,
+                    allowNoteFallback: allowNoteOwnershipFallback
+                ) {
                     var needsSave = false
                     if existingEvent.startDate != s || existingEvent.endDate != e {
                         existingEvent.startDate = s
@@ -331,6 +339,7 @@ final class CalendarManager: ObservableObject {
         guard let calendar = destinationCalendar() else { return }
 
         var map = loadEventMap()
+        let allowNoteOwnershipFallback = selectedDestinationID() == Self.defaultDestinationID
 
         // 1) Try mapping first (fast path)
         if let eventID = map[taskID.uuidString], let ev = store.event(withIdentifier: eventID) {
@@ -350,7 +359,8 @@ final class CalendarManager: ObservableObject {
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: [calendar])
         let events = store.events(matching: predicate)
 
-        if let ev = events.first(where: { extractTaskID(from: $0) == taskID.uuidString }) {
+        if allowNoteOwnershipFallback,
+           let ev = events.first(where: { extractTaskID(from: $0) == taskID.uuidString }) {
             do {
                 try store.remove(ev, span: .thisEvent, commit: true)
                 map.removeValue(forKey: taskID.uuidString)
@@ -483,7 +493,9 @@ final class CalendarManager: ObservableObject {
            let range = notes.range(of: "SchedAI_ID:") {
             let idStart = notes.index(range.upperBound, offsetBy: 0)
             let id = String(notes[idStart...])
-            return id.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard UUID(uuidString: trimmed) != nil else { return nil }
+            return trimmed
         }
 
         // Back-compat tag
@@ -491,16 +503,36 @@ final class CalendarManager: ObservableObject {
            let range = notes.range(of: "SchedAI Task ") {
             let idStart = notes.index(range.upperBound, offsetBy: 0)
             let id = String(notes[idStart...])
-            return id.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard UUID(uuidString: trimmed) != nil else { return nil }
+            return trimmed
         }
 
         return nil
     }
 
-    private func fetchEvent(for taskID: UUID, from events: [EKEvent], map: [String: String]) -> EKEvent? {
+    private func ownedTaskID(
+        from event: EKEvent,
+        map: [String: String],
+        allowNoteFallback: Bool
+    ) -> String? {
+        if let mapped = map.first(where: { $0.value == event.eventIdentifier })?.key {
+            return mapped
+        }
+        guard allowNoteFallback else { return nil }
+        return extractTaskID(from: event)
+    }
+
+    private func fetchEvent(
+        for taskID: UUID,
+        from events: [EKEvent],
+        map: [String: String],
+        allowNoteFallback: Bool
+    ) -> EKEvent? {
         if let mapped = map[taskID.uuidString] {
             return events.first(where: { $0.eventIdentifier == mapped })
         }
+        guard allowNoteFallback else { return nil }
         return events.first(where: { extractTaskID(from: $0) == taskID.uuidString })
     }
 
