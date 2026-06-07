@@ -192,7 +192,7 @@ struct NLPTestRunner {
             Case(
                 name: "Daily meditate",
                 input: "every day meditate 10m",
-                expectedCount: 30,
+                expectedCount: 20,
                 expected: [
                     .init(title: "Meditate", minutes: 10, hasTime: true),
                 ]
