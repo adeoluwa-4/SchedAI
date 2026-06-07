@@ -83,11 +83,11 @@
           <h2>Optional AI parsing</h2>
           <p>
             SchedAI can preview tasks on device first. If you choose to improve a preview with AI, the task text you typed or spoke, the planning date, your locale, time zone, and an offline preview are sent to SchedAI's hosted parsing service and processed by OpenAI to return structured tasks.
-            SchedAI also sends a rotating app-side client identifier so the service can prevent abuse, apply rate limits, and disable hosted AI for a specific app install if needed.
+            SchedAI also sends a random app-install client identifier so the service can prevent abuse, apply rate limits, and disable hosted AI for a specific app install if needed.
             This is used only to provide the task parsing feature. Do not include sensitive information in task text that you do not want processed by the hosted AI service.
           </p>
           <p>
-            Hosted AI improve is optional. SchedAI asks before first use, and you can turn it back off later in the app's Settings.
+            Hosted AI improve is on by default for the Improve feature, and you can turn it off later in the app's Settings.
             SchedAI is designed not to store your submitted task text in a separate app database after parsing, but limited technical records or provider-side processing records may still exist for security, abuse prevention, and reliability.
           </p>
         </section>
