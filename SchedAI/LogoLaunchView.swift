@@ -2,12 +2,15 @@ import SwiftUI
 #if canImport(AuthenticationServices)
 import AuthenticationServices
 #endif
+#if canImport(LocalAuthentication)
+import LocalAuthentication
+#endif
 #if canImport(UIKit)
 import UIKit
 #endif
 
 struct LogoLaunchView: View {
-    private enum Phase { case logo, onboarding, splash, notifications, main }
+    private enum Phase { case logo, onboarding, splash, notifications, faceIDUnlock, main }
 
     @EnvironmentObject private var app: AppState
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
@@ -51,6 +54,16 @@ struct LogoLaunchView: View {
                 )
                 .transition(.opacity)
 
+            case .faceIDUnlock:
+                FaceIDUnlockView(
+                    onUnlock: showMain,
+                    onDisable: {
+                        app.faceIDEnabled = false
+                        showMain()
+                    }
+                )
+                .transition(.opacity)
+
             case .main:
                 ContentView() // Home (Today first tab)
                     .transition(.opacity)
@@ -60,6 +73,20 @@ struct LogoLaunchView: View {
 
     private func completeNotificationOnboarding() {
         hasSeenNotificationOnboarding = true
+        routeToMain()
+    }
+
+    private func routeToMain() {
+        if app.faceIDEnabled {
+            withAnimation(.easeOut(duration: 0.25)) {
+                phase = .faceIDUnlock
+            }
+        } else {
+            showMain()
+        }
+    }
+
+    private func showMain() {
         withAnimation(.easeOut(duration: 0.25)) {
             phase = .main
         }
@@ -67,9 +94,7 @@ struct LogoLaunchView: View {
 
     private func startMainExperience() {
         guard !hasSeenNotificationOnboarding else {
-            withAnimation(.easeOut(duration: 0.25)) {
-                phase = .main
-            }
+            routeToMain()
             return
         }
 
@@ -78,9 +103,7 @@ struct LogoLaunchView: View {
                 switch status {
                 case .authorized, .denied:
                     hasSeenNotificationOnboarding = true
-                    withAnimation(.easeOut(duration: 0.25)) {
-                        phase = .main
-                    }
+                    routeToMain()
                 case .notDetermined:
                     withAnimation(.easeOut(duration: 0.25)) {
                         phase = .notifications
@@ -96,8 +119,12 @@ private struct OnboardingView: View {
     @AppStorage("hasSeenWidgetGuide") private var hasSeenWidgetGuide = false
     @State private var page = 0
     @State private var hasCompletedAppleSignIn = false
+    @State private var hasCompletedFaceIDChoice = false
+    @State private var hasCompletedCalendarChoice = false
     @State private var needsNameEntry = false
     @State private var firstNameInput = ""
+    @State private var isRequestingFaceID = false
+    @State private var isRequestingCalendar = false
     @State private var signInMessage: String? = nil
     @State private var presentedSheet: OnboardingSheet? = nil
 
@@ -110,6 +137,13 @@ private struct OnboardingView: View {
             VStack(spacing: 0) {
                 if needsNameEntry {
                     NameEntryOnboardingScreen(firstName: $firstNameInput)
+                } else if hasCompletedAppleSignIn && !hasCompletedFaceIDChoice {
+                    FaceIDOnboardingScreen(isRequesting: isRequestingFaceID)
+                } else if hasCompletedAppleSignIn && !hasCompletedCalendarChoice {
+                    CalendarConnectOnboardingScreen(
+                        status: app.calendarConnectionStatus,
+                        isRequesting: isRequestingCalendar
+                    )
                 } else if hasCompletedAppleSignIn {
                     TabView(selection: $page) {
                         ForEach(Array(pages.enumerated()), id: \.offset) { index, page in
@@ -139,6 +173,14 @@ private struct OnboardingView: View {
         } message: {
             Text(signInMessage ?? "")
         }
+        .alert("Calendar", isPresented: Binding(
+            get: { app.calendarSyncMessage != nil },
+            set: { if !$0 { app.calendarSyncMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(app.calendarSyncMessage ?? "")
+        }
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
             case .widgetGuide:
@@ -146,6 +188,21 @@ private struct OnboardingView: View {
                     onDone: completeWidgetGuide,
                     onMaybeLater: completeWidgetGuide
                 )
+            }
+        }
+        .onAppear {
+            app.refreshCalendarConnectionStatus()
+        }
+        .onChange(of: app.calendarConnectionStatus) { _, status in
+            guard isRequestingCalendar else { return }
+            switch status {
+            case .connected:
+                isRequestingCalendar = false
+                completeCalendarOnboarding()
+            case .denied, .unavailable:
+                isRequestingCalendar = false
+            case .notConnected:
+                break
             }
         }
     }
@@ -212,6 +269,74 @@ private struct OnboardingView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.secondary)
+                }
+            } else if hasCompletedAppleSignIn && !hasCompletedFaceIDChoice {
+                VStack(spacing: 10) {
+                    Button {
+                        enableFaceIDFromOnboarding()
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isRequestingFaceID {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "faceid")
+                            }
+                            Text(isRequestingFaceID ? "Checking..." : "Enable Face ID")
+                        }
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandBlue)
+                    .disabled(isRequestingFaceID)
+
+                    Button {
+                        skipFaceIDOnboarding()
+                    } label: {
+                        Text("Not Now")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .disabled(isRequestingFaceID)
+                }
+            } else if hasCompletedAppleSignIn && !hasCompletedCalendarChoice {
+                VStack(spacing: 10) {
+                    Button {
+                        connectCalendarFromOnboarding()
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isRequestingCalendar {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "calendar.badge.plus")
+                            }
+                            Text(isRequestingCalendar ? "Connecting..." : calendarButtonTitle)
+                        }
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandBlue)
+                    .disabled(isRequestingCalendar)
+
+                    Button {
+                        skipCalendarOnboarding()
+                    } label: {
+                        Text(app.calendarConnectionStatus == .connected ? "Continue" : "Not Now")
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+                    .disabled(isRequestingCalendar)
                 }
             } else if hasCompletedAppleSignIn {
                 Button {
@@ -287,6 +412,10 @@ private struct OnboardingView: View {
         return hasSeenWidgetGuide ? "checkmark" : "questionmark.circle"
     }
 
+    private var calendarButtonTitle: String {
+        app.calendarConnectionStatus == .connected ? "Calendar Connected" : "Connect Calendar"
+    }
+
     #if canImport(AuthenticationServices)
     private func handleAppleSignInResult(_ result: Result<ASAuthorization, Error>) {
         switch result {
@@ -311,8 +440,7 @@ private struct OnboardingView: View {
                 if app.userDisplayName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
                     needsNameEntry = true
                 } else {
-                    hasCompletedAppleSignIn = true
-                    page = 0
+                    continueToFaceIDChoice()
                 }
             }
         case .failure:
@@ -329,8 +457,7 @@ private struct OnboardingView: View {
         withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
             firstNameInput = ""
             needsNameEntry = false
-            hasCompletedAppleSignIn = true
-            page = 0
+            continueToFaceIDChoice()
         }
     }
 
@@ -341,8 +468,7 @@ private struct OnboardingView: View {
         app.userDisplayName = name
         withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
             needsNameEntry = false
-            hasCompletedAppleSignIn = true
-            page = 0
+            continueToFaceIDChoice()
         }
     }
 
@@ -350,7 +476,69 @@ private struct OnboardingView: View {
         firstNameInput = ""
         withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
             needsNameEntry = false
-            hasCompletedAppleSignIn = true
+            continueToFaceIDChoice()
+        }
+    }
+
+    private func continueToFaceIDChoice() {
+        hasCompletedAppleSignIn = true
+        hasCompletedFaceIDChoice = false
+        hasCompletedCalendarChoice = false
+        page = 0
+    }
+
+    private func skipFaceIDOnboarding() {
+        app.faceIDEnabled = false
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+            hasCompletedFaceIDChoice = true
+            page = 0
+        }
+    }
+
+    private func enableFaceIDFromOnboarding() {
+        isRequestingFaceID = true
+        authenticateWithFaceID(reason: "Enable Face ID to unlock SchedAI locally.") { success, message in
+            isRequestingFaceID = false
+            if success {
+                app.faceIDEnabled = true
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+                    hasCompletedFaceIDChoice = true
+                    hasCompletedCalendarChoice = app.calendarConnectionStatus == .connected
+                    page = 0
+                }
+            } else {
+                app.faceIDEnabled = false
+                signInMessage = message ?? "Face ID could not be enabled. You can continue without it."
+            }
+        }
+    }
+
+    private func connectCalendarFromOnboarding() {
+        if app.calendarConnectionStatus == .connected {
+            completeCalendarOnboarding()
+            return
+        }
+
+        isRequestingCalendar = true
+        app.enableCalendarSyncUserDriven()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            if app.calendarConnectionStatus == .connected {
+                isRequestingCalendar = false
+                completeCalendarOnboarding()
+            } else if app.calendarConnectionStatus != .notConnected {
+                isRequestingCalendar = false
+            }
+        }
+    }
+
+    private func skipCalendarOnboarding() {
+        isRequestingCalendar = false
+        completeCalendarOnboarding()
+    }
+
+    private func completeCalendarOnboarding() {
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+            hasCompletedCalendarChoice = true
             page = 0
         }
     }
@@ -963,6 +1151,300 @@ private struct SignInOnboardingScreen: View {
             Spacer(minLength: 32)
         }
     }
+}
+
+private struct FaceIDOnboardingScreen: View {
+    @Environment(\.colorScheme) private var scheme
+    let isRequesting: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 56)
+
+            VStack(spacing: 28) {
+                ZStack {
+                    Circle()
+                        .fill(Color.brandBlue.opacity(scheme == .dark ? 0.18 : 0.12))
+                        .frame(width: 92, height: 92)
+
+                    Image(systemName: "faceid")
+                        .font(.system(size: 46, weight: .semibold))
+                        .foregroundStyle(Color.brandBlue)
+                }
+
+                VStack(spacing: 14) {
+                    Text("Protect your plan with Face ID.")
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.82)
+
+                    Text("Use Face ID to unlock SchedAI on this phone. Your tasks and Apple sign-in details stay local.")
+                        .font(.system(size: 17, weight: .medium, design: .rounded))
+                        .lineSpacing(3)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: 320)
+                }
+
+                HStack(spacing: 10) {
+                    Image(systemName: "lock.shield")
+                    Text(isRequesting ? "Waiting for Face ID..." : "Optional. You can skip it.")
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.brandBlue)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color.brandBlue.opacity(scheme == .dark ? 0.18 : 0.1))
+                )
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 32)
+        }
+    }
+}
+
+private struct CalendarConnectOnboardingScreen: View {
+    @Environment(\.colorScheme) private var scheme
+    let status: CalendarManager.ConnectionStatus
+    let isRequesting: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Spacer(minLength: 48)
+
+            VStack(spacing: 24) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 30, style: .continuous)
+                        .fill(Color.brandBlue.opacity(scheme == .dark ? 0.16 : 0.1))
+                        .frame(width: 106, height: 106)
+
+                    Image(systemName: status == .connected ? "calendar.badge.checkmark" : "calendar.badge.plus")
+                        .font(.system(size: 48, weight: .semibold))
+                        .foregroundStyle(Color.brandBlue)
+                }
+
+                VStack(spacing: 12) {
+                    Text(status == .connected ? "Calendar is connected." : "Connect your calendar.")
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.82)
+
+                    Text("SchedAI can read busy time and write planned tasks only after you allow calendar access.")
+                        .font(.system(size: 17, weight: .medium, design: .rounded))
+                        .lineSpacing(3)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: 330)
+                }
+
+                VStack(spacing: 10) {
+                    CalendarBenefitPill(icon: "eye", text: "Avoid scheduling over busy blocks")
+                    CalendarBenefitPill(icon: "square.and.pencil", text: "Add your plan to the calendar you choose")
+                    CalendarBenefitPill(icon: "slider.horizontal.3", text: "Optional and adjustable in Settings")
+                }
+                .frame(maxWidth: 340)
+
+                HStack(spacing: 10) {
+                    Image(systemName: statusIcon)
+                    Text(statusText)
+                }
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(Color.brandBlue)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(Color.brandBlue.opacity(scheme == .dark ? 0.18 : 0.1))
+                )
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)
+
+            Spacer(minLength: 24)
+        }
+    }
+
+    private var statusIcon: String {
+        if isRequesting { return "arrow.triangle.2.circlepath" }
+        switch status {
+        case .connected: return "checkmark.shield"
+        case .denied: return "exclamationmark.triangle"
+        case .unavailable: return "xmark.octagon"
+        case .notConnected: return "lock.shield"
+        }
+    }
+
+    private var statusText: String {
+        if isRequesting { return "Waiting for Calendar permission..." }
+        switch status {
+        case .connected: return "Connected. You can continue."
+        case .denied: return "Permission is denied in iOS Settings."
+        case .unavailable: return "Calendar is unavailable on this device."
+        case .notConnected: return "You can skip this and connect later."
+        }
+    }
+}
+
+private struct CalendarBenefitPill: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Color.brandBlue)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(Color.brandBlue.opacity(0.12)))
+
+            Text(text)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
+                .minimumScaleFactor(0.86)
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.primary.opacity(0.045))
+        )
+    }
+}
+
+private struct FaceIDUnlockView: View {
+    @Environment(\.colorScheme) private var scheme
+    @State private var isAuthenticating = false
+    @State private var errorMessage: String? = nil
+    @State private var didAutoAttempt = false
+
+    let onUnlock: () -> Void
+    let onDisable: () -> Void
+
+    var body: some View {
+        OnboardingBackground {
+            VStack(spacing: 28) {
+                Spacer(minLength: 80)
+
+                ZStack {
+                    Circle()
+                        .fill(Color.brandBlue.opacity(scheme == .dark ? 0.18 : 0.12))
+                        .frame(width: 104, height: 104)
+
+                    Image(systemName: "faceid")
+                        .font(.system(size: 52, weight: .semibold))
+                        .foregroundStyle(Color.brandBlue)
+                }
+
+                VStack(spacing: 10) {
+                    Text("Unlock SchedAI")
+                        .font(.system(size: 36, weight: .bold, design: .rounded))
+                        .multilineTextAlignment(.center)
+
+                    Text(errorMessage ?? "Use Face ID to open your local planner.")
+                        .font(.system(size: 16, weight: .medium, design: .rounded))
+                        .foregroundStyle(errorMessage == nil ? Color.secondary : Color.red)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 300)
+                }
+
+                Spacer()
+
+                VStack(spacing: 10) {
+                    Button {
+                        authenticate()
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isAuthenticating {
+                                ProgressView()
+                                    .tint(.white)
+                            } else {
+                                Image(systemName: "faceid")
+                            }
+                            Text(isAuthenticating ? "Checking..." : "Unlock with Face ID")
+                        }
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 56)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandBlue)
+                    .disabled(isAuthenticating)
+
+                    Button("Turn Off Face ID") {
+                        onDisable()
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .disabled(isAuthenticating)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 26)
+            }
+        }
+        .task {
+            guard !didAutoAttempt else { return }
+            didAutoAttempt = true
+            authenticate()
+        }
+    }
+
+    private func authenticate() {
+        isAuthenticating = true
+        errorMessage = nil
+        authenticateWithFaceID(reason: "Unlock SchedAI.") { success, message in
+            isAuthenticating = false
+            if success {
+                onUnlock()
+            } else {
+                errorMessage = message ?? "Face ID failed. Try again or turn it off."
+            }
+        }
+    }
+}
+
+private func authenticateWithFaceID(
+    reason: String,
+    completion: @escaping (_ success: Bool, _ message: String?) -> Void
+) {
+    #if canImport(LocalAuthentication)
+    let context = LAContext()
+    context.localizedCancelTitle = "Cancel"
+
+    var authError: NSError?
+    guard context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &authError) else {
+        DispatchQueue.main.async {
+            completion(false, "Face ID is not available or not set up on this device.")
+        }
+        return
+    }
+
+    context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { success, error in
+        DispatchQueue.main.async {
+            if success {
+                completion(true, nil)
+            } else {
+                let message = (error as? LAError)?.code == .userCancel
+                    ? "Face ID was cancelled."
+                    : "Face ID could not verify you. Try again."
+                completion(false, message)
+            }
+        }
+    }
+    #else
+    DispatchQueue.main.async {
+        completion(false, "Face ID is unavailable on this device.")
+    }
+    #endif
 }
 
 #if canImport(AuthenticationServices)
