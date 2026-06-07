@@ -46,6 +46,7 @@ struct AIService {
 
     private enum Limits {
         static let maxRemoteInputCharacters = 4000
+        static let maxParsedTasks = 20
     }
 
     private struct ParseTasksRequest: Encodable {
@@ -65,10 +66,12 @@ struct AIService {
 
     // Vercel keeps OPENAI_API_KEY server-side. Override with UserDefaults or Info.plist for other deployments.
     static var parseEndpoint: URL? {
+        #if DEBUG
         if let override = UserDefaults.standard.string(forKey: DefaultsKey.aiParseEndpoint),
            let url = cleanURL(override) {
             return url
         }
+        #endif
 
         if let bundled = Bundle.main.object(forInfoDictionaryKey: BundleKey.aiParseEndpoint) as? String,
            let url = cleanURL(bundled) {
@@ -98,21 +101,49 @@ struct AIService {
         allowsHostedAI: Bool = false
     ) async -> TaskParseResult {
         let safeInput = remoteSafeInput(input)
+        let offline = fallbackTasks(from: safeInput, now: now)
+        let offlineDrafts = drafts(from: offline)
+        var rejectedHostedAI = false
+
+        if allowsHostedAI, let endpoint = parseEndpoint {
+            do {
+                let drafts = try await extractTasks(
+                    from: safeInput,
+                    endpoint: endpoint,
+                    now: now,
+                    planningDate: planningDate,
+                    offlinePreview: offlineDrafts
+                )
+                let remote = normalizedAIItems(
+                    from: drafts,
+                    fallback: offline,
+                    input: safeInput,
+                    now: now
+                )
+                if !remote.isEmpty,
+                   isReasonableAIResult(remote, comparedTo: offline, input: safeInput, now: now) {
+                    return TaskParseResult(tasks: remote, source: .ai, message: nil)
+                }
+                rejectedHostedAI = !remote.isEmpty
+            } catch {
+                // Hosted parsing is the best path, but the preview still needs to work offline.
+            }
+        }
 
         if let drafts = await OnDeviceTaskParser.extractTasks(
             from: safeInput,
             now: now,
             planningDate: planningDate,
-            offlinePreview: []
+            offlinePreview: offlineDrafts
         ) {
-            let validationFallback = fallbackTasks(from: safeInput, now: now)
             let onDevice = normalizedAIItems(
                 from: drafts,
-                fallback: validationFallback,
+                fallback: offline,
                 input: safeInput,
                 now: now
             )
-            if !onDevice.isEmpty {
+            if !onDevice.isEmpty,
+               isReasonableAIResult(onDevice, comparedTo: offline, input: safeInput, now: now) {
                 return TaskParseResult(
                     tasks: onDevice,
                     source: .onDeviceAI,
@@ -121,52 +152,20 @@ struct AIService {
             }
         }
 
-        let offline = fallbackTasks(from: safeInput, now: now)
-        let offlineDrafts = drafts(from: offline)
-
-        guard allowsHostedAI else {
-            return TaskParseResult(
-                tasks: offline,
-                source: .offline,
-                message: "Apple Intelligence is unavailable. Used offline parser."
-            )
+        let message: String
+        if rejectedHostedAI {
+            message = "AI changed explicit times. Used offline parser."
+        } else if allowsHostedAI {
+            message = "AI parser unavailable. Used offline parser."
+        } else {
+            message = "Apple Intelligence is unavailable. Used offline parser."
         }
 
-        guard let endpoint = parseEndpoint else {
-            return TaskParseResult(tasks: offline, source: .offline, message: nil)
-        }
-
-        do {
-            let drafts = try await extractTasks(
-                from: safeInput,
-                endpoint: endpoint,
-                now: now,
-                planningDate: planningDate,
-                offlinePreview: offlineDrafts
-            )
-            let remote = taskItems(from: drafts)
-            guard !remote.isEmpty else {
-                return TaskParseResult(tasks: offline, source: .offline, message: "AI parser returned no tasks. Used offline parser.")
-            }
-            return TaskParseResult(tasks: remote, source: .ai, message: nil)
-        } catch {
-            let message: String
-            if let serviceError = error as? AIServiceError {
-                switch serviceError {
-                case .badResponse(403):
-                    message = offline.isEmpty ? "AI access is disabled for this app right now." : "AI access is disabled for this app right now. Used offline parser."
-                case .badResponse(429):
-                    message = offline.isEmpty ? "AI is being used too quickly right now." : "AI is being used too quickly right now. Used offline parser."
-                case .badResponse(503):
-                    message = offline.isEmpty ? "AI is temporarily turned off." : "AI is temporarily turned off. Used offline parser."
-                default:
-                    message = offline.isEmpty ? "AI parser unavailable." : "AI parser unavailable. Used offline parser."
-                }
-            } else {
-                message = offline.isEmpty ? "AI parser unavailable." : "AI parser unavailable. Used offline parser."
-            }
-            return TaskParseResult(tasks: offline, source: .offline, message: message)
-        }
+        return TaskParseResult(
+            tasks: offline,
+            source: .offline,
+            message: message
+        )
     }
 
     static func mockExtractTasks(from input: String) -> [TaskDraft] {
@@ -174,7 +173,7 @@ struct AIService {
     }
 
     static func taskItems(from drafts: [TaskDraft], calendar: Calendar = .current) -> [TaskItem] {
-        drafts.compactMap { draft in
+        drafts.prefix(Limits.maxParsedTasks).compactMap { draft in
             let title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !title.isEmpty else { return nil }
 
@@ -388,6 +387,60 @@ struct AIService {
             return trimmed
         }
         return String(trimmed.prefix(Limits.maxRemoteInputCharacters))
+    }
+
+    private static func isReasonableAIResult(
+        _ aiItems: [TaskItem],
+        comparedTo offlineItems: [TaskItem],
+        input: String,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
+        guard OfflineNLP.hasExplicitDayReference(input, now: now) || explicitClockTokenCount(in: input) > 0 else {
+            return true
+        }
+
+        let offlineTimed = offlineItems.compactMap(\.scheduledStart)
+        let aiTimed = aiItems.compactMap(\.scheduledStart)
+        guard !offlineTimed.isEmpty else { return true }
+        guard aiTimed.count >= max(1, offlineTimed.count - 1) else { return false }
+
+        if aiItems.count == offlineItems.count {
+            for index in aiItems.indices {
+                guard index < offlineItems.count,
+                      let expected = offlineItems[index].scheduledStart,
+                      let actual = aiItems[index].scheduledStart else {
+                    continue
+                }
+                if abs(actual.timeIntervalSince(expected)) > 2.5 * 60 * 60 {
+                    return false
+                }
+            }
+            return true
+        }
+
+        var unmatched = aiTimed
+        for expected in offlineTimed {
+            guard let matchIndex = unmatched.indices.min(by: {
+                abs(unmatched[$0].timeIntervalSince(expected)) < abs(unmatched[$1].timeIntervalSince(expected))
+            }) else {
+                return false
+            }
+
+            if abs(unmatched[matchIndex].timeIntervalSince(expected)) > 2.5 * 60 * 60 {
+                return false
+            }
+            unmatched.remove(at: matchIndex)
+        }
+
+        return true
+    }
+
+    private static func explicitClockTokenCount(in input: String) -> Int {
+        let pattern = #"(?i)\b(?:at|by|around|about|near|until|till)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return 0 }
+        let range = NSRange(location: 0, length: (input as NSString).length)
+        return regex.numberOfMatches(in: input, range: range)
     }
 
     private static func clientID() -> String {
