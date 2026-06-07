@@ -67,7 +67,7 @@ struct SettingsView: View {
             case .calendar:
                 return "Connect SchedAI to your calendar so it can read busy time and write planned tasks when enabled."
             case .privacy:
-                return "Review the choices that control AI, voice, widget data, calendar access, and what can leave the phone."
+                return "Review hosted AI Improve, voice, widget titles, calendar access, and what can leave the phone."
             case .support:
                 return "Find version details, support links, legal pages, and product information."
             }
@@ -543,8 +543,20 @@ struct SettingsView: View {
 
                 SettingsInfoRow(
                     icon: "rectangle.inset.filled",
-                    title: "Widget & Alerts",
-                    subtitle: "Widget data is shared with the extension. Alert titles stay hidden unless enabled.",
+                    title: "Widget Titles",
+                    subtitle: "Control whether SchedAI widgets show real task names or private placeholders.",
+                    color: .teal
+                )
+
+                SettingsDivider()
+
+                SettingsToggleRow(
+                    icon: app.showTaskTitlesInWidget ? "eye" : "eye.slash",
+                    title: "Always Show Titles in Widgets",
+                    subtitle: app.showTaskTitlesInWidget
+                        ? "Widgets show task names on the Home Screen and Lock Screen"
+                        : "Widgets hide task names behind private placeholders",
+                    isOn: $app.showTaskTitlesInWidget,
                     color: .teal
                 )
 
@@ -619,7 +631,7 @@ struct SettingsView: View {
         case .calendar:
             return app.calendarSyncEnabled ? "\(calendarStatusText) - \(calendarDestinationName)" : calendarStatusText
         case .privacy:
-            return app.hostedAIConsent ? "Hosted AI allowed, voice and widget controls" : "Local-first controls"
+            return app.hostedAIConsent ? "Hosted AI Improve allowed" : "Hosted AI Improve off"
         case .support:
             return "\(shortVersionString), legal, and help"
         }
