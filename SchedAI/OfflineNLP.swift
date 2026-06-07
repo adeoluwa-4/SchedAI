@@ -115,32 +115,40 @@ struct OfflineNLP {
 
     // MARK: - Public entry point
 
+    private enum ParseLimits {
+        static let maxInputCharacters = 4000
+        static let maxParsedTasks = 20
+        static let maxParsedChunks = 20
+    }
+
     static func parse(_ rawText: String, now: Date = Date()) -> [TaskItem] {
-        if shouldUseStepPipeline(rawText) {
-            let planned = parseWithStepPipeline(rawText, now: now)
+        let input = limitedInput(rawText)
+        if shouldUseStepPipeline(input) {
+            let planned = parseWithStepPipeline(input, now: now)
             if !planned.isEmpty {
                 return planned
             }
         }
-        return parseInternal(rawText, now: now, minConfidence: .medium)
+        return parseInternal(input, now: now, minConfidence: .medium)
     }
 
     /// Safer parsing: only schedules times when confidence is high.
     static func parseSafely(_ rawText: String, now: Date = Date()) -> [TaskItem] {
-        if shouldUseStepPipeline(rawText) {
-            let planned = parseWithStepPipeline(rawText, now: now)
+        let input = limitedInput(rawText)
+        if shouldUseStepPipeline(input) {
+            let planned = parseWithStepPipeline(input, now: now)
             if !planned.isEmpty {
                 var safePlanned = planned
-                applySafeAmbiguityGuard(to: &safePlanned, rawText: rawText)
+                applySafeAmbiguityGuard(to: &safePlanned, rawText: input)
                 return safePlanned
             }
         }
-        return parseInternal(rawText, now: now, minConfidence: .high)
+        return parseInternal(input, now: now, minConfidence: .high)
     }
 
     private static func parseInternal(_ rawText: String, now: Date, minConfidence: TimeConfidence) -> [TaskItem] {
         let text = normalize(rawText)
-        let chunks = splitIntoChunks(text)
+        let chunks = Array(splitIntoChunks(text).prefix(ParseLimits.maxParsedChunks))
 
         var tasks: [TaskItem] = []
         var dayContext = globalDayContextIfUnambiguous(in: text, now: now)
@@ -158,16 +166,25 @@ struct OfflineNLP {
                     tasks.append(base)
                 }
             }
+            if tasks.count >= ParseLimits.maxParsedTasks {
+                return Array(tasks.prefix(ParseLimits.maxParsedTasks))
+            }
         }
 
-        return tasks
+        return Array(tasks.prefix(ParseLimits.maxParsedTasks))
+    }
+
+    private static func limitedInput(_ rawText: String) -> String {
+        let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count > ParseLimits.maxInputCharacters else { return trimmed }
+        return String(trimmed.prefix(ParseLimits.maxInputCharacters))
     }
 
     // MARK: - Step-based pipeline
 
     private enum StepRegex {
         static let connectorRegex = try! NSRegularExpression(
-            pattern: #"(?i)\s*(?:\band\s+then\b|\band\s+after\s+that\b|\bafter\s+that\b|\bafterwards?\b|\blater\b|\bthen\b|\balso\b|\bplus\b|\bnext\b(?!\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|day|days|week|month|year|\d+\s*(?:m|min|mins?|minutes?|h|hr|hrs?|hours?)))|\band\b)\s*"#
+            pattern: #"(?i)\s*(?:\band\s+then\b|\band\s+after\s+that\b|\bafter\s+that\b|\bafterwards?\b|\blater\b(?!\s+(?:today|tonight|this\s+(?:afternoon|evening))\b)(?=\s+[a-z])|\bthen\b|\balso\b|\bplus\b|\bnext\b(?!\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|day|days|week|month|year|\d+\s*(?:m|min|mins?|minutes?|h|hr|hrs?|hours?)))|\band\b)\s*"#
         )
         static let durationRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?(\d+(?:\.\d+)?)\s*(h|hr|hrs|hours?|m|min|mins|minutes?)\b"#
@@ -177,6 +194,9 @@ struct OfflineNLP {
         )
         static let explicitTimeRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:at|by|around|about|near)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
+        )
+        static let compactTimeRegex = try! NSRegularExpression(
+            pattern: #"(?i)\b(?:at|by|around|about|near)\s*(\d{3,4})\b"#
         )
         static let untilRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:until|till)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
@@ -188,7 +208,7 @@ struct OfflineNLP {
             pattern: #"(?i)^(.*?\bfor\s+\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b)\s+([a-z].*\b\d{1,2}\s*(?:till|to|-)\s*\d{1,2}\b.*)$"#
         )
         static let rangeAndDurationCleanupRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b(?:from\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|until|to|-)\s*(?:about|around|near)?\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by|around|about|near|until|till)\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:(?:at|by|around|about|near|until|till)\s+)?(?:midnight|noon)\b"#
+            pattern: #"(?i)\b(?:from\s+)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?\s*(?:till|until|to|-)\s*(?:about|around|near)?\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?\b|\b(?:at|by|around|about|near|until|till)\s*(?:\d{1,2}(?::\d{2})?|\d{3,4})\s*(?:am|pm)?\b|\b(?:for|take|takes|lasting|lasts|last|about|around)?\s*(?:a\s+)?\d+(?:\.\d+)?\s*(?:h|hr|hrs|hours?|m|min|mins|minutes?)\b|\b(?:(?:at|by|around|about|near|until|till)\s+)?(?:midnight|noon)\b"#
         )
         static let relativeWindowRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:in|within|over)\s+(?:the\s+)?next\s+(\d+(?:\.\d+)?)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)\b"#
@@ -270,7 +290,7 @@ struct OfflineNLP {
     }
 
     private static func parseWithStepPipeline(_ rawText: String, now: Date) -> [TaskItem] {
-        let chunks = splitTasks(rawText)
+        let chunks = Array(splitTasks(rawText).prefix(ParseLimits.maxParsedChunks))
         guard !chunks.isEmpty else { return [] }
 
         var tasks: [TaskItem] = []
@@ -300,9 +320,16 @@ struct OfflineNLP {
             let estimated = max(5, timing.duration ?? 30)
             let start = timing.start
             var end = timing.end
-            let targetDay = timing.targetDay
+            let initialTargetDay = timing.targetDay
                 ?? start.map { Calendar.current.startOfDay(for: $0) }
                 ?? dayContext
+            let preferredWindow = preferredWindowIfVague(
+                in: parsedChunk,
+                targetDay: initialTargetDay,
+                now: now
+            )
+            let targetDay = initialTargetDay
+                ?? preferredWindow.map { Calendar.current.startOfDay(for: $0.start) }
 
             if let start, end == nil {
                 end = Calendar.current.date(byAdding: .minute, value: estimated, to: start)
@@ -322,10 +349,12 @@ struct OfflineNLP {
                 title: title,
                 estimatedMinutes: estimated,
                 priority: priorityResult.priority,
-                isPinned: timing.isExplicitTime,
+                isPinned: start != nil && timing.isExplicitTime,
                 targetDay: targetDay,
                 scheduledStart: start,
-                scheduledEnd: end
+                scheduledEnd: end,
+                preferredStart: start == nil ? preferredWindow?.start : nil,
+                preferredEnd: start == nil ? preferredWindow?.end : nil
             )
 
             if let rec = recResult.recurrence {
@@ -334,10 +363,13 @@ struct OfflineNLP {
             } else {
                 tasks.append(task)
             }
+            if tasks.count >= ParseLimits.maxParsedTasks {
+                break
+            }
         }
 
         enforceNonOverlappingSchedule(&tasks)
-        return tasks
+        return Array(tasks.prefix(ParseLimits.maxParsedTasks))
     }
 
     private static func splitDurationThenRangeChunk(_ chunk: String) -> [String] {
@@ -513,6 +545,18 @@ struct OfflineNLP {
                 rawHour: h,
                 minute: m,
                 ampm: ap,
+                context: working,
+                previousTaskStart: previousTaskStart,
+                globalContext: globalContext
+            )
+            start = buildDate(hour24: hour24, minute: m)
+            explicitTime = true
+        } else if let compact = StepRegex.compactTimeRegex.firstMatch(in: working, range: fullRange),
+                  let (h, m) = parseCompactTime(ns.substring(with: compact.range(at: 1))) {
+            let hour24 = resolveHour(
+                rawHour: h,
+                minute: m,
+                ampm: nil,
                 context: working,
                 previousTaskStart: previousTaskStart,
                 globalContext: globalContext
@@ -1603,6 +1647,26 @@ struct OfflineNLP {
             if let r = Range(range, in: working) { working.removeSubrange(r) }
         }
 
+        func strictDate(year: Int, month: Int, day: Int) -> Date? {
+            guard (1...12).contains(month), (1...31).contains(day) else { return nil }
+
+            var comps = DateComponents()
+            comps.year = year
+            comps.month = month
+            comps.day = day
+            comps.hour = 0
+            comps.minute = 0
+
+            guard let date = calendar.date(from: comps) else { return nil }
+            let resolved = calendar.dateComponents([.year, .month, .day], from: date)
+            guard resolved.year == year,
+                  resolved.month == month,
+                  resolved.day == day else {
+                return nil
+            }
+            return date
+        }
+
         let monthRegex = Cache.monthDayRegex
         do {
             let ns = working as NSString
@@ -1617,20 +1681,14 @@ struct OfflineNLP {
                    let day = Int(dStr) {
                     let currentYear = calendar.component(.year, from: now)
                     var year = yStr.flatMap { Int($0) } ?? currentYear
-
-                    var comps = DateComponents()
-                    comps.year = year
-                    comps.month = month
-                    comps.day = day
-                    comps.hour = 0
-                    comps.minute = 0
-
-                    if let date0 = calendar.date(from: comps) {
+                    if let date0 = strictDate(year: year, month: month, day: day) {
+                        var resolved = date0
                         if yStr == nil && calendar.startOfDay(for: date0) < calendar.startOfDay(for: now) {
                             year += 1
-                            comps.year = year
+                            guard let future = strictDate(year: year, month: month, day: day) else { return BaseDayResult(baseDay: nil, cleaned: working, hasExplicitDay: false) }
+                            resolved = future
                         }
-                        baseDay = calendar.date(from: comps)
+                        baseDay = resolved
                         explicitDay = true
                         removeMatch(match.range)
                     }
@@ -1657,18 +1715,13 @@ struct OfflineNLP {
                         year = currentYear
                     }
 
-                    var comps = DateComponents()
-                    comps.year = year
-                    comps.month = m
-                    comps.day = d
-                    comps.hour = 0
-                    comps.minute = 0
-
-                    if let date0 = calendar.date(from: comps) {
+                    if let date0 = strictDate(year: year, month: m, day: d) {
+                        var resolved = date0
                         if yStr == nil && calendar.startOfDay(for: date0) < calendar.startOfDay(for: now) {
-                            comps.year = year + 1
+                            guard let future = strictDate(year: year + 1, month: m, day: d) else { return BaseDayResult(baseDay: nil, cleaned: working, hasExplicitDay: false) }
+                            resolved = future
                         }
-                        baseDay = calendar.date(from: comps)
+                        baseDay = resolved
                         explicitDay = true
                         removeMatch(match.range)
                     }
@@ -2672,6 +2725,12 @@ struct OfflineNLP {
         if t == "had to work" {
             t = "head to work"
         }
+        t = t.replacingOccurrences(
+            of: #"(?i)^.*\bleave\s+(?:the\s+)?house\b"#,
+            with: "leave house",
+            options: .regularExpression
+        )
+        t = t.replacingOccurrences(of: #"(?i)\s+for\s+that$"#, with: "", options: .regularExpression)
 
         if let structured = structuredCalendarTitle(original: originalTitleText, cleaned: t) {
             return structured
