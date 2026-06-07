@@ -9,6 +9,7 @@ import Testing
 import Foundation
 @testable import SchedAI
 
+@Suite(.serialized)
 struct SchedAITests {
 
     private func fixedDate(_ year: Int, _ month: Int, _ day: Int, _ hour: Int = 9, _ minute: Int = 0) -> Date {
@@ -168,6 +169,31 @@ struct SchedAITests {
         #expect(tasks[6].scheduledStart.map { cal.component(.hour, from: $0) } == 21)
     }
 
+    @Test func offlineNlpParsesCompactAfternoonTravelTimes() async throws {
+        let now = fixedDate(2026, 6, 6, 9, 32)
+        let input = "I'll go to Kansas City today I'll leave the house around 10 for that then go get food around 130 then hang out around Kansas City till four and be home by six"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 4)
+        guard tasks.count == 4 else { return }
+
+        #expect(tasks.map(\.title) == [
+            "Leave house",
+            "Go get food",
+            "Hang out around kansas city",
+            "Be home"
+        ])
+
+        let cal = Calendar.current
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 10)
+        #expect(tasks[0].scheduledStart.map { cal.component(.minute, from: $0) } == 0)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 13)
+        #expect(tasks[1].scheduledStart.map { cal.component(.minute, from: $0) } == 30)
+        #expect(tasks[2].scheduledStart.map { cal.component(.hour, from: $0) } == 14)
+        #expect(tasks[2].scheduledEnd.map { cal.component(.hour, from: $0) } == 16)
+        #expect(tasks[3].scheduledStart.map { cal.component(.hour, from: $0) } == 18)
+    }
+
     @Test func offlineNlpCarriesEnrollmentContextAcrossCourses() async throws {
         let now = fixedDate(2026, 5, 2, 12, 0)
         let input = "Remind me on Monday the fourth to enroll for Jen Ba 205 and for management 596"
@@ -229,6 +255,54 @@ struct SchedAITests {
         #expect(tasks[1].scheduledStart != nil)
         #expect(tasks[1].scheduledEnd != nil)
         #expect(tasks[1].isPinned)
+    }
+
+    @Test func hostedAIImproveDefaultsOnForFirstRun() async throws {
+        UserDefaults.standard.removeObject(forKey: "hostedAIConsent")
+        let app = await MainActor.run { AppState() }
+        let allowed = await MainActor.run { app.hostedAIConsent }
+        #expect(allowed)
+    }
+
+    @Test func aiServiceCapsStructuredDrafts() async throws {
+        let drafts = (1...25).map { index in
+            TaskDraft(
+                title: "Task \(index)",
+                estimatedMinutes: 30,
+                priority: "medium",
+                targetDayISO8601: nil,
+                scheduledStartISO8601: nil,
+                scheduledEndISO8601: nil,
+                preferredStartISO8601: nil,
+                preferredEndISO8601: nil,
+                isPinned: false,
+                notes: nil
+            )
+        }
+
+        let tasks = AIService.taskItems(from: drafts)
+        #expect(tasks.count == 20)
+        #expect(tasks.first?.title == "Task 1")
+        #expect(tasks.last?.title == "Task 20")
+    }
+
+    @Test func offlineNlpCapsExpandedTaskCount() async throws {
+        let now = fixedDate(2026, 6, 5, 10, 0)
+        let input = (1...30)
+            .map { "task \($0) at \((($0 - 1) % 12) + 1)pm" }
+            .joined(separator: " then ")
+
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+        #expect(tasks.count == 20)
+    }
+
+    @Test func offlineNlpDoesNotNormalizeInvalidNumericDates() async throws {
+        let now = fixedDate(2026, 1, 1, 9, 0)
+        let tasks = OfflineNLP.parseSafely("Submit form on 2/31 at 9am", now: now)
+
+        guard let target = tasks.first?.targetDay else { return }
+        let cal = Calendar.current
+        #expect(!(cal.component(.month, from: target) == 3 && cal.component(.day, from: target) == 3))
     }
 
     @Test func offlineNlpTurnsLaterTodayIntoPreferredWindow() async throws {
