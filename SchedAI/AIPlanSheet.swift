@@ -296,7 +296,7 @@ struct AIPlanSheet: View {
                 .buttonStyle(.bordered)
                 .disabled(isPlanning)
 
-                Text("Optional. Tries Apple Intelligence on device first; asks before hosted AI.")
+                Text("Tries Apple Intelligence on device first; hosted AI Improve is ready when needed.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -561,10 +561,11 @@ struct AIPlanSheet: View {
     }
 
     private func requestAIImprove() {
+        app.hostedAIConsent = true
         Task {
             await improvePreviewWithAI(
-                allowsHostedAI: app.hostedAIConsent,
-                promptForHostedFallback: !app.hostedAIConsent
+                allowsHostedAI: true,
+                promptForHostedFallback: false
             )
         }
     }
@@ -615,7 +616,7 @@ struct AIPlanSheet: View {
                     cleaned.title = cleaned.title.trimmingCharacters(in: .whitespacesAndNewlines)
                     return cleaned.title.isEmpty ? nil : cleaned
                 }
-                cleanedPreview.forEach { app.addTask($0) }
+                app.addTasks(cleanedPreview)
                 let affectedDays = cleanedPreview.map { task in
                     if let start = task.scheduledStart {
                         return Calendar.current.startOfDay(for: start)
