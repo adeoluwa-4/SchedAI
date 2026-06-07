@@ -17,6 +17,7 @@ struct AIAddTasksSheet: View {
     @State private var isParsing: Bool = false
     @State private var parsedPreview: [TaskItem] = []
     @State private var parseStatusMessage: String? = nil
+    @State private var previewUsedAI = false
     @State private var showAIConsentSheet: Bool = false
     @State private var didLoadInitialInput = false
 
@@ -68,8 +69,7 @@ struct AIAddTasksSheet: View {
                 input = initialInput
             }
             .onChange(of: input) { _, _ in
-                parsedPreview = []
-                parseStatusMessage = nil
+                resetPreviewState()
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -92,15 +92,11 @@ struct AIAddTasksSheet: View {
         if usesAccessibilityLayout {
             VStack(spacing: 10) {
                 previewButton(disabled: isParsing || inputIsEmpty)
-                improveButton(disabled: isParsing || inputIsEmpty)
                 addAllButton
             }
         } else {
             VStack(spacing: 10) {
-                HStack(spacing: 12) {
-                    previewButton(disabled: isParsing || inputIsEmpty)
-                    improveButton(disabled: isParsing || inputIsEmpty)
-                }
+                previewButton(disabled: isParsing || inputIsEmpty)
                 addAllButton
             }
         }
@@ -110,25 +106,12 @@ struct AIAddTasksSheet: View {
         Button {
             Task { await parsePreview() }
         } label: {
-            Label("Preview", systemImage: "eye")
+            Label("Preview", systemImage: "wand.and.stars")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
         }
-        .buttonStyle(.bordered)
-        .disabled(disabled)
-    }
-
-    private func improveButton(disabled: Bool) -> some View {
-        Button {
-            requestAIImprove()
-        } label: {
-            Label(isParsing ? "Using AI" : "Improve", systemImage: "sparkles")
-                .font(.subheadline.weight(.semibold))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity)
-        }
-        .buttonStyle(.bordered)
+        .buttonStyle(.borderedProminent)
         .disabled(disabled)
     }
 
@@ -146,7 +129,7 @@ struct AIAddTasksSheet: View {
     }
 
     private var statusText: some View {
-        Text(parseStatusMessage ?? "Preview stays on device. AI Improve tries Apple Intelligence locally before hosted AI.")
+        Text(parseStatusMessage ?? "Preview stays on device. Improve with AI tries Apple Intelligence locally before hosted AI.")
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -169,9 +152,37 @@ struct AIAddTasksSheet: View {
 
     private var previewSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Preview")
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Text("\(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s") detected")
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Text(previewUsedAI ? "AI improved" : "Offline")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Color.secondary.opacity(0.16)))
+            }
+
+            if !previewUsedAI {
+                Button {
+                    requestAIImprove()
+                } label: {
+                    Label(isParsing ? "Using AI" : "Improve with AI", systemImage: "sparkles")
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .disabled(isParsing || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Text("Tries Apple Intelligence on device first; hosted AI Improve is ready when needed.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             VStack(spacing: 10) {
                 ForEach(parsedPreview) { task in
@@ -261,6 +272,7 @@ struct AIAddTasksSheet: View {
         let result = AIService.parseTasksOffline(from: trimmed, now: Date())
         parsedPreview = result.tasks
         parseStatusMessage = "Offline preview. No credits used."
+        previewUsedAI = false
     }
 
     private func improvePreviewWithAI(
@@ -280,6 +292,7 @@ struct AIAddTasksSheet: View {
             allowsHostedAI: allowsHostedAI ?? app.hostedAIConsent
         )
         parsedPreview = result.tasks
+        previewUsedAI = result.source.isAIEnhanced
         parseStatusMessage = result.message ?? (result.source.isAIEnhanced ? "AI improved this preview." : "Offline preview. No credits used.")
 
         if promptForHostedFallback, result.source == .offline {
@@ -288,10 +301,11 @@ struct AIAddTasksSheet: View {
     }
 
     private func requestAIImprove() {
+        app.hostedAIConsent = true
         Task {
             await improvePreviewWithAI(
-                allowsHostedAI: app.hostedAIConsent,
-                promptForHostedFallback: !app.hostedAIConsent
+                allowsHostedAI: true,
+                promptForHostedFallback: false
             )
         }
     }
@@ -299,12 +313,16 @@ struct AIAddTasksSheet: View {
     private func addAllAndDismiss() {
         guard !parsedPreview.isEmpty else { return }
 
-        for t in parsedPreview {
-            app.addTask(t)
-        }
+        app.addTasks(parsedPreview)
 
         onAddComplete()
         dismiss()
+    }
+
+    private func resetPreviewState() {
+        parsedPreview = []
+        parseStatusMessage = nil
+        previewUsedAI = false
     }
 
     private func time(_ d: Date) -> String {
