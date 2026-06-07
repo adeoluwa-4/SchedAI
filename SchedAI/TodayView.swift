@@ -10,6 +10,7 @@ struct TodayView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var showAI = false
     @State private var showQuickAdd = false
+    @State private var quickAddNavigationTitle = "Quick Add"
     @State private var autoStartOfflineNLPFromWidget = false
     @State private var showOverflowBanner = false
     @State private var overflowHideWorkItem: DispatchWorkItem? = nil
@@ -153,7 +154,7 @@ struct TodayView: View {
                 .environmentObject(app)
         }
         .sheet(isPresented: $showQuickAdd) {
-            AIAddTasksSheet(navigationTitle: "Quick Add")
+            AIAddTasksSheet(navigationTitle: quickAddNavigationTitle)
                 .environmentObject(app)
         }
         .sheet(isPresented: $showCalendar) {
@@ -390,7 +391,7 @@ struct TodayView: View {
                             
                             Button {
                                 Haptics.medium()
-                                openQuickAddSheet()
+                                openQuickAddSheet(title: "Quick Add")
                             } label: {
                                 Label("Quick Add", systemImage: "plus")
                                     .font(.subheadline)
@@ -452,7 +453,7 @@ struct TodayView: View {
                             
                             Button {
                                 Haptics.medium()
-                                openQuickAddSheet()
+                                openQuickAddSheet(title: "Add More")
                             } label: {
                                 Label("Add More", systemImage: "plus")
                                     .font(.subheadline)
@@ -706,13 +707,14 @@ struct TodayView: View {
         showAI = true
     }
 
-    private func openQuickAddSheet() {
+    private func openQuickAddSheet(title: String = "Quick Add") {
+        quickAddNavigationTitle = title
         showQuickAdd = true
     }
 
     private func handleWidgetVoiceRequestIfNeeded() {
         guard app.consumeWidgetVoiceRequest() else { return }
-        openOfflineNLPSheet(autoStartRecording: true)
+        openOfflineNLPSheet(autoStartRecording: false)
     }
     
     private func formattedDate() -> String {
