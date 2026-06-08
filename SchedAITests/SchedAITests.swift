@@ -194,6 +194,79 @@ struct SchedAITests {
         #expect(tasks[3].scheduledStart.map { cal.component(.hour, from: $0) } == 18)
     }
 
+    @Test func offlineNlpUnderstandsTravelCompactClockSequence() async throws {
+        let now = fixedDate(2026, 6, 6, 5, 45)
+        let input = "I need to be at the airport by 645 then fly out at 830 and land around 1045"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+        #expect(tasks.map(\.title) == ["Be at the airport", "Fly out", "Land"])
+
+        let cal = Calendar.current
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 6)
+        #expect(tasks[0].scheduledStart.map { cal.component(.minute, from: $0) } == 45)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 8)
+        #expect(tasks[1].scheduledStart.map { cal.component(.minute, from: $0) } == 30)
+        #expect(tasks[2].scheduledStart.map { cal.component(.hour, from: $0) } == 10)
+        #expect(tasks[2].scheduledStart.map { cal.component(.minute, from: $0) } == 45)
+    }
+
+    @Test func offlineNlpUnderstandsBeforeAndAfterWorkWindows() async throws {
+        SchedulingPreferenceStore.resetForTesting()
+        defer { SchedulingPreferenceStore.resetForTesting() }
+
+        let now = fixedDate(2026, 6, 6, 6, 0)
+        let input = "drop off package before work then pick up prescription after work"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+        #expect(tasks.map(\.title) == ["Drop off package", "Pick up prescription"])
+        #expect(tasks[0].scheduledStart == nil)
+        #expect(tasks[1].scheduledStart == nil)
+
+        let cal = Calendar.current
+        #expect(tasks[0].preferredStart.map { cal.component(.hour, from: $0) } == 7)
+        #expect(tasks[0].preferredEnd.map { cal.component(.hour, from: $0) } == 9)
+        #expect(tasks[1].preferredStart.map { cal.component(.hour, from: $0) } == 17)
+        #expect(tasks[1].preferredEnd.map { cal.component(.hour, from: $0) } == 20)
+    }
+
+    @Test func offlineNlpUnderstandsSpokenClockAndEndOfDayDeadline() async throws {
+        let now = fixedDate(2026, 6, 6, 9, 0)
+        let input = "finish lab report by end of day then meet Jordan at one thirty and workout at quarter to seven"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+        #expect(tasks.map(\.title) == ["Finish lab report", "Meet Jordan", "Workout"])
+
+        let cal = Calendar.current
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 17)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 13)
+        #expect(tasks[1].scheduledStart.map { cal.component(.minute, from: $0) } == 30)
+        #expect(tasks[2].scheduledStart.map { cal.component(.hour, from: $0) } == 18)
+        #expect(tasks[2].scheduledStart.map { cal.component(.minute, from: $0) } == 45)
+    }
+
+    @Test func offlineNlpCarriesTomorrowAcrossReminderSpeech() async throws {
+        let now = fixedDate(2026, 6, 6, 10, 0)
+        let input = "can you remind me to turn in my paper tomorrow morning and text Sarah after class"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+        #expect(tasks.map(\.title) == ["Turn in my paper", "Text Sarah"])
+
+        let cal = Calendar.current
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now))!
+        #expect(tasks[0].targetDay.map { cal.isDate($0, inSameDayAs: tomorrow) } == true)
+        #expect(tasks[1].targetDay.map { cal.isDate($0, inSameDayAs: tomorrow) } == true)
+        #expect(tasks[0].preferredStart.map { cal.component(.hour, from: $0) } == 9)
+        #expect(tasks[1].preferredStart.map { cal.component(.hour, from: $0) } == 15)
+    }
+
     @Test func offlineNlpCarriesEnrollmentContextAcrossCourses() async throws {
         let now = fixedDate(2026, 5, 2, 12, 0)
         let input = "Remind me on Monday the fourth to enroll for Jen Ba 205 and for management 596"
