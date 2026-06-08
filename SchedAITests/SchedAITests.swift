@@ -267,6 +267,154 @@ struct SchedAITests {
         #expect(tasks[1].preferredStart.map { cal.component(.hour, from: $0) } == 15)
     }
 
+    @Test func offlineNlpUnderstandsTodoistStyleAbbreviatedDates() async throws {
+        let now = fixedDate(2026, 6, 1, 10, 0) // Monday
+        let tasks = OfflineNLP.parseSafely("club meeting Fri @ 7pm", now: now)
+
+        #expect(tasks.count == 1)
+        let task = try #require(tasks.first)
+        #expect(task.title == "Club meeting")
+
+        let start = try #require(task.scheduledStart)
+        let cal = Calendar.current
+        #expect(cal.component(.weekday, from: start) == 6)
+        #expect(cal.component(.hour, from: start) == 19)
+    }
+
+    @Test func offlineNlpUnderstandsTomorrowShorthandAndLooseTimes() async throws {
+        let now = fixedDate(2026, 6, 6, 10, 0)
+        let input = "dentist tom 12:00 then meeting tomorrow 4pm then dinner around like 7ish"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+        #expect(tasks.map(\.title) == ["Dentist", "Meeting", "Dinner"])
+
+        let cal = Calendar.current
+        let tomorrow = cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: now))!
+        #expect(tasks[0].scheduledStart.map { cal.isDate($0, inSameDayAs: tomorrow) } == true)
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 12)
+        #expect(tasks[1].scheduledStart.map { cal.isDate($0, inSameDayAs: tomorrow) } == true)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 16)
+        #expect(tasks[2].scheduledStart.map { cal.component(.hour, from: $0) } == 19)
+    }
+
+    @Test func offlineNlpUnderstandsMealRelativeWindows() async throws {
+        SchedulingPreferenceStore.resetForTesting()
+        defer { SchedulingPreferenceStore.resetForTesting() }
+
+        let now = fixedDate(2026, 6, 6, 8, 0)
+        let input = "study after lunch and clean room before dinner"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+        #expect(tasks.map(\.title) == ["Study", "Clean room"])
+        #expect(tasks[0].scheduledStart == nil)
+        #expect(tasks[1].scheduledStart == nil)
+
+        let cal = Calendar.current
+        #expect(tasks[0].preferredStart.map { cal.component(.hour, from: $0) } == 13)
+        #expect(tasks[0].preferredEnd.map { cal.component(.hour, from: $0) } == 15)
+        #expect(tasks[1].preferredStart.map { cal.component(.hour, from: $0) } == 16)
+        #expect(tasks[1].preferredEnd.map { cal.component(.hour, from: $0) } == 18)
+    }
+
+    @Test func offlineNlpUnderstandsWeekendPhrases() async throws {
+        let now = fixedDate(2026, 6, 3, 10, 0) // Wednesday
+        let tasks = OfflineNLP.parseSafely("wash car this weekend and visit grandma next weekend", now: now)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+        #expect(tasks.map(\.title) == ["Wash car", "Visit grandma"])
+
+        let cal = Calendar.current
+        #expect(tasks[0].targetDay.map { cal.component(.weekday, from: $0) } == 7)
+        #expect(tasks[0].targetDay.map { cal.component(.day, from: $0) } == 6)
+        #expect(tasks[1].targetDay.map { cal.component(.weekday, from: $0) } == 7)
+        #expect(tasks[1].targetDay.map { cal.component(.day, from: $0) } == 13)
+    }
+
+    @Test func offlineNlpUnderstandsNextFridayNightAsPreferredWindow() async throws {
+        let now = fixedDate(2026, 6, 1, 10, 0) // Monday
+        let tasks = OfflineNLP.parseSafely("movie next Friday night", now: now)
+
+        #expect(tasks.count == 1)
+        let task = try #require(tasks.first)
+        #expect(task.title == "Movie")
+
+        let cal = Calendar.current
+        #expect(task.targetDay.map { cal.component(.weekday, from: $0) } == 6)
+        #expect(task.preferredStart.map { cal.component(.hour, from: $0) } == 19)
+        #expect(task.preferredEnd.map { cal.component(.hour, from: $0) } == 22)
+    }
+
+    @Test func offlineNlpUnderstandsBusinessDayAndLaterThisWeek() async throws {
+        let now = fixedDate(2026, 6, 3, 10, 0) // Wednesday
+        let input = "file expense report next business day and review budget later this week"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+        #expect(tasks.map(\.title) == ["File expense report", "Review budget"])
+
+        let cal = Calendar.current
+        #expect(tasks[0].targetDay.map { cal.component(.weekday, from: $0) } == 5)
+        #expect(tasks[0].targetDay.map { cal.component(.day, from: $0) } == 4)
+        #expect(tasks[1].targetDay.map { cal.component(.weekday, from: $0) } == 6)
+        #expect(tasks[1].targetDay.map { cal.component(.day, from: $0) } == 5)
+    }
+
+    @Test func offlineNlpExpandsWeekdayRecurringTasks() async throws {
+        let now = fixedDate(2026, 6, 1, 8, 0) // Monday
+        let tasks = OfflineNLP.parseSafely("weekdays standup at 9a", now: now)
+
+        #expect(tasks.count == 20)
+        #expect(tasks.allSatisfy { $0.title == "Standup" })
+
+        let cal = Calendar.current
+        let firstWeekdays = Set(tasks.prefix(5).compactMap { task in
+            task.scheduledStart.map { cal.component(.weekday, from: $0) }
+        })
+        #expect(firstWeekdays == Set([2, 3, 4, 5, 6]))
+        #expect(tasks.allSatisfy { task in
+            task.scheduledStart.map { cal.component(.hour, from: $0) } == 9
+        })
+    }
+
+    @Test func offlineNlpExpandsMultipleWeekdayRecurringTasks() async throws {
+        let now = fixedDate(2026, 6, 1, 8, 0) // Monday
+        let tasks = OfflineNLP.parseSafely("every Tuesday and Thursday workout at 7p", now: now)
+
+        #expect(tasks.count == 20)
+        #expect(tasks.allSatisfy { $0.title == "Workout" })
+
+        let cal = Calendar.current
+        let firstWeekdays = tasks.prefix(2).compactMap { task in
+            task.scheduledStart.map { cal.component(.weekday, from: $0) }
+        }
+        #expect(firstWeekdays == [3, 5])
+        #expect(tasks.allSatisfy { task in
+            task.scheduledStart.map { cal.component(.hour, from: $0) } == 19
+        })
+    }
+
+    @Test func offlineNlpUnderstandsEodAndNoonOnWeekday() async throws {
+        let now = fixedDate(2026, 6, 1, 9, 0) // Monday
+        let input = "send invoice eod Friday and lunch with Maya friday noon"
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 2)
+        guard tasks.count == 2 else { return }
+        #expect(tasks.map(\.title) == ["Send invoice", "Lunch with Maya"])
+
+        let cal = Calendar.current
+        #expect(tasks[0].scheduledStart.map { cal.component(.weekday, from: $0) } == 6)
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 17)
+        #expect(tasks[1].scheduledStart.map { cal.component(.weekday, from: $0) } == 6)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 12)
+    }
+
     @Test func offlineNlpCarriesEnrollmentContextAcrossCourses() async throws {
         let now = fixedDate(2026, 5, 2, 12, 0)
         let input = "Remind me on Monday the fourth to enroll for Jen Ba 205 and for management 596"
