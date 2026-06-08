@@ -555,6 +555,47 @@ struct SchedAITests {
         #expect(firstWeekendSet == Set([1, 7]))
     }
 
+    @Test func offlineNlpExpandsClassDayShorthand() async throws {
+        let now = fixedDate(2026, 6, 1, 7, 0) // Monday
+        let mwf = OfflineNLP.parseSafely("calc class MWF at 10", now: now)
+        let tth = OfflineNLP.parseSafely("chem lab TTh 2:30-4:20", now: now)
+
+        #expect(mwf.count == 20)
+        #expect(mwf.allSatisfy { $0.title == "Calc class" })
+        #expect(tth.count == 20)
+        #expect(tth.allSatisfy { $0.title == "Chem lab" })
+
+        let cal = Calendar.current
+        let mwfWeekdays = Set(mwf.prefix(3).compactMap { task in
+            task.scheduledStart.map { cal.component(.weekday, from: $0) }
+        })
+        let tthWeekdays = Set(tth.prefix(2).compactMap { task in
+            task.scheduledStart.map { cal.component(.weekday, from: $0) }
+        })
+        let firstMWF = try #require(mwf.first)
+        let firstTTh = try #require(tth.first)
+        #expect(mwfWeekdays == Set([2, 4, 6]))
+        #expect(tthWeekdays == Set([3, 5]))
+        #expect(firstMWF.scheduledStart.map { cal.component(.hour, from: $0) } == 10)
+        #expect(firstTTh.scheduledStart.map { cal.component(.hour, from: $0) } == 14)
+        #expect(firstTTh.scheduledEnd.map { cal.component(.hour, from: $0) } == 16)
+    }
+
+    @Test func offlineNlpUnderstandsNumericSchoolDeadlines() async throws {
+        let now = fixedDate(2026, 6, 1, 10, 0)
+        let tasks = OfflineNLP.parseSafely("history paper due 9/1 by 11:59", now: now)
+
+        #expect(tasks.count == 1)
+        let task = try #require(tasks.first)
+        #expect(task.title == "History paper")
+
+        let cal = Calendar.current
+        #expect(task.scheduledStart.map { cal.component(.month, from: $0) } == 9)
+        #expect(task.scheduledStart.map { cal.component(.day, from: $0) } == 1)
+        #expect(task.scheduledStart.map { cal.component(.hour, from: $0) } == 23)
+        #expect(task.scheduledStart.map { cal.component(.minute, from: $0) } == 59)
+    }
+
     @Test func offlineNlpCarriesEnrollmentContextAcrossCourses() async throws {
         let now = fixedDate(2026, 5, 2, 12, 0)
         let input = "Remind me on Monday the fourth to enroll for Jen Ba 205 and for management 596"
