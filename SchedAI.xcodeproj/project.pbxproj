@@ -8,9 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		6A1FA3712F92FB7A00B1B49C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */; };
-		6A1FA3722F92FB7A00B1B49C /* SwiftUI.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6A1FA3742F92FB7C00B1B49C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */; };
-		6A1FA3752F92FB7C00B1B49C /* WidgetKit.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		6AEC17302F92C4F300FC61A5 /* SchedAI-WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
@@ -39,18 +37,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		6A1FA3732F92FB7A00B1B49C /* Embed Frameworks */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = "";
-			dstSubfolderSpec = 10;
-			files = (
-				6A1FA3722F92FB7A00B1B49C /* SwiftUI.framework in Embed Frameworks */,
-				6A1FA3752F92FB7C00B1B49C /* WidgetKit.framework in Embed Frameworks */,
-			);
-			name = "Embed Frameworks";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		6AA3AC122F44BB5B003693DD /* Embed Foundation Extensions */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -187,7 +173,6 @@
 				6AEC17172F92C4EF00FC61A5 /* Sources */,
 				6AEC17182F92C4EF00FC61A5 /* Frameworks */,
 				6AEC17192F92C4EF00FC61A5 /* Resources */,
-				6A1FA3732F92FB7A00B1B49C /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
