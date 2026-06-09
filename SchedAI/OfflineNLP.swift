@@ -287,7 +287,17 @@ struct OfflineNLP {
 
         return chunks
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            .filter { !$0.isEmpty && !isDanglingSpeechFragment($0) }
+    }
+
+    private static func isDanglingSpeechFragment(_ text: String) -> Bool {
+        let normalized = normalizeInput(text).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return true }
+
+        return normalized.range(
+            of: #"(?i)\b(?:i['’]?ll|i\s+will|i['’]?m|i\s+am)\s*$"#,
+            options: .regularExpression
+        ) != nil
     }
 
     static func hasExplicitDayReference(_ text: String, now: Date = Date()) -> Bool {
