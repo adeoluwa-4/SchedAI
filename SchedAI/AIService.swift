@@ -103,7 +103,31 @@ struct AIService {
         let safeInput = remoteSafeInput(input)
         let offline = fallbackTasks(from: safeInput, now: now)
         let offlineDrafts = drafts(from: offline)
+        var rejectedOnDeviceAI = false
         var rejectedHostedAI = false
+
+        if let drafts = await OnDeviceTaskParser.extractTasks(
+            from: safeInput,
+            now: now,
+            planningDate: planningDate,
+            offlinePreview: offlineDrafts
+        ) {
+            let onDevice = normalizedAIItems(
+                from: drafts,
+                fallback: offline,
+                input: safeInput,
+                now: now
+            )
+            if !onDevice.isEmpty,
+               isReasonableAIResult(onDevice, comparedTo: offline, input: safeInput, now: now) {
+                return TaskParseResult(
+                    tasks: onDevice,
+                    source: .onDeviceAI,
+                    message: "Improved on device with Apple Intelligence."
+                )
+            }
+            rejectedOnDeviceAI = !onDevice.isEmpty
+        }
 
         if allowsHostedAI, let endpoint = parseEndpoint {
             do {
@@ -126,37 +150,19 @@ struct AIService {
                 }
                 rejectedHostedAI = !remote.isEmpty
             } catch {
-                // Hosted parsing is the best path, but the preview still needs to work offline.
-            }
-        }
-
-        if let drafts = await OnDeviceTaskParser.extractTasks(
-            from: safeInput,
-            now: now,
-            planningDate: planningDate,
-            offlinePreview: offlineDrafts
-        ) {
-            let onDevice = normalizedAIItems(
-                from: drafts,
-                fallback: offline,
-                input: safeInput,
-                now: now
-            )
-            if !onDevice.isEmpty,
-               isReasonableAIResult(onDevice, comparedTo: offline, input: safeInput, now: now) {
-                return TaskParseResult(
-                    tasks: onDevice,
-                    source: .onDeviceAI,
-                    message: "Improved on device with Apple Intelligence."
-                )
+                // Hosted AI is a fallback after local intelligence; keep the preview usable offline.
             }
         }
 
         let message: String
-        if rejectedHostedAI {
+        if rejectedOnDeviceAI && rejectedHostedAI {
+            message = "AI changed explicit times. Used offline parser."
+        } else if rejectedOnDeviceAI {
+            message = allowsHostedAI ? "Apple Intelligence changed explicit times. Tried hosted AI, then used offline parser." : "Apple Intelligence changed explicit times. Used offline parser."
+        } else if rejectedHostedAI {
             message = "AI changed explicit times. Used offline parser."
         } else if allowsHostedAI {
-            message = "AI parser unavailable. Used offline parser."
+            message = "Apple Intelligence and hosted AI unavailable. Used offline parser."
         } else {
             message = "Apple Intelligence is unavailable. Used offline parser."
         }
