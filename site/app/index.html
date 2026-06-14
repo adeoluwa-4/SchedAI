@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>SchedAI | Web Planner</title>
+    <meta name="description" content="SchedAI turns messy task notes into a clear daily schedule with AI parsing, reminders, task editing, and calendar export.">
+    <meta name="robots" content="index,follow">
+    <meta property="og:title" content="SchedAI Web Planner">
+    <meta property="og:description" content="A browser-native SchedAI planner for turning tasks into a calm day plan.">
+    <meta property="og:image" content="https://schedai-snowy.vercel.app/og.png">
+    <meta property="og:url" content="https://schedai-snowy.vercel.app/app/">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="SchedAI Web Planner">
+    <meta name="twitter:description" content="Plan today from plain language, then edit, schedule, remind, and export.">
+    <meta name="twitter:image" content="https://schedai-snowy.vercel.app/og.png">
+    <link rel="icon" href="/favicon.png">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,500,0,0">
+    <link rel="preload" href="/app.css" as="style">
+    <link rel="stylesheet" href="/app.css">
+  </head>
+  <body>
+    <div id="app" class="app-shell" data-auth="locked">
+      <aside class="sidebar" aria-label="Primary">
+        <a class="brand" href="/" aria-label="SchedAI home">
+          <img src="/favicon.png" alt="" class="brand-icon">
+          <span>
+            <strong>SchedAI</strong>
+            <small>Web planner</small>
+          </span>
+        </a>
+
+        <nav class="nav-list">
+          <a href="#today" class="nav-item is-active" data-nav="today">
+            <span class="icon" aria-hidden="true">calendar_today</span>
+            Today
+          </a>
+          <a href="#tasks" class="nav-item" data-nav="tasks">
+            <span class="icon" aria-hidden="true">checklist</span>
+            Tasks
+          </a>
+          <a href="#settings" class="nav-item" data-nav="settings">
+            <span class="icon" aria-hidden="true">tune</span>
+            Settings
+          </a>
+        </nav>
+
+        <section class="sidebar-card">
+          <div class="mini-label">Plan progress</div>
+          <strong id="sidebar-progress">0 of 0 done</strong>
+          <div class="progress-track" aria-hidden="true"><span id="sidebar-progress-bar"></span></div>
+        </section>
+
+        <section class="sidebar-card muted-card">
+          <div class="mini-label">Privacy mode</div>
+          <p id="privacy-summary">Hosted AI is optional. Your plan is saved in this browser.</p>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="date-line" id="date-line"></p>
+            <h1 id="greeting">Plan today</h1>
+          </div>
+
+          <div class="account-bar">
+            <button class="ghost-button" id="theme-toggle" type="button" aria-label="Toggle theme">
+              <span class="icon" aria-hidden="true">dark_mode</span>
+            </button>
+            <button class="apple-button" id="apple-sign-in" type="button">
+              <span class="apple-mark" aria-hidden="true"></span>
+              <span id="apple-button-label">Sign in with Apple</span>
+            </button>
+            <button class="ghost-button hidden" id="sign-out" type="button">Sign out</button>
+          </div>
+        </header>
+
+        <section class="login-panel" id="login-panel" aria-labelledby="login-title">
+          <div class="login-copy">
+            <img src="/media/logo.png" alt="SchedAI" class="login-logo">
+            <h2 id="login-title">Start with Apple, then plan the day.</h2>
+            <p>SchedAI keeps your task list in this browser, uses hosted AI only when enabled, and lets you turn a rough brain dump into a real schedule.</p>
+          </div>
+          <div class="login-actions">
+            <button class="apple-button large" id="apple-sign-in-gate" type="button">
+              <span class="apple-mark" aria-hidden="true"></span>
+              <span>Continue with Apple</span>
+            </button>
+            <label class="local-name-field">
+              <span>Apple display name</span>
+              <input id="local-name-input" type="text" autocomplete="name" placeholder="Your name">
+            </label>
+            <button class="text-button" id="local-apple-name" type="button">Use Apple name locally</button>
+            <p id="auth-message" role="status"></p>
+          </div>
+        </section>
+
+        <section class="content-grid" id="today" aria-label="SchedAI planner">
+          <div class="primary-column">
+            <section class="panel command-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="mini-label">Ask SchedAI</span>
+                  <h2>Brain dump to plan</h2>
+                </div>
+                <span class="status-pill" id="ai-mode-pill">Hosted AI ready</span>
+              </div>
+              <label class="sr-only" for="brain-dump">Task text</label>
+              <textarea id="brain-dump" rows="5" placeholder="Example: finish calculus homework by 4, study biology for 45 minutes, email advisor, gym around 6"></textarea>
+              <div class="command-actions">
+                <button class="primary-button" id="improve-button" type="button">
+                  <span class="icon" aria-hidden="true">auto_awesome</span>
+                  Improve
+                </button>
+                <button class="secondary-button" id="plan-button" type="button">
+                  <span class="icon" aria-hidden="true">event_available</span>
+                  Plan today
+                </button>
+                <button class="ghost-button" id="add-blank-task" type="button">
+                  <span class="icon" aria-hidden="true">add</span>
+                  Add task
+                </button>
+              </div>
+              <p class="helper-text" id="parser-status">Offline parsing runs first. Improve can call the hosted parser when enabled.</p>
+            </section>
+
+            <section class="panel schedule-panel">
+              <div class="panel-heading">
+                <div>
+                  <span class="mini-label">Today</span>
+                  <h2>Schedule</h2>
+                </div>
+                <button class="secondary-button compact" id="export-calendar" type="button">
+                  <span class="icon" aria-hidden="true">download</span>
+                  Calendar file
+                </button>
+              </div>
+              <div class="timeline" id="timeline"></div>
+            </section>
+          </div>
+
+          <div class="secondary-column">
+            <section class="panel stats-panel">
+              <div class="stat">
+                <span>Scheduled</span>
+                <strong id="scheduled-count">0</strong>
+              </div>
+              <div class="stat">
+                <span>Open</span>
+                <strong id="open-count">0</strong>
+              </div>
+              <div class="stat">
+                <span>Done</span>
+                <strong id="done-count">0</strong>
+              </div>
+            </section>
+
+            <section class="panel" id="tasks">
+              <div class="panel-heading">
+                <div>
+                  <span class="mini-label">Tasks</span>
+                  <h2>Plan preview</h2>
+                </div>
+                <select id="task-filter" aria-label="Filter tasks">
+                  <option value="all">All</option>
+                  <option value="open">Open</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="done">Done</option>
+                  <option value="high">High priority</option>
+                </select>
+              </div>
+              <div class="task-list" id="task-list"></div>
+            </section>
+
+            <section class="panel" id="settings">
+              <div class="panel-heading">
+                <div>
+                  <span class="mini-label">Settings</span>
+                  <h2>Planning controls</h2>
+                </div>
+              </div>
+
+              <div class="settings-grid">
+                <label class="setting-row">
+                  <span>
+                    <strong>Work window</strong>
+                    <small>Auto-schedule inside selected hours</small>
+                  </span>
+                  <input id="work-window-enabled" type="checkbox">
+                </label>
+                <div class="time-row">
+                  <label>Start <input id="work-start" type="time"></label>
+                  <label>End <input id="work-end" type="time"></label>
+                </div>
+                <label class="setting-row">
+                  <span>
+                    <strong>Reminders</strong>
+                    <small id="reminder-copy">Browser notifications before tasks start</small>
+                  </span>
+                  <input id="reminders-enabled" type="checkbox">
+                </label>
+                <label class="range-row">
+                  <span>Lead time</span>
+                  <input id="reminder-lead" type="range" min="1" max="60" step="1">
+                  <strong id="reminder-lead-label">5 min</strong>
+                </label>
+                <label class="setting-row">
+                  <span>
+                    <strong>Hosted AI Improve</strong>
+                    <small>Send task text to SchedAI parser when you tap Improve</small>
+                  </span>
+                  <input id="hosted-ai" type="checkbox">
+                </label>
+                <label class="setting-row">
+                  <span>
+                    <strong>Private reminders</strong>
+                    <small>Hide task titles in notification bodies</small>
+                  </span>
+                  <input id="private-reminders" type="checkbox">
+                </label>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="task-template">
+      <article class="task-card">
+        <button class="done-toggle" type="button" aria-label="Toggle complete"></button>
+        <div class="task-body">
+          <input class="task-title" type="text" aria-label="Task title">
+          <div class="task-meta">
+            <select class="task-priority" aria-label="Priority">
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <label><input class="task-minutes" type="number" min="5" max="600" step="5" aria-label="Estimated minutes"> min</label>
+            <label class="pin-label"><input class="task-pinned" type="checkbox"> Pinned</label>
+            <input class="task-time" type="time" aria-label="Scheduled start">
+          </div>
+        </div>
+        <div class="task-actions">
+          <button class="icon-button move-up" type="button" aria-label="Move task up"><span class="icon">arrow_upward</span></button>
+          <button class="icon-button move-down" type="button" aria-label="Move task down"><span class="icon">arrow_downward</span></button>
+          <button class="icon-button delete-task" type="button" aria-label="Delete task"><span class="icon">delete</span></button>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js" defer></script>
+  </body>
+</html>
