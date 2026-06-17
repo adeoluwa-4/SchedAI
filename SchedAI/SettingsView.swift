@@ -79,6 +79,8 @@ struct SettingsView: View {
     @Environment(\.colorScheme) private var scheme
     @State private var calendarToastMessage: String? = nil
     @State private var signInMessage: String? = nil
+    @State private var accountDeletionMessage: String? = nil
+    @State private var showDeleteAccountConfirmation: Bool = false
     @State private var showAIConsentSheet: Bool = false
 #if canImport(AuthenticationServices)
     @State private var appleSignIn = AppleIDSignInCoordinator()
@@ -133,6 +135,23 @@ struct SettingsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(signInMessage ?? "")
+            }
+            .alert("Delete Account?", isPresented: $showDeleteAccountConfirmation) {
+                Button("Delete Account", role: .destructive) {
+                    app.deleteAccountAndLocalData()
+                    accountDeletionMessage = "Your SchedAI account and local data have been deleted."
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This permanently deletes your local profile, tasks, reminders, widget data, and SchedAI calendar events from this device.")
+            }
+            .alert("Account Deleted", isPresented: Binding(
+                get: { accountDeletionMessage != nil },
+                set: { if !$0 { accountDeletionMessage = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(accountDeletionMessage ?? "")
             }
             .overlay(alignment: .top) {
                 if let message = calendarToastMessage {
@@ -345,6 +364,26 @@ struct SettingsView: View {
                     }
                 }
 #endif
+            }
+
+            SettingsGroupCard(icon: "trash", title: "Account Deletion", color: .red) {
+                SettingsInfoRow(
+                    icon: "lock.shield",
+                    title: "Delete Account and Data",
+                    subtitle: "Remove your local profile and all SchedAI data from this device.",
+                    color: .red
+                )
+
+                SettingsDivider()
+
+                SettingsActionRow(
+                    icon: "trash",
+                    title: "Delete Account and Data",
+                    subtitle: "Permanently deletes tasks, reminders, widget data, and local personalization.",
+                    color: .red
+                ) {
+                    showDeleteAccountConfirmation = true
+                }
             }
         }
     }
