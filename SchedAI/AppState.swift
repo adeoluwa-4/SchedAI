@@ -36,7 +36,6 @@ final class AppState: ObservableObject {
         static let workEnd = "workEnd"
         static let unfinishedTaskPolicy = "unfinishedTaskPolicy"
         static let hostedAIConsent = "hostedAIConsent"
-        static let faceIDEnabled = "faceIDEnabled"
     }
 
     private enum WidgetBridge {
@@ -131,12 +130,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    @Published var faceIDEnabled: Bool {
-        didSet {
-            UserDefaults.standard.set(faceIDEnabled, forKey: DefaultsKey.faceIDEnabled)
-        }
-    }
-
     @Published var theme: AppTheme {
         didSet {
             UserDefaults.standard.set(theme.rawValue, forKey: DefaultsKey.theme)
@@ -226,7 +219,6 @@ final class AppState: ObservableObject {
         self.unfinishedTaskPolicy = UnfinishedTaskPolicy(rawValue: unfinishedRaw) ?? .askMe
         // Default ON so Improve can use hosted AI immediately when local options need help.
         self.hostedAIConsent = (defaults.object(forKey: DefaultsKey.hostedAIConsent) as? Bool) ?? true
-        self.faceIDEnabled = (defaults.object(forKey: DefaultsKey.faceIDEnabled) as? Bool) ?? false
         self.workStart = (defaults.object(forKey: DefaultsKey.workStart) as? Date) ?? workStart
         self.workEnd = (defaults.object(forKey: DefaultsKey.workEnd) as? Date) ?? workEnd
         validateWorkWindow()
@@ -536,7 +528,6 @@ final class AppState: ObservableObject {
         workEnd = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date()) ?? workEnd
         unfinishedTaskPolicy = .askMe
         hostedAIConsent = true
-        faceIDEnabled = false
         theme = .system
 
         calendarSyncMessage = nil
@@ -1178,7 +1169,7 @@ final class AppState: ObservableObject {
             DefaultsKey.workEnd,
             DefaultsKey.unfinishedTaskPolicy,
             DefaultsKey.hostedAIConsent,
-            DefaultsKey.faceIDEnabled,
+            "faceIDEnabled",
             "hasCompletedOnboarding",
             "hasSeenNotificationOnboarding",
             "hasSeenWidgetGuide",
