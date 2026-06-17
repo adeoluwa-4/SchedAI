@@ -505,6 +505,48 @@ final class AppState: ObservableObject {
         }
     }
 
+    func deleteAccountAndLocalData() {
+        let existingTaskIDs = tasks.map(\.id)
+        let shouldDeleteCalendarEvents = calendarSyncEnabled
+
+        for id in existingTaskIDs {
+            NotificationManager.cancelReminder(for: id)
+            if shouldDeleteCalendarEvents {
+                CalendarManager.shared.deleteEvent(for: id)
+            }
+        }
+
+        NotificationManager.clearAll(delivered: true, pending: true)
+
+        tasks = []
+        removePersistedTaskFiles()
+        clearWidgetData()
+
+        lastPlanOverflow = 0
+        planningDate = Calendar.current.startOfDay(for: Date())
+        remindersEnabled = false
+        reminderLeadMinutes = 5
+        showTaskTitlesInNotifications = false
+        showTaskTitlesInWidget = true
+        calendarSyncEnabled = false
+        selectedCalendarDestinationID = CalendarManager.defaultDestinationID
+        userDisplayName = nil
+        workWindowEnabled = false
+        workStart = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: Date()) ?? workStart
+        workEnd = Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date()) ?? workEnd
+        unfinishedTaskPolicy = .askMe
+        hostedAIConsent = true
+        faceIDEnabled = false
+        theme = .system
+
+        calendarSyncMessage = nil
+        calendarSyncToast = nil
+        persistenceMessage = nil
+        reminderMessage = nil
+        refreshCalendarConnectionStatus()
+        removeAccountDeletionDefaults()
+    }
+
     func toggleComplete(id: UUID) {
         guard let i = tasks.firstIndex(where: { $0.id == id }) else { return }
         tasks[i].isCompleted.toggle()
@@ -1104,5 +1146,49 @@ final class AppState: ObservableObject {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadTimelines(ofKind: "SchedAI_Widget")
         #endif
+    }
+
+    private func removePersistedTaskFiles() {
+        let fm = FileManager.default
+        try? fm.removeItem(at: saveURL)
+        try? fm.removeItem(at: legacySaveURL)
+    }
+
+    private func clearWidgetData() {
+        guard let defaults = UserDefaults(suiteName: WidgetBridge.appGroupID) else { return }
+        defaults.removeObject(forKey: WidgetBridge.tasksKey)
+        defaults.set(false, forKey: WidgetBridge.voiceRequestKey)
+        #if canImport(WidgetKit)
+        WidgetCenter.shared.reloadTimelines(ofKind: "SchedAI_Widget")
+        #endif
+    }
+
+    private func removeAccountDeletionDefaults() {
+        let keys = [
+            DefaultsKey.remindersEnabled,
+            DefaultsKey.reminderLeadMinutes,
+            DefaultsKey.showTaskTitlesInNotifications,
+            DefaultsKey.showTaskTitlesInWidget,
+            DefaultsKey.theme,
+            DefaultsKey.lastResetDay,
+            DefaultsKey.calendarSyncEnabled,
+            DefaultsKey.userDisplayName,
+            DefaultsKey.workWindowEnabled,
+            DefaultsKey.workStart,
+            DefaultsKey.workEnd,
+            DefaultsKey.unfinishedTaskPolicy,
+            DefaultsKey.hostedAIConsent,
+            DefaultsKey.faceIDEnabled,
+            "hasCompletedOnboarding",
+            "hasSeenNotificationOnboarding",
+            "hasSeenWidgetGuide",
+            "SchedAI_EventMap",
+            "SchedAI_CalendarIdentifier",
+            "SchedAI_SelectedCalendarDestination"
+        ]
+
+        for key in keys {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 }
