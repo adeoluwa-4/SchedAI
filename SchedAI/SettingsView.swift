@@ -74,14 +74,24 @@ struct SettingsView: View {
         }
     }
 
+    private enum SettingsSheet: Identifiable {
+        case accountDeletion
+        case aiConsent
+
+        var id: String {
+            switch self {
+            case .accountDeletion: return "accountDeletion"
+            case .aiConsent: return "aiConsent"
+            }
+        }
+    }
+
     @EnvironmentObject private var app: AppState
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var scheme
     @State private var calendarToastMessage: String? = nil
     @State private var signInMessage: String? = nil
-    @State private var accountDeletionMessage: String? = nil
-    @State private var showDeleteAccountConfirmation: Bool = false
-    @State private var showAIConsentSheet: Bool = false
+    @State private var presentedSheet: SettingsSheet? = nil
 #if canImport(AuthenticationServices)
     @State private var appleSignIn = AppleIDSignInCoordinator()
 #endif
@@ -136,23 +146,6 @@ struct SettingsView: View {
             } message: {
                 Text(signInMessage ?? "")
             }
-            .alert("Delete Account?", isPresented: $showDeleteAccountConfirmation) {
-                Button("Delete Account", role: .destructive) {
-                    app.deleteAccountAndLocalData()
-                    accountDeletionMessage = "Your SchedAI account and local data have been deleted."
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This permanently deletes your local profile, tasks, reminders, widget data, and SchedAI calendar events from this device.")
-            }
-            .alert("Account Deleted", isPresented: Binding(
-                get: { accountDeletionMessage != nil },
-                set: { if !$0 { accountDeletionMessage = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(accountDeletionMessage ?? "")
-            }
             .overlay(alignment: .top) {
                 if let message = calendarToastMessage {
                     Text(message)
@@ -170,12 +163,19 @@ struct SettingsView: View {
                         )
                         .padding(.top, 10)
                         .padding(.horizontal, 20)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                    .transition(.move(edge: .top).combined(with: .opacity))
                 }
             }
-            .sheet(isPresented: $showAIConsentSheet) {
-                AIConsentSheet {
-                    app.hostedAIConsent = true
+            .sheet(item: $presentedSheet) { sheet in
+                switch sheet {
+                case .accountDeletion:
+                    AccountDeletionSheet {
+                        app.deleteAccountAndLocalData()
+                    }
+                case .aiConsent:
+                    AIConsentSheet {
+                        app.hostedAIConsent = true
+                    }
                 }
             }
         }
@@ -382,7 +382,7 @@ struct SettingsView: View {
                     subtitle: "Permanently deletes tasks, reminders, widget data, and local personalization.",
                     color: .red
                 ) {
-                    showDeleteAccountConfirmation = true
+                    presentedSheet = .accountDeletion
                 }
             }
         }
@@ -746,7 +746,7 @@ struct SettingsView: View {
                     if app.hostedAIConsent {
                         return
                     }
-                    showAIConsentSheet = true
+                    presentedSheet = .aiConsent
                 } else {
                     app.hostedAIConsent = false
                 }
@@ -929,6 +929,98 @@ private struct SettingsDetailPage<Background: View, Content: View>: View {
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.visible, for: .navigationBar)
+    }
+}
+
+private struct AccountDeletionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var scheme
+    @State private var didDelete = false
+
+    let onDelete: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Capsule()
+                .fill(Color.secondary.opacity(0.3))
+                .frame(width: 42, height: 5)
+                .padding(.top, 10)
+
+            SettingsIcon(
+                systemName: didDelete ? "checkmark.circle.fill" : "trash",
+                color: didDelete ? .green : .red,
+                size: 68
+            )
+
+            VStack(spacing: 10) {
+                Text(didDelete ? "Account Deleted" : "Delete Account and Data?")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.primary)
+
+                Text(didDelete ? deletedMessage : confirmationMessage)
+                    .font(.system(size: 16, weight: .medium, design: .rounded))
+                    .lineSpacing(3)
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+
+            if didDelete {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Done")
+                        .font(.headline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 54)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.brandBlue)
+            } else {
+                VStack(spacing: 10) {
+                    Button(role: .destructive) {
+                        onDelete()
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) {
+                            didDelete = true
+                        }
+                    } label: {
+                        Text("Delete Account and Data")
+                            .font(.headline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Text("Cancel")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 18)
+        .presentationDetents([.height(didDelete ? 360 : 430), .medium])
+        .presentationDragIndicator(.hidden)
+        .background(scheme == .dark ? Color.black : Color(.systemBackground))
+    }
+
+    private var confirmationMessage: String {
+        "This permanently deletes your local profile, tasks, reminders, widget data, and SchedAI calendar events from this device."
+    }
+
+    private var deletedMessage: String {
+        "Your SchedAI account and local data have been deleted from this device."
     }
 }
 
