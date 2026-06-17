@@ -590,7 +590,6 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI needs calendar access to read busy times and create or update planned tasks in the calendar destination you choose when Calendar sync is enabled.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "SchedAI uses Face ID only to unlock your local planner on this device.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -627,7 +626,6 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI needs calendar access to read busy times and create or update planned tasks in the calendar destination you choose when Calendar sync is enabled.";
-				INFOPLIST_KEY_NSFaceIDUsageDescription = "SchedAI uses Face ID only to unlock your local planner on this device.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
