@@ -12,10 +12,6 @@ enum NotificationManager {
     private static let maximumScheduledReminders = 60
     private static let reminderIdentifierPrefix = "schedai.task."
 
-    private enum DefaultsKey {
-        static let showTaskTitlesInNotifications = "showTaskTitlesInNotifications"
-    }
-
     enum AuthorizationState: Equatable {
         case notDetermined
         case denied
@@ -168,17 +164,11 @@ enum NotificationManager {
             let trigger = UNCalendarNotificationTrigger(dateMatching: comps, repeats: false)
 
             let content = UNMutableNotificationContent()
-            let priorityDot = reminderDot(for: t.priority)
+            let startTime = start.formatted(date: .omitted, time: .shortened)
             let priorityText = "\(t.priority.displayName) Priority"
-            if shouldShowTaskTitles() {
-                content.title = "\(priorityDot) \(priorityText): \(t.title)"
-                content.subtitle = "Starts at \(start.formatted(date: .omitted, time: .shortened))"
-                content.body = "Starts in about \(minutesBefore) min (\(t.estimatedMinutes)m)"
-            } else {
-                content.title = "SchedAI Reminder"
-                content.subtitle = "Starts at \(start.formatted(date: .omitted, time: .shortened))"
-                content.body = "\(priorityText) task starts in about \(minutesBefore) min."
-            }
+            content.title = "Task: \(t.title)"
+            content.subtitle = "\(startTime) • \(priorityText)"
+            content.body = "Time: \(startTime) • Priority: \(t.priority.displayName)"
             content.sound = .default
             content.interruptionLevel = .active
 
@@ -202,18 +192,6 @@ enum NotificationManager {
 
     private static func reminderIdentifier(for id: UUID) -> String {
         "\(reminderIdentifierPrefix)\(id.uuidString)"
-    }
-
-    private static func shouldShowTaskTitles() -> Bool {
-        UserDefaults.standard.bool(forKey: DefaultsKey.showTaskTitlesInNotifications)
-    }
-
-    private static func reminderDot(for priority: TaskPriority) -> String {
-        switch priority {
-        case .high: return "🔴"
-        case .medium: return "🟡"
-        case .low: return "🟢"
-        }
     }
 
     static func sendTestReminder(inSeconds seconds: TimeInterval) {
