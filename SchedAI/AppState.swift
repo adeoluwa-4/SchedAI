@@ -25,7 +25,6 @@ final class AppState: ObservableObject {
     private enum DefaultsKey {
         static let remindersEnabled = "remindersEnabled"
         static let reminderLeadMinutes = "reminderLeadMinutes"
-        static let showTaskTitlesInNotifications = "showTaskTitlesInNotifications"
         static let showTaskTitlesInWidget = "showTaskTitlesInWidget"
         static let theme = "appThemePreference"
         static let lastResetDay = "lastResetDay"
@@ -164,15 +163,6 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Whether local notifications may show task titles on the lock screen.
-    @Published var showTaskTitlesInNotifications: Bool {
-        didSet {
-            UserDefaults.standard.set(showTaskTitlesInNotifications, forKey: DefaultsKey.showTaskTitlesInNotifications)
-            guard remindersEnabled else { return }
-            rescheduleReminders()
-        }
-    }
-
     /// Whether the widget may show task titles on the Home Screen / Lock Screen.
     @Published var showTaskTitlesInWidget: Bool {
         didSet {
@@ -209,7 +199,6 @@ final class AppState: ObservableObject {
         // Default OFF for first-run so we don't prompt on launch.
         self.remindersEnabled = (defaults.object(forKey: DefaultsKey.remindersEnabled) as? Bool) ?? false
         self.reminderLeadMinutes = (defaults.object(forKey: DefaultsKey.reminderLeadMinutes) as? Int) ?? 5
-        self.showTaskTitlesInNotifications = (defaults.object(forKey: DefaultsKey.showTaskTitlesInNotifications) as? Bool) ?? false
         self.showTaskTitlesInWidget = (defaults.object(forKey: DefaultsKey.showTaskTitlesInWidget) as? Bool) ?? true
         self.calendarSyncEnabled = (defaults.object(forKey: DefaultsKey.calendarSyncEnabled) as? Bool) ?? false
         self.selectedCalendarDestinationID = CalendarManager.shared.selectedDestinationID()
@@ -518,7 +507,6 @@ final class AppState: ObservableObject {
         planningDate = Calendar.current.startOfDay(for: Date())
         remindersEnabled = false
         reminderLeadMinutes = 5
-        showTaskTitlesInNotifications = false
         showTaskTitlesInWidget = true
         calendarSyncEnabled = false
         selectedCalendarDestinationID = CalendarManager.defaultDestinationID
@@ -1158,7 +1146,6 @@ final class AppState: ObservableObject {
         let keys = [
             DefaultsKey.remindersEnabled,
             DefaultsKey.reminderLeadMinutes,
-            DefaultsKey.showTaskTitlesInNotifications,
             DefaultsKey.showTaskTitlesInWidget,
             DefaultsKey.theme,
             DefaultsKey.lastResetDay,
@@ -1169,6 +1156,7 @@ final class AppState: ObservableObject {
             DefaultsKey.workEnd,
             DefaultsKey.unfinishedTaskPolicy,
             DefaultsKey.hostedAIConsent,
+            "showTaskTitlesInNotifications",
             "faceIDEnabled",
             "hasCompletedOnboarding",
             "hasSeenNotificationOnboarding",
