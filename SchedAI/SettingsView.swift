@@ -447,7 +447,7 @@ struct SettingsView: View {
             SettingsInfoRow(
                 icon: "bell.and.waves.left.and.right",
                 title: "Reminder Behavior",
-                subtitle: "SchedAI schedules local alerts for planned tasks. You can keep alerts private by hiding titles.",
+                subtitle: "SchedAI schedules local alerts with the task, start time, and priority.",
                 color: .orange
             )
 
@@ -478,13 +478,10 @@ struct SettingsView: View {
 
                 SettingsDivider()
 
-                SettingsToggleRow(
-                    icon: app.showTaskTitlesInNotifications ? "text.badge.checkmark" : "lock",
-                    title: "Show Titles in Alerts",
-                    subtitle: app.showTaskTitlesInNotifications
-                        ? "Reminder notifications may show task names"
-                        : "Reminder notifications hide task names",
-                    isOn: $app.showTaskTitlesInNotifications,
+                SettingsInfoRow(
+                    icon: "text.badge.checkmark",
+                    title: "Alert Details",
+                    subtitle: "Alerts show the task name, start time, and priority.",
                     color: .orange
                 )
             }
