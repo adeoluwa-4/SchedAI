@@ -659,6 +659,48 @@ struct SchedAITests {
         #expect(tasks[1].isPinned)
     }
 
+    @Test func aiServiceRejectsAndRepairsShiftedBareReminderClock() async throws {
+        let now = fixedDate(2026, 7, 27, 17, 5)
+        let input = "Remind me to call uncle Tony 7:30"
+        let offline = OfflineNLP.parseSafely(input, now: now)
+        let expectedStart = try #require(offline.first?.scheduledStart)
+
+        let shiftedDrafts = [
+            TaskDraft(
+                title: "Call Uncle Tony",
+                estimatedMinutes: 30,
+                priority: "medium",
+                targetDayISO8601: nil,
+                scheduledStartISO8601: AIService.isoString(fixedDate(2026, 7, 27, 2, 30)),
+                scheduledEndISO8601: AIService.isoString(fixedDate(2026, 7, 27, 3, 0)),
+                preferredStartISO8601: nil,
+                preferredEndISO8601: nil,
+                isPinned: true,
+                notes: nil
+            )
+        ]
+
+        let shiftedItems = AIService.taskItems(from: shiftedDrafts)
+        #expect(!AIService.isReasonableAIResultForTesting(
+            shiftedItems,
+            comparedTo: offline,
+            input: input,
+            now: now
+        ))
+
+        let repaired = AIService.normalizedAIItemsForTesting(
+            from: shiftedDrafts,
+            fallback: offline,
+            input: input,
+            now: now
+        )
+
+        #expect(repaired.count == 1)
+        #expect(repaired[0].title == "Call Uncle Tony")
+        #expect(repaired[0].scheduledStart == expectedStart)
+        #expect(repaired[0].isPinned)
+    }
+
     @Test func hostedAIImproveDefaultsOnForFirstRun() async throws {
         UserDefaults.standard.removeObject(forKey: "hostedAIConsent")
         let app = await MainActor.run { AppState() }
@@ -1182,6 +1224,23 @@ struct SchedAITests {
         #expect(comps.month == 6)
         #expect(comps.day == 3)
         #expect(comps.hour == 14)
+        #expect(comps.minute == 30)
+    }
+
+    @Test func offlineNlpInfersPmForTrailingBareColonReminder() async throws {
+        let now = fixedDate(2026, 7, 27, 17, 5)
+        let tasks = OfflineNLP.parseSafely("Remind me to call uncle Tony 7:30", now: now)
+        #expect(tasks.count == 1)
+        let task = try #require(tasks.first)
+
+        #expect(task.title == "Call Uncle Tony")
+
+        let start = try #require(task.scheduledStart)
+        let comps = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: start)
+        #expect(comps.year == 2026)
+        #expect(comps.month == 7)
+        #expect(comps.day == 27)
+        #expect(comps.hour == 19)
         #expect(comps.minute == 30)
     }
 
