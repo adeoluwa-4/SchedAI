@@ -204,15 +204,22 @@ private enum FoundationModelsTaskParser {
     }
 
     private static func timeAnchors(in input: String) -> [OnDeviceTimeAnchor] {
-        let pattern = #"(?i)\b(at|by|around|about|near|until|till|from|starting|start)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|noon|midnight)\b"#
+        let pattern = #"(?i)\b(at|by|around|about|near|until|till|from|starting|start)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|noon|midnight)\b|\b((?:1[0-2]|0?[1-9])\s*:\s*[0-5]\d\s*(?:am|pm)?)\b"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = input as NSString
         let matches = regex.matches(in: input, range: NSRange(location: 0, length: ns.length))
 
         return matches.prefix(20).map { match in
             let phrase = ns.substring(with: match.range(at: 0))
-            let marker = ns.substring(with: match.range(at: 1)).lowercased()
-            let value = ns.substring(with: match.range(at: 2))
+            let marker: String
+            let value: String
+            if match.range(at: 1).location != NSNotFound {
+                marker = ns.substring(with: match.range(at: 1)).lowercased()
+                value = ns.substring(with: match.range(at: 2))
+            } else {
+                marker = "bare"
+                value = ns.substring(with: match.range(at: 3))
+            }
             let relation: String
             switch marker {
             case "by":
