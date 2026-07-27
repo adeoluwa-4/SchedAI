@@ -275,11 +275,26 @@ struct AIService {
         guard !items.isEmpty else { return [] }
 
         if items.count == fallback.count {
+            let shouldPreserveExplicitSchedules = explicitClockTokenCount(in: input) > 0
+
             for index in items.indices {
                 let fallbackTask = fallback[index]
 
-                if items[index].scheduledStart == nil,
+                if shouldPreserveExplicitSchedules,
+                   fallbackTask.isPinned,
                    let fallbackStart = fallbackTask.scheduledStart {
+                    let actualStart = items[index].scheduledStart
+                    let didMoveExplicitTime = actualStart.map {
+                        abs($0.timeIntervalSince(fallbackStart)) > 60
+                    } ?? true
+                    if didMoveExplicitTime {
+                        items[index].isPinned = fallbackTask.isPinned
+                        items[index].targetDay = fallbackTask.targetDay
+                        items[index].scheduledStart = fallbackStart
+                        items[index].scheduledEnd = fallbackTask.scheduledEnd
+                    }
+                } else if items[index].scheduledStart == nil,
+                          let fallbackStart = fallbackTask.scheduledStart {
                     items[index].isPinned = fallbackTask.isPinned
                     items[index].targetDay = fallbackTask.targetDay
                     items[index].scheduledStart = fallbackStart
@@ -309,6 +324,40 @@ struct AIService {
         )
         return items
     }
+
+    #if DEBUG
+    static func normalizedAIItemsForTesting(
+        from drafts: [TaskDraft],
+        fallback: [TaskItem],
+        input: String,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> [TaskItem] {
+        normalizedAIItems(
+            from: drafts,
+            fallback: fallback,
+            input: input,
+            now: now,
+            calendar: calendar
+        )
+    }
+
+    static func isReasonableAIResultForTesting(
+        _ aiItems: [TaskItem],
+        comparedTo offlineItems: [TaskItem],
+        input: String,
+        now: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
+        isReasonableAIResult(
+            aiItems,
+            comparedTo: offlineItems,
+            input: input,
+            now: now,
+            calendar: calendar
+        )
+    }
+    #endif
 
     private static func normalizeDatesWithoutExplicitDay(
         items: inout [TaskItem],
@@ -410,6 +459,9 @@ struct AIService {
         let aiTimed = aiItems.compactMap(\.scheduledStart)
         guard !offlineTimed.isEmpty else { return true }
         guard aiTimed.count >= max(1, offlineTimed.count - 1) else { return false }
+        let maxAllowedDrift: TimeInterval = explicitClockTokenCount(in: input) > 0
+            ? 15 * 60
+            : 2.5 * 60 * 60
 
         if aiItems.count == offlineItems.count {
             for index in aiItems.indices {
@@ -418,7 +470,7 @@ struct AIService {
                       let actual = aiItems[index].scheduledStart else {
                     continue
                 }
-                if abs(actual.timeIntervalSince(expected)) > 2.5 * 60 * 60 {
+                if abs(actual.timeIntervalSince(expected)) > maxAllowedDrift {
                     return false
                 }
             }
@@ -433,7 +485,7 @@ struct AIService {
                 return false
             }
 
-            if abs(unmatched[matchIndex].timeIntervalSince(expected)) > 2.5 * 60 * 60 {
+            if abs(unmatched[matchIndex].timeIntervalSince(expected)) > maxAllowedDrift {
                 return false
             }
             unmatched.remove(at: matchIndex)
@@ -443,7 +495,7 @@ struct AIService {
     }
 
     private static func explicitClockTokenCount(in input: String) -> Int {
-        let pattern = #"(?i)\b(?:at|by|around|about|near|until|till)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b"#
+        let pattern = #"(?i)\b(?:at|by|around|about|near|until|till)\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)?|\d{3,4}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\b|\b(?:1[0-2]|0?[1-9])\s*:\s*[0-5]\d\s*(?:am|pm)?\b|\b(?:1[0-2]|0?[1-9])\s*(?:am|pm)\b|\b(?:noon|midnight)\b"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return 0 }
         let range = NSRange(location: 0, length: (input as NSString).length)
         return regex.numberOfMatches(in: input, range: range)
