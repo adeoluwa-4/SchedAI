@@ -2659,7 +2659,7 @@ struct OfflineNLP {
         guard hasReminderLeadIn else { return false }
 
         return normalized.range(
-            of: #"(?i)\b(?:at|around|about|near|by)\s*\d{1,2}\s*:\s*\d{2}\b"#,
+            of: #"(?i)\b(?:at|around|about|near|by)?\s*\d{1,2}\s*:\s*\d{2}\b"#,
             options: .regularExpression
         ) != nil
     }
@@ -3184,19 +3184,30 @@ struct OfflineNLP {
     }
 
     private static func capitalizedNamesAfterAction(in text: String) -> [(action: String, displayAction: String, name: String)] {
-        let pattern = #"\b(meet|text|call|email)\s+([A-Z][A-Za-z'-]{1,}(?:\s+[A-Z][A-Za-z'-]{1,})?)\b"#
+        let relationship = #"(?:uncle|aunt|grandma|grandpa|mom|dad|mother|father|brother|sister|cousin)"#
+        let pattern = #"\b(meet|text|call|email)\s+((?:"# + relationship + #")\s+)?([A-Z][A-Za-z'-]{1,}(?:\s+[A-Z][A-Za-z'-]{1,})?)\b"#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let ns = text as NSString
         let matches = regex.matches(in: text, range: NSRange(location: 0, length: ns.length))
         return matches.compactMap { match in
             guard match.range(at: 1).location != NSNotFound,
-                  match.range(at: 2).location != NSNotFound else { return nil }
+                  match.range(at: 3).location != NSNotFound else { return nil }
             let action = ns.substring(with: match.range(at: 1)).lowercased()
             let displayAction = action.prefix(1).uppercased() + action.dropFirst()
+            let familyPrefix: String
+            if match.range(at: 2).location != NSNotFound {
+                let rawPrefix = ns.substring(with: match.range(at: 2))
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                familyPrefix = rawPrefix.prefix(1).uppercased() + rawPrefix.dropFirst().lowercased()
+            } else {
+                familyPrefix = ""
+            }
+            let properName = ns.substring(with: match.range(at: 3))
+            let displayName = familyPrefix.isEmpty ? properName : "\(familyPrefix) \(properName)"
             return (
                 action: action,
                 displayAction: String(displayAction),
-                name: ns.substring(with: match.range(at: 2))
+                name: displayName
             )
         }
     }
