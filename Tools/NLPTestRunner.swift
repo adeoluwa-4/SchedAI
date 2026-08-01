@@ -2,7 +2,7 @@ import Foundation
 
 // Small, deterministic test harness for OfflineNLP without needing Xcode.
 // Run:
-//   swiftc SchedAI/TaskItem.swift SchedAI/OfflineNLP.swift Tools/NLPTestRunner.swift -o /tmp/nlp && /tmp/nlp
+//   swiftc SchedAI/TaskItem.swift SchedAI/SchedulingPreferenceStore.swift SchedAI/OfflineNLP.swift Tools/NLPTestRunner.swift -o /tmp/nlp && /tmp/nlp
 
 @main
 struct NLPTestRunner {
