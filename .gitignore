@@ -8,6 +8,9 @@
 *.pem
 *.key
 *.cer
+*Secrets.xcconfig
+**/*Secrets.xcconfig
+firebase_app_id_file.json
 *.zip
 GoogleService-Info.plist
 **/GoogleService-Info.plist
