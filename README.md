@@ -1,6 +1,6 @@
 # SchedAI
 
-SchedAI is a native iPhone planner that turns rough, natural-language tasks into a realistic daily schedule. It combines fast capture, deterministic offline parsing, calendar awareness, reminders, and a home-screen widget in a focused SwiftUI experience.
+SchedAI is a native iPhone planner that turns rough, natural language tasks into a realistic daily schedule. It combines fast capture, deterministic offline parsing, calendar awareness, reminders, and a home screen widget in a focused SwiftUI experience.
 
 [View SchedAI on the App Store](https://apps.apple.com/us/app/schedai/id6777319679) · [Visit the product site](https://schedai-snowy.vercel.app)
 
@@ -9,7 +9,7 @@ SchedAI is a native iPhone planner that turns rough, natural-language tasks into
 ## Product highlights
 
 - Capture tasks by typing or speaking phrases such as "study for two hours tomorrow."
-- Extract dates, times, durations, and task titles with the on-device parser.
+- Extract dates, times, durations, and task titles with the on device parser.
 - Build a schedule around work hours, fixed tasks, priorities, and busy calendar periods.
 - Review the day in a native timeline and edit tasks before committing changes.
 - Schedule local reminders and optionally add planned work to Apple Calendar.
@@ -44,7 +44,7 @@ flowchart LR
 - WidgetKit and App Intents
 - EventKit and UserNotifications
 - Speech framework integration
-- Local persistence and shared app-group data
+- Local persistence and shared app group data
 - Node.js and Vercel for the optional hosted parser
 
 ## Run locally
@@ -57,7 +57,7 @@ Requirements: Xcode with an iOS 17 or newer simulator, or an iPhone running iOS 
 4. Choose a simulator or connected iPhone.
 5. Build and run.
 
-No hosted-AI configuration is required for the offline planning flow. Calendar, notifications, speech recognition, and widgets require their corresponding system permissions.
+No hosted AI configuration is required for the offline planning flow. Calendar, notifications, speech recognition, and widgets require their corresponding system permissions.
 
 ## Verification
 
@@ -67,4 +67,4 @@ No hosted-AI configuration is required for the offline planning flow. Calendar, 
 
 ## Privacy
 
-Planning works locally by default. SchedAI requests calendar, reminder, speech, or hosted-AI access only for the features the user chooses to enable. The optional hosted parser is separated from the on-device parser so the main task-planning workflow remains available offline.
+Planning works locally by default. SchedAI requests calendar, reminder, speech, or hosted AI access only for the features the user chooses to enable. The optional hosted parser is separated from the on device parser so the main task planning workflow remains available offline.
