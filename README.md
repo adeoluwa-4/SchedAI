@@ -4,6 +4,8 @@ SchedAI is an iPhone app that helps you turn messy plans into a real schedule.
 
 Type or say what you need to do, and SchedAI helps break it into tasks, place it on your day, and keep you moving.
 
+App Store: https://apps.apple.com/us/app/schedai/id6777319679
+
 ## What It Does
 
 - Adds tasks from plain language, like "study for 2 hours tomorrow" or "finish essay tonight"
