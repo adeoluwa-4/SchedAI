@@ -118,7 +118,7 @@ struct OfflineNLP {
         static let timeRangeRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:(from|between)\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:to|and|-)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#)
         static let untilRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:until|till)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#)
         static let time24Regex = try! NSRegularExpression(pattern: #"(?i)\b(0\d|1[3-9]|2[0-3])\s*:\s*([0-5]\d)\b"#)
-        static let time12Regex = try! NSRegularExpression(pattern: #"(?i)\b(1[0-2]|0?[1-9])(?::\s*([0-5]\d))?\s*(am|pm)\b"#)
+        static let time12Regex = try! NSRegularExpression(pattern: #"(?i)\b(?:(?:at|around|about|near|by)\s*)?(1[0-2]|0?[1-9])(?::\s*([0-5]\d))?\s*(am|pm)\b"#)
         static let timeColonNoMeridiemRegex = try! NSRegularExpression(pattern: #"(?i)\b(1[0-2]|0?[1-9])\s*:\s*([0-5]\d)\b"#)
         static let timeCompactRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|around|about|near|by|from|starting|start)\s*(\d{3,4})\b"#)
         static let timeBareHourRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:at|around|about|near|by)\s*(\d{1,2})\b(?!\s*(?:h|hr|hrs|hour|hours|min|mins|minute|minutes))"#
@@ -169,11 +169,14 @@ struct OfflineNLP {
     }
 
     private static func parseInternal(_ rawText: String, now: Date, minConfidence: TimeConfidence) -> [TaskItem] {
-        let text = normalize(rawText)
-        let chunks = Array(splitIntoChunks(text).prefix(ParseLimits.maxParsedChunks))
+        let chunks = Array(
+            hardTaskSegments(rawText)
+                .flatMap { splitIntoChunks(normalize($0)) }
+                .prefix(ParseLimits.maxParsedChunks)
+        )
 
         var tasks: [TaskItem] = []
-        var dayContext = globalDayContextIfUnambiguous(in: text, now: now)
+        var dayContext = globalDayContextIfUnambiguous(in: rawText, now: now)
 
         for rawChunk in chunks {
             let recResult = detectRecurrence(in: rawChunk)
@@ -200,6 +203,15 @@ struct OfflineNLP {
         let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count > ParseLimits.maxInputCharacters else { return trimmed }
         return String(trimmed.prefix(ParseLimits.maxInputCharacters))
+    }
+
+    private static func hardTaskSegments(_ rawText: String) -> [String] {
+        rawText
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .split(whereSeparator: { $0 == "\n" || $0 == ";" })
+            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     // MARK: - Step-based pipeline
@@ -259,26 +271,32 @@ struct OfflineNLP {
     static func splitListEntries(_ text: String) -> [String] {
         text
             .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
             .split(whereSeparator: { $0 == "\n" || $0 == "," })
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
     }
 
     static func splitTasks(_ text: String) -> [String] {
-        let normalized = normalizeInput(text)
-        guard !normalized.isEmpty else { return [] }
+        let segments = hardTaskSegments(text)
+        guard !segments.isEmpty else { return [] }
 
-        let ns = normalized as NSString
-        let replaced = StepRegex.connectorRegex.stringByReplacingMatches(
-            in: normalized,
-            range: NSRange(location: 0, length: ns.length),
-            withTemplate: "|"
-        )
+        var chunks = segments.flatMap { segment -> [String] in
+            let normalized = normalizeInput(segment)
+            guard !normalized.isEmpty else { return [] }
 
-        var chunks = replaced
-            .split(separator: "|", omittingEmptySubsequences: true)
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+            let ns = normalized as NSString
+            let replaced = StepRegex.connectorRegex.stringByReplacingMatches(
+                in: normalized,
+                range: NSRange(location: 0, length: ns.length),
+                withTemplate: "|"
+            )
+
+            return replaced
+                .split(separator: "|", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+        }
 
         chunks = chunks.flatMap { splitDurationThenRangeChunk($0) }
         chunks = chunks.flatMap { splitOnMultipleTimeMarkers($0) }
