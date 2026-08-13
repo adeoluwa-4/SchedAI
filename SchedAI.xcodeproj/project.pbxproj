@@ -62,6 +62,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AD0000040000000000000004 /* Exceptions for "SchedAI" folder in "SchedAI" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CF2DEE2D2EF4EB1B00F2998C /* SchedAI */;
+		};
 		6AEC17332F92C4F300FC61A5 /* Exceptions for "SchedAI-Widget" folder in "SchedAI-WidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -82,6 +89,9 @@
 		};
 		CF2DEE302EF4EB1B00F2998C /* SchedAI */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AD0000040000000000000004 /* Exceptions for "SchedAI" folder in "SchedAI" target */,
+			);
 			path = SchedAI;
 			sourceTree = "<group>";
 		};
@@ -595,7 +605,7 @@
 				DEVELOPMENT_TEAM = TPNSH32JP3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_GADApplicationIdentifier = "ca-app-pub-3940256099942544~1458002511";
+				INFOPLIST_FILE = SchedAI/Info.plist;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI needs calendar access to read busy times and create or update planned tasks in the calendar destination you choose when Calendar sync is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
@@ -632,7 +642,7 @@
 				DEVELOPMENT_TEAM = TPNSH32JP3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_GADApplicationIdentifier = "ca-app-pub-3940256099942544~1458002511";
+				INFOPLIST_FILE = SchedAI/Info.plist;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI needs calendar access to read busy times and create or update planned tasks in the calendar destination you choose when Calendar sync is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
