@@ -6,6 +6,10 @@ import UIKit
 struct ContentView: View {
     @EnvironmentObject private var app: AppState
     @State private var selectedTab: Tab = .today
+    @StateObject private var adMob = AdMobController()
+
+    // Google demo unit. Replace with SchedAI's banner unit before App Store release.
+    private let bannerAdUnitID = "ca-app-pub-3940256099942544/2435281174"
 
     private enum Tab: Hashable {
         case today
@@ -26,6 +30,15 @@ struct ContentView: View {
             SettingsView()
                 .tag(Tab.settings)
                 .tabItem { Label("Settings", systemImage: "gearshape") }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if adMob.canRequestAds {
+                AdMobBannerView(adUnitID: bannerAdUnitID)
+                    .background(Color(uiColor: .systemBackground))
+            }
+        }
+        .task {
+            await adMob.start()
         }
         .onAppear {
             consumeWidgetVoiceRequestIfNeeded()
