@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD0000010000000000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000030000000000000003 /* GoogleMobileAds */; };
 		6A1FA3712F92FB7A00B1B49C /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171E2F92C4F000FC61A5 /* SwiftUI.framework */; };
 		6A1FA3742F92FB7C00B1B49C /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6AEC171C2F92C4F000FC61A5 /* WidgetKit.framework */; };
 		6AEC17302F92C4F300FC61A5 /* SchedAI-WidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 6AEC171B2F92C4EF00FC61A5 /* SchedAI-WidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -110,6 +111,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AD0000010000000000000001 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -207,6 +209,7 @@
 			);
 			name = SchedAI;
 			packageProductDependencies = (
+				AD0000030000000000000003 /* GoogleMobileAds */,
 			);
 			productName = SchedAI;
 			productReference = CF2DEE2E2EF4EB1B00F2998C /* SchedAI.app */;
@@ -294,6 +297,9 @@
 			mainGroup = CF2DEE252EF4EB1B00F2998C;
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
+			packageReferences = (
+				AD0000020000000000000002 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
+			);
 			productRefGroup = CF2DEE2F2EF4EB1B00F2998C /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -589,6 +595,7 @@
 				DEVELOPMENT_TEAM = TPNSH32JP3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_GADApplicationIdentifier = "ca-app-pub-3940256099942544~1458002511";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI needs calendar access to read busy times and create or update planned tasks in the calendar destination you choose when Calendar sync is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
@@ -625,6 +632,7 @@
 				DEVELOPMENT_TEAM = TPNSH32JP3;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_GADApplicationIdentifier = "ca-app-pub-3940256099942544~1458002511";
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "SchedAI needs calendar access to read busy times and create or update planned tasks in the calendar destination you choose when Calendar sync is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "SchedAI needs microphone access to capture your voice for creating tasks.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "SchedAI uses speech recognition to convert your voice into text for task planning.";
@@ -783,6 +791,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
-	};
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AD0000020000000000000002 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AD0000030000000000000003 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD0000020000000000000002 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
+/* End XCSwiftPackageProductDependency section */
+};
 	rootObject = CF2DEE262EF4EB1B00F2998C /* Project object */;
 }
