@@ -17,3 +17,6 @@ GoogleService-Info.plist
 
 # Local scratch project (contains secrets like SupabaseSecrets.xcconfig)
 ios/
+
+# Keep hosted API implementation local; do not publish it to GitHub.
+api/
