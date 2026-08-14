@@ -8,6 +8,20 @@ const MAX_INPUT_CHARS = Number(process.env.AI_MAX_INPUT_CHARS || 4_000);
 const MAX_TASKS = Number(process.env.AI_MAX_TASKS || 20);
 const MAX_OUTPUT_TOKENS = Number(process.env.AI_MAX_OUTPUT_TOKENS || 1_200);
 const MAX_BUCKETS = Number(process.env.AI_RATE_LIMIT_MAX_BUCKETS || 2_000);
+const REDIS_REST_URL = String(
+  process.env.UPSTASH_REDIS_REST_URL
+  || process.env.KV_REST_API_URL
+  || process.env.REDIS_REST_URL
+  || ''
+).trim();
+const REDIS_REST_TOKEN = String(
+  process.env.UPSTASH_REDIS_REST_TOKEN
+  || process.env.KV_REST_API_TOKEN
+  || process.env.REDIS_REST_TOKEN
+  || ''
+).trim();
+const RATE_LIMIT_KEY_PREFIX = String(process.env.AI_RATE_LIMIT_KEY_PREFIX || 'schedai:ai-rate').trim();
+const RATE_LIMIT_FAIL_OPEN = /^true$/i.test(String(process.env.AI_RATE_LIMIT_FAIL_OPEN || ''));
 const ALLOWED_ORIGINS = String(process.env.AI_ALLOWED_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -118,7 +132,7 @@ function pruneBuckets(now) {
   }
 }
 
-function checkRateLimit(key, maxRequests) {
+function checkMemoryRateLimit(key, maxRequests) {
   const now = Date.now();
   pruneBuckets(now);
 
@@ -135,6 +149,82 @@ function checkRateLimit(key, maxRequests) {
 
   current.count += 1;
   return { allowed: true, remaining: Math.max(0, maxRequests - current.count), resetAt: current.resetAt, limit: maxRequests };
+}
+
+function hasDurableRateLimit() {
+  return Boolean(REDIS_REST_URL && REDIS_REST_TOKEN);
+}
+
+function durableRateLimitKey(key) {
+  return `${RATE_LIMIT_KEY_PREFIX}:${key}`;
+}
+
+async function redisPipeline(commands) {
+  const url = REDIS_REST_URL.replace(/\/+$/, '');
+  const response = await fetch(`${url}/pipeline`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${REDIS_REST_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(commands),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Redis rate limit failed with ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!Array.isArray(data)) {
+    throw new Error('Redis rate limit returned an invalid pipeline response');
+  }
+  const failedCommand = data.find((item) => item?.error);
+  if (failedCommand) {
+    throw new Error(`Redis rate limit command failed: ${failedCommand.error}`);
+  }
+  return data;
+}
+
+async function checkDurableRateLimit(key, maxRequests) {
+  const now = Date.now();
+  const redisKey = durableRateLimitKey(key);
+  const results = await redisPipeline([
+    ['INCR', redisKey],
+    ['PEXPIRE', redisKey, String(WINDOW_MS)],
+    ['PTTL', redisKey],
+  ]);
+
+  const count = Number(results[0]?.result || 0);
+  const ttl = Number(results[2]?.result || WINDOW_MS);
+  const resetAt = now + Math.max(0, ttl > 0 ? ttl : WINDOW_MS);
+
+  return {
+    allowed: count <= maxRequests,
+    remaining: Math.max(0, maxRequests - count),
+    resetAt,
+    limit: maxRequests,
+  };
+}
+
+async function checkRateLimit(key, maxRequests) {
+  if (!hasDurableRateLimit()) {
+    return checkMemoryRateLimit(key, maxRequests);
+  }
+
+  try {
+    return await checkDurableRateLimit(key, maxRequests);
+  } catch {
+    if (RATE_LIMIT_FAIL_OPEN) {
+      return checkMemoryRateLimit(key, maxRequests);
+    }
+    return {
+      allowed: false,
+      remaining: 0,
+      resetAt: Date.now() + WINDOW_MS,
+      limit: maxRequests,
+      unavailable: true,
+    };
+  }
 }
 
 function rateLimitHeaders(result) {
@@ -265,10 +355,17 @@ module.exports = async function handler(req, res) {
     return;
   }
 
-  const globalRateLimit = checkRateLimit('global', MAX_GLOBAL_REQUESTS);
-  const clientRateLimit = checkRateLimit(`client:${clientID}`, MAX_REQUESTS);
-  const ipRateLimit = checkRateLimit(`ip:${clientKey(req)}`, MAX_IP_REQUESTS);
+  const [globalRateLimit, clientRateLimit, ipRateLimit] = await Promise.all([
+    checkRateLimit('global', MAX_GLOBAL_REQUESTS),
+    checkRateLimit(`client:${clientID}`, MAX_REQUESTS),
+    checkRateLimit(`ip:${clientKey(req)}`, MAX_IP_REQUESTS),
+  ]);
   const headers = rateLimitHeaders(clientRateLimit);
+  if (globalRateLimit.unavailable || clientRateLimit.unavailable || ipRateLimit.unavailable) {
+    send(req, res, 503, { error: 'Rate limiter is temporarily unavailable.' }, headers);
+    return;
+  }
+
   if (!globalRateLimit.allowed || !clientRateLimit.allowed || !ipRateLimit.allowed) {
     send(req, res, 429, { error: 'Too many requests. Please try again later.' }, headers);
     return;
