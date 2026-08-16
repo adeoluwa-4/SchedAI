@@ -91,11 +91,14 @@ struct OfflineNLP {
 
         // Base day extraction
         static let monthDayRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*|\s+)?(\d{4})?\b"#)
+        static let dayMonthRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:,\s*|\s+)?(\d{4})?\b"#)
         static let numericDateRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b"#)
         static let weekdayPattern = #"mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?"#
         static let dayOfWeekRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?((?:next|this|coming)\s+)?("# + weekdayPattern + #")\b"#)
+        static let nthWeekdayFromNowRegex = try! NSRegularExpression(pattern: #"(?i)\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+((?:"# + weekdayPattern + #")s?)\s+from\s+now\b"#)
         static let relativeDayRegex = try! NSRegularExpression(pattern: #"(?i)\bin\s+(\d+)\s*(day|days|week|weeks)\b"#)
         static let relativeFromNowRegex = try! NSRegularExpression(pattern: #"(?i)\b(\d+)\s*(day|days|week|weeks)\s+from\s+now\b"#)
+        static let bareDayOfMonthRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+the\s+|the\s+)(\d{1,2})(?:st|nd|rd|th)?\b|\bon\s+(\d{1,2})(?:st|nd|rd|th)\b|\b(\d{1,2})(?:st|nd|rd|th)\b"#)
         static let dayAfterTomorrowRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:the\s+)?day\s+after\s+tomorrow\b"#)
         static let weekdayOrdinalRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?("# + weekdayPattern + #")\s+the\s+(\d{1,2})(?:st|nd|rd|th)?\b"#)
         static let weekdayOrdinalWordRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?("# + weekdayPattern + #")\s+the\s+("# + ordinalDayWordPattern + #")\b"#)
@@ -257,7 +260,7 @@ struct OfflineNLP {
             pattern: #"(?i)\bin\s+(\d+(?:\.\d+)?)\s*(minute|minutes|min|mins|hour|hours|hr|hrs)\b"#
         )
         static let relativeDatePhraseRegex = try! NSRegularExpression(
-            pattern: #"(?i)\b(?:(?:the\s+)?day\s+after\s+tomorrow|today|tonight|tomorrow|tom|tommorow|tomorow|tommorrow|tmrw|tommporw|next\s+(?:business\s+day|workday)|later\s+this\s+week|this\s+weekend|next\s+weekend|coming\s+weekend|weekend|next\s+month|next\s+week|end\s+of\s+week|eow|end\s+of\s+month|eom|next\s+year|next\s+(?:"# + Cache.weekdayPattern + #")|this\s+(?:"# + Cache.weekdayPattern + #")|coming\s+(?:"# + Cache.weekdayPattern + #")|\d+\s*(?:day|days|week|weeks)\s+from\s+now|in\s+\d+\s*(?:day|days|week|weeks)|(?:on\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|(?:on\s+)?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:on\s+)?(?:"# + Cache.weekdayPattern + #")\s+the\s+(?:"# + Cache.ordinalDayWordPattern + #")|(?:on\s+)?(?:"# + Cache.weekdayPattern + #")\s+the\s+\d{1,2}(?:st|nd|rd|th)?|(?:on\s+)?(?:"# + Cache.weekdayPattern + #"))\b"#
+            pattern: #"(?i)\b(?:(?:the\s+)?day\s+after\s+tomorrow|today|tonight|tomorrow|tom|tommorow|tomorow|tommorrow|tmrw|tommporw|next\s+(?:business\s+day|workday)|later\s+this\s+week|this\s+weekend|next\s+weekend|coming\s+weekend|weekend|next\s+month|next\s+week|end\s+of\s+week|eow|end\s+of\s+month|eom|next\s+year|next\s+(?:"# + Cache.weekdayPattern + #")|this\s+(?:"# + Cache.weekdayPattern + #")|coming\s+(?:"# + Cache.weekdayPattern + #")|(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:(?:"# + Cache.weekdayPattern + #")s?)\s+from\s+now|\d+\s*(?:day|days|week|weeks)\s+from\s+now|in\s+\d+\s*(?:day|days|week|weeks)|(?:on\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?|(?:on\s+)?(?:the\s+)?\d{1,2}(?:st|nd|rd|th)?\s+(?:of\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:,\s*\d{4})?|(?:on\s+)?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|(?:on\s+the\s+|the\s+)\d{1,2}(?:st|nd|rd|th)?|on\s+\d{1,2}(?:st|nd|rd|th)|\d{1,2}(?:st|nd|rd|th)|(?:on\s+)?(?:"# + Cache.weekdayPattern + #")\s+the\s+(?:"# + Cache.ordinalDayWordPattern + #")|(?:on\s+)?(?:"# + Cache.weekdayPattern + #")\s+the\s+\d{1,2}(?:st|nd|rd|th)?|(?:on\s+)?(?:"# + Cache.weekdayPattern + #"))\b"#
         )
         static let relativeWeekdayOrdinalWordPhraseRegex = try! NSRegularExpression(
             pattern: #"(?i)\b(?:on\s+)?(?:"# + Cache.weekdayPattern + #")\s+the\s+("# + Cache.ordinalDayWordPattern + #")\b"#
@@ -888,7 +891,7 @@ struct OfflineNLP {
         guard hasBareHour else { return }
 
         let hasStrongContext = text.range(
-            of: #"\b(?:breakfast|lunch|dinner|supper|bed|sleep|midnight|noon|morning|afternoon|evening|tonight|today|tomorrow|interview|appointment|mall|shift|office\s+hours|in\s+\d+\s*(?:day|days|week|weeks)|\d+\s*(?:day|days|week|weeks)\s+from\s+now|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month|year)|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|coming\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|\/\d{1,2}\b|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b"#,
+            of: #"\b(?:breakfast|lunch|dinner|supper|bed|sleep|midnight|noon|morning|afternoon|evening|tonight|today|tomorrow|interview|appointment|mall|shift|office\s+hours|in\s+\d+\s*(?:day|days|week|weeks)|\d+\s*(?:day|days|week|weeks)\s+from\s+now|(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+(?:monday|mondays|tuesday|tuesdays|wednesday|wednesdays|thursday|thursdays|friday|fridays|saturday|saturdays|sunday|sundays)\s+from\s+now|next\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|week|month|year)|this\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|coming\s+(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)|(?:the\s+|on\s+the\s+|on\s+)\d{1,2}(?:st|nd|rd|th)\b|\/\d{1,2}\b|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b"#,
             options: .regularExpression
         ) != nil
 
@@ -1114,6 +1117,8 @@ struct OfflineNLP {
         s = s.replacingOccurrences(of: #"(?i)\bthan\b"#, with: " then ", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?i)\bthem\b"#, with: " then ", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?i)\bweday\b"#, with: "wednesday", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?i)\btuedsays\b"#, with: "tuesdays", options: .regularExpression)
+        s = s.replacingOccurrences(of: #"(?i)\btuedsay\b"#, with: "tuesday", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?i)\bmotnh\b"#, with: "month", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?i)\bnoe\b"#, with: "now", options: .regularExpression)
         s = s.replacingOccurrences(of: #"(?i)\btommorow\b"#, with: "tomorrow", options: .regularExpression)
@@ -1947,6 +1952,35 @@ struct OfflineNLP {
         }
 
         if baseDay == nil {
+            let regex = Cache.dayMonthRegex
+            let ns = working as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            if let match = regex.firstMatch(in: working, range: range) {
+                let dStr = ns.substring(with: match.range(at: 1))
+                let mName = ns.substring(with: match.range(at: 2))
+                let yRange = match.range(at: 3)
+                let yStr = (yRange.location != NSNotFound) ? ns.substring(with: yRange) : nil
+
+                if let month = monthIndex(for: mName),
+                   let day = Int(dStr) {
+                    let currentYear = calendar.component(.year, from: now)
+                    var year = yStr.flatMap { Int($0) } ?? currentYear
+                    if let date0 = strictDate(year: year, month: month, day: day) {
+                        var resolved = date0
+                        if yStr == nil && calendar.startOfDay(for: date0) < calendar.startOfDay(for: now) {
+                            year += 1
+                            guard let future = strictDate(year: year, month: month, day: day) else { return BaseDayResult(baseDay: nil, cleaned: working, hasExplicitDay: false) }
+                            resolved = future
+                        }
+                        baseDay = resolved
+                        explicitDay = true
+                        removeMatch(match.range)
+                    }
+                }
+            }
+        }
+
+        if baseDay == nil {
             let regex = Cache.numericDateRegex
             let ns = working as NSString
             let range = NSRange(location: 0, length: ns.length)
@@ -1975,6 +2009,42 @@ struct OfflineNLP {
                         explicitDay = true
                         removeMatch(match.range)
                     }
+                }
+            }
+        }
+
+        if baseDay == nil {
+            let regex = Cache.nthWeekdayFromNowRegex
+            let ns = working as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            if let match = regex.firstMatch(in: working, range: range) {
+                let countText = ns.substring(with: match.range(at: 1))
+                let dayName = ns.substring(with: match.range(at: 2))
+
+                if let count = smallInteger(from: countText),
+                   let weekday = weekdayIndex(for: dayName),
+                   let resolved = dateForNthWeekdayFromNow(count: count, weekday: weekday, reference: now) {
+                    baseDay = resolved
+                    explicitDay = true
+                    removeMatch(match.range)
+                }
+            }
+        }
+
+        if baseDay == nil {
+            let regex = Cache.bareDayOfMonthRegex
+            let ns = working as NSString
+            let range = NSRange(location: 0, length: ns.length)
+            if let match = regex.firstMatch(in: working, range: range) {
+                let dayRanges = [match.range(at: 1), match.range(at: 2), match.range(at: 3)]
+                let dayText = dayRanges.first { $0.location != NSNotFound }.map { ns.substring(with: $0) }
+
+                if let dayText,
+                   let day = Int(dayText),
+                   let resolved = dateFor(dayOfMonth: day, inSameMonthAs: now) {
+                    baseDay = resolved
+                    explicitDay = true
+                    removeMatch(match.range)
                 }
             }
         }
@@ -2216,7 +2286,14 @@ struct OfflineNLP {
     }
 
     private static func weekdayIndex(for name: String) -> Int? {
-        switch name.lowercased() {
+        var normalized = name
+            .lowercased()
+            .replacingOccurrences(of: #"(?i)\btuedsday\b"#, with: "tuesday", options: .regularExpression)
+        if normalized.hasSuffix("s") {
+            normalized.removeLast()
+        }
+
+        switch normalized {
         case "sunday", "sun": return 1
         case "monday", "mon": return 2
         case "tuesday", "tue", "tues": return 3
@@ -2226,6 +2303,13 @@ struct OfflineNLP {
         case "saturday", "sat": return 7
         default: return nil
         }
+    }
+
+    private static func smallInteger(from text: String) -> Int? {
+        if let number = Int(text), number > 0 {
+            return number
+        }
+        return Cache.numberWordMap[text.lowercased()]
     }
 
     private static func weekdayIndexes(in text: String) -> [Int] {
@@ -2278,10 +2362,41 @@ struct OfflineNLP {
         let q = qualifier?.lowercased() ?? ""
 
         if q.contains("next") {
-            delta = (delta == 0) ? 7 : (delta + 7)
+            delta = (delta == 0) ? 7 : delta
         }
         let start = cal.startOfDay(for: reference)
         return cal.date(byAdding: .day, value: delta, to: start)
+    }
+
+    private static func dateFor(dayOfMonth: Int, inSameMonthAs reference: Date) -> Date? {
+        let cal = Calendar.current
+        let refStart = cal.startOfDay(for: reference)
+        guard let range = cal.range(of: .day, in: .month, for: refStart),
+              range.contains(dayOfMonth) else {
+            return nil
+        }
+
+        var comps = cal.dateComponents([.year, .month], from: refStart)
+        comps.day = dayOfMonth
+        comps.hour = 0
+        comps.minute = 0
+        comps.second = 0
+        return cal.date(from: comps)
+    }
+
+    private static func dateForNthWeekdayFromNow(count: Int, weekday: Int, reference: Date) -> Date? {
+        guard count > 0 else { return nil }
+
+        let cal = Calendar.current
+        let refStart = cal.startOfDay(for: reference)
+        guard var candidate = cal.date(byAdding: .day, value: 1, to: refStart) else { return nil }
+
+        while cal.component(.weekday, from: candidate) != weekday {
+            guard let next = cal.date(byAdding: .day, value: 1, to: candidate) else { return nil }
+            candidate = next
+        }
+
+        return cal.date(byAdding: .day, value: (count - 1) * 7, to: candidate)
     }
 
     private static func weekendStart(qualifier: String?, reference: Date) -> Date? {
