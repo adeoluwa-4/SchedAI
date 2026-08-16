@@ -530,7 +530,7 @@ struct AIPlanSheet: View {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        applyParseResult(AIService.parseTasksOffline(from: text, now: Date()), for: text)
+        applyParseResult(AIService.parseTasksOffline(from: text, now: planningReferenceDate), for: text)
     }
 
     private func improvePreviewWithAI(
@@ -549,7 +549,7 @@ struct AIPlanSheet: View {
 
         let result = await AIService.improveTasksWithAI(
             from: text,
-            now: Date(),
+            now: planningReferenceDate,
             planningDate: app.planningDate,
             allowsHostedAI: allowsHostedAI ?? app.hostedAIConsent
         )
@@ -637,6 +637,16 @@ struct AIPlanSheet: View {
         hasManualPreviewEdits = false
         parseStatusMessage = nil
         previewUsedAI = false
+    }
+
+    private var planningReferenceDate: Date {
+        let calendar = Calendar.current
+        let selectedDay = calendar.startOfDay(for: app.planningDate)
+        let now = Date()
+        if calendar.isDate(selectedDay, inSameDayAs: now) {
+            return now
+        }
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: selectedDay) ?? selectedDay
     }
 
     private func autoPlace(_ tasks: [TaskItem], on day: Date) -> [TaskItem] {
