@@ -119,7 +119,7 @@ struct AIAddTasksSheet: View {
         Button {
             addAllAndDismiss()
         } label: {
-            Label("Add All", systemImage: "plus.circle.fill")
+            Label("Confirm", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
@@ -269,10 +269,7 @@ struct AIAddTasksSheet: View {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
 
-        let result = AIService.parseTasksOffline(from: trimmed, now: Date())
-        parsedPreview = result.tasks
-        parseStatusMessage = "Offline preview. No credits used."
-        previewUsedAI = false
+        await improvePreviewWithAI()
     }
 
     private func improvePreviewWithAI(
@@ -287,7 +284,7 @@ struct AIAddTasksSheet: View {
 
         let result = await AIService.improveTasksWithAI(
             from: trimmed,
-            now: Date(),
+            now: planningReferenceDate,
             planningDate: app.planningDate,
             allowsHostedAI: allowsHostedAI ?? app.hostedAIConsent
         )
@@ -313,7 +310,21 @@ struct AIAddTasksSheet: View {
     private func addAllAndDismiss() {
         guard !parsedPreview.isEmpty else { return }
 
-        app.addTasks(parsedPreview)
+        let calendar = Calendar.current
+        let fallbackDay = calendar.startOfDay(for: app.planningDate)
+        let tasksForPlanningDay = parsedPreview.map { task -> TaskItem in
+            var task = task
+            if let start = task.scheduledStart {
+                task.targetDay = calendar.startOfDay(for: start)
+            } else if let target = task.targetDay {
+                task.targetDay = calendar.startOfDay(for: target)
+            } else {
+                task.targetDay = fallbackDay
+            }
+            return task
+        }
+
+        app.addTasks(tasksForPlanningDay)
 
         onAddComplete()
         dismiss()
@@ -323,6 +334,16 @@ struct AIAddTasksSheet: View {
         parsedPreview = []
         parseStatusMessage = nil
         previewUsedAI = false
+    }
+
+    private var planningReferenceDate: Date {
+        let calendar = Calendar.current
+        let selectedDay = calendar.startOfDay(for: app.planningDate)
+        let now = Date()
+        if calendar.isDate(selectedDay, inSameDayAs: now) {
+            return now
+        }
+        return calendar.date(bySettingHour: 9, minute: 0, second: 0, of: selectedDay) ?? selectedDay
     }
 
     private func time(_ d: Date) -> String {
