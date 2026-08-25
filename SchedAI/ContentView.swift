@@ -9,7 +9,7 @@ struct ContentView: View {
     @StateObject private var adMob = AdMobController()
 
     // Google demo unit. Replace with SchedAI's banner unit before App Store release.
-    private let bannerAdUnitID = "ca-app-pub-3940256099942544/2435281174"
+    private let bannerAdUnitID = "ca-app-pub-1559067251456423/4837063087"
 
     private enum Tab: Hashable {
         case today
