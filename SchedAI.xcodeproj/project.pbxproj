@@ -66,6 +66,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Products.storekit,
 			);
 			target = CF2DEE2D2EF4EB1B00F2998C /* SchedAI */;
 		};
