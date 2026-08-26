@@ -27,11 +27,25 @@ struct TaskParseResult: Equatable {
     let tasks: [TaskItem]
     let source: TaskParseSource
     let message: String?
+    let requiresPro: Bool
+
+    init(
+        tasks: [TaskItem],
+        source: TaskParseSource,
+        message: String?,
+        requiresPro: Bool = false
+    ) {
+        self.tasks = tasks
+        self.source = source
+        self.message = message
+        self.requiresPro = requiresPro
+    }
 }
 
 enum AIServiceError: Error, Equatable {
     case badResponse(Int)
     case parseFailed
+    case proRequired
 }
 
 struct AIService {
@@ -85,9 +99,16 @@ struct AIService {
         from input: String,
         now: Date = Date(),
         planningDate: Date = Date(),
-        allowsHostedAI: Bool = false
+        allowsHostedAI: Bool = false,
+        entitlementJWS: String? = nil
     ) async -> TaskParseResult {
-        await improveTasksWithAI(from: input, now: now, planningDate: planningDate, allowsHostedAI: allowsHostedAI)
+        await improveTasksWithAI(
+            from: input,
+            now: now,
+            planningDate: planningDate,
+            allowsHostedAI: allowsHostedAI,
+            entitlementJWS: entitlementJWS
+        )
     }
 
     static func parseTasksOffline(from input: String, now: Date = Date()) -> TaskParseResult {
@@ -98,13 +119,15 @@ struct AIService {
         from input: String,
         now: Date = Date(),
         planningDate: Date = Date(),
-        allowsHostedAI: Bool = false
+        allowsHostedAI: Bool = false,
+        entitlementJWS: String? = nil
     ) async -> TaskParseResult {
         let safeInput = remoteSafeInput(input)
         let offline = fallbackTasks(from: safeInput, now: now)
         let offlineDrafts = drafts(from: offline)
         var rejectedOnDeviceAI = false
         var rejectedHostedAI = false
+        var requiresPro = false
 
         if let drafts = await OnDeviceTaskParser.extractTasks(
             from: safeInput,
@@ -136,7 +159,8 @@ struct AIService {
                     endpoint: endpoint,
                     now: now,
                     planningDate: planningDate,
-                    offlinePreview: offlineDrafts
+                    offlinePreview: offlineDrafts,
+                    entitlementJWS: entitlementJWS
                 )
                 let remote = normalizedAIItems(
                     from: drafts,
@@ -149,13 +173,17 @@ struct AIService {
                     return TaskParseResult(tasks: remote, source: .ai, message: nil)
                 }
                 rejectedHostedAI = !remote.isEmpty
+            } catch AIServiceError.proRequired {
+                requiresPro = true
             } catch {
                 // Hosted AI is a fallback after local intelligence; keep the preview usable offline.
             }
         }
 
         let message: String
-        if rejectedOnDeviceAI && rejectedHostedAI {
+        if requiresPro {
+            message = "Used the offline parser. Upgrade to Pro for more hosted AI improvements today."
+        } else if rejectedOnDeviceAI && rejectedHostedAI {
             message = "AI changed explicit times. Used offline parser."
         } else if rejectedOnDeviceAI {
             message = allowsHostedAI ? "Apple Intelligence changed explicit times. Tried hosted AI, then used offline parser." : "Apple Intelligence changed explicit times. Used offline parser."
@@ -170,7 +198,8 @@ struct AIService {
         return TaskParseResult(
             tasks: offline,
             source: .offline,
-            message: message
+            message: message,
+            requiresPro: requiresPro
         )
     }
 
@@ -212,13 +241,17 @@ struct AIService {
         endpoint: URL,
         now: Date,
         planningDate: Date,
-        offlinePreview: [TaskDraft]
+        offlinePreview: [TaskDraft],
+        entitlementJWS: String?
     ) async throws -> [TaskDraft] {
         var request = URLRequest(url: endpoint)
         request.httpMethod = "POST"
         request.timeoutInterval = 12
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(clientID(), forHTTPHeaderField: "X-SchedAI-Client-ID")
+        if let entitlementJWS, !entitlementJWS.isEmpty {
+            request.setValue(entitlementJWS, forHTTPHeaderField: "X-SchedAI-Entitlement")
+        }
 
         let body = ParseTasksRequest(
             input: input,
@@ -232,6 +265,7 @@ struct AIService {
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AIServiceError.parseFailed }
+        if http.statusCode == 402 { throw AIServiceError.proRequired }
         guard (200..<300).contains(http.statusCode) else { throw AIServiceError.badResponse(http.statusCode) }
 
         let decoded = try JSONDecoder().decode(ParseTasksResponse.self, from: data)
