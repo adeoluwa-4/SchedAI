@@ -6,6 +6,7 @@ import Foundation
 struct AIAddTasksSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var app: AppState
+    @EnvironmentObject private var subscriptions: SubscriptionManager
     @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -79,7 +80,7 @@ struct AIAddTasksSheet: View {
             .sheet(isPresented: $showAIConsentSheet) {
                 AIConsentSheet {
                     app.hostedAIConsent = true
-                    Task { await improvePreviewWithAI() }
+                    Task { await improvePreviewWithAI(promptForHostedFallback: true) }
                 }
             }
         }
@@ -282,18 +283,35 @@ struct AIAddTasksSheet: View {
         isParsing = true
         defer { isParsing = false }
 
+        let hasHostedAccess = subscriptions.canUseHostedAI
         let result = await AIService.improveTasksWithAI(
             from: trimmed,
             now: planningReferenceDate,
             planningDate: app.planningDate,
-            allowsHostedAI: allowsHostedAI ?? app.hostedAIConsent
+            allowsHostedAI: (allowsHostedAI ?? app.hostedAIConsent) && hasHostedAccess,
+            entitlementJWS: subscriptions.entitlementJWS
         )
         parsedPreview = result.tasks
         previewUsedAI = result.source.isAIEnhanced
-        parseStatusMessage = result.message ?? (result.source.isAIEnhanced ? "AI improved this preview." : "Offline preview. No credits used.")
+        if result.source == .ai {
+            subscriptions.recordHostedAIUse()
+        }
+
+        let hostedAllowanceExhausted = !subscriptions.isPro
+            && !hasHostedAccess
+            && result.source == .offline
+        if hostedAllowanceExhausted {
+            parseStatusMessage = "Offline preview. You used today's free hosted AI improvements."
+        } else {
+            parseStatusMessage = result.message ?? (result.source.isAIEnhanced ? "AI improved this preview." : "Offline preview. No credits used.")
+        }
 
         if promptForHostedFallback, result.source == .offline {
-            showAIConsentSheet = true
+            if !app.hostedAIConsent {
+                showAIConsentSheet = true
+            } else if result.requiresPro || hostedAllowanceExhausted {
+                subscriptions.presentPaywall(.hostedAI)
+            }
         }
     }
 
@@ -302,7 +320,7 @@ struct AIAddTasksSheet: View {
         Task {
             await improvePreviewWithAI(
                 allowsHostedAI: true,
-                promptForHostedFallback: false
+                promptForHostedFallback: true
             )
         }
     }
