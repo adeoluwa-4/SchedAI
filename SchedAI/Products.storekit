@@ -1,0 +1,134 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "5343484544414950",
+  "nonRenewingSubscriptions" : [
+  ],
+  "products" : [
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Purchase"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Verification"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Store Sync"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Subscription Status"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "App Transaction"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Manage Subscriptions Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Refund Request Sheet"
+      },
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "534348454450524F",
+      "localizations" : [
+        {
+          "description" : "Expanded hosted AI access and an ad-free SchedAI experience.",
+          "displayName" : "SchedAI Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "SchedAI Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+          ],
+          "codeOffers" : [
+          ],
+          "displayPrice" : "2.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "53434845444D4F4E",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Expanded hosted AI access and no banner ads, billed monthly.",
+              "displayName" : "SchedAI Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "me.SchedAI.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "SchedAI Pro Monthly",
+          "subscriptionGroupID" : "534348454450524F",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+          ],
+          "codeOffers" : [
+          ],
+          "displayPrice" : "19.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5343484544594541",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Expanded hosted AI access and no banner ads, billed annually.",
+              "displayName" : "SchedAI Pro Annual",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "me.SchedAI.pro.annual",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "SchedAI Pro Annual",
+          "subscriptionGroupID" : "534348454450524F",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}
