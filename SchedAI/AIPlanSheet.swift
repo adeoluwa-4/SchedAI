@@ -3,6 +3,7 @@ import SwiftUI
 struct AIPlanSheet: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var app: AppState
+    @EnvironmentObject private var subscriptions: SubscriptionManager
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     let autoStartRecording: Bool
@@ -77,7 +78,7 @@ struct AIPlanSheet: View {
             .sheet(isPresented: $showAIConsentSheet) {
                 AIConsentSheet {
                     app.hostedAIConsent = true
-                    Task { await improvePreviewWithAI() }
+                    Task { await improvePreviewWithAI(promptForHostedFallback: true) }
                 }
             }
             .onDisappear {
@@ -547,16 +548,25 @@ struct AIPlanSheet: View {
             animateLoader = false
         }
 
+        let hasHostedAccess = subscriptions.canUseHostedAI
         let result = await AIService.improveTasksWithAI(
             from: text,
             now: planningReferenceDate,
             planningDate: app.planningDate,
-            allowsHostedAI: allowsHostedAI ?? app.hostedAIConsent
+            allowsHostedAI: (allowsHostedAI ?? app.hostedAIConsent) && hasHostedAccess,
+            entitlementJWS: subscriptions.entitlementJWS
         )
         applyParseResult(result, for: text)
+        if result.source == .ai {
+            subscriptions.recordHostedAIUse()
+        }
 
         if promptForHostedFallback, result.source == .offline {
-            showAIConsentSheet = true
+            if !app.hostedAIConsent {
+                showAIConsentSheet = true
+            } else if result.requiresPro || (!subscriptions.isPro && !hasHostedAccess) {
+                subscriptions.presentPaywall(.hostedAI)
+            }
         }
     }
 
@@ -565,7 +575,7 @@ struct AIPlanSheet: View {
         Task {
             await improvePreviewWithAI(
                 allowsHostedAI: true,
-                promptForHostedFallback: false
+                promptForHostedFallback: true
             )
         }
     }
@@ -598,7 +608,13 @@ struct AIPlanSheet: View {
         expandedPreviewTaskIDs.removeAll()
         hasManualPreviewEdits = false
         previewUsedAI = result.source.isAIEnhanced
-        parseStatusMessage = result.message ?? (previewUsedAI ? "AI improved this preview." : "Offline preview. No credits used.")
+        if !subscriptions.isPro,
+           !subscriptions.canUseHostedAI,
+           result.source == .offline {
+            parseStatusMessage = "Offline preview. You used today's free hosted AI improvements."
+        } else {
+            parseStatusMessage = result.message ?? (previewUsedAI ? "AI improved this preview." : "Offline preview. No credits used.")
+        }
         parsedPreview = autoPlace(base, on: previewDay)
     }
 
