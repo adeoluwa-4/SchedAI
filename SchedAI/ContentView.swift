@@ -5,6 +5,7 @@ import UIKit
 
 struct ContentView: View {
     @EnvironmentObject private var app: AppState
+    @EnvironmentObject private var subscriptions: SubscriptionManager
     @State private var selectedTab: Tab = .today
     @StateObject private var adMob = AdMobController()
 
@@ -32,12 +33,14 @@ struct ContentView: View {
                 .tabItem { Label("Settings", systemImage: "gearshape") }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if adMob.canRequestAds {
+            if !subscriptions.isPro, adMob.canRequestAds {
                 AdMobBannerView(adUnitID: bannerAdUnitID)
                     .background(Color(uiColor: .systemBackground))
+                    .accessibilityLabel("Advertisement")
             }
         }
-        .task {
+        .task(id: subscriptions.isPro) {
+            guard !subscriptions.isPro else { return }
             await adMob.start()
         }
         .onAppear {
