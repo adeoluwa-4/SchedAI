@@ -8,6 +8,7 @@ import UIKit
 
 struct SettingsView: View {
     private enum SettingsDestination: String, CaseIterable, Identifiable {
+        case pro
         case account
         case appearance
         case workWindow
@@ -20,6 +21,7 @@ struct SettingsView: View {
 
         var title: String {
             switch self {
+            case .pro: return "SchedAI Pro"
             case .account: return "Account"
             case .appearance: return "Appearance"
             case .workWindow: return "Work Window"
@@ -32,6 +34,7 @@ struct SettingsView: View {
 
         var icon: String {
             switch self {
+            case .pro: return "crown.fill"
             case .account: return "person.circle"
             case .appearance: return "paintbrush.pointed"
             case .workWindow: return "clock.badge.checkmark"
@@ -44,6 +47,7 @@ struct SettingsView: View {
 
         var color: Color {
             switch self {
+            case .pro: return Color.brandBlue
             case .account: return Color.brandBlue
             case .appearance: return .pink
             case .workWindow: return .indigo
@@ -56,6 +60,8 @@ struct SettingsView: View {
 
         var detailDescription: String {
             switch self {
+            case .pro:
+                return "Get expanded hosted AI access, remove banner ads, restore purchases, or manage your subscription."
             case .account:
                 return "Manage the personal details SchedAI uses locally, including the optional Apple name shown in the app."
             case .appearance:
@@ -87,6 +93,7 @@ struct SettingsView: View {
     }
 
     @EnvironmentObject private var app: AppState
+    @EnvironmentObject private var subscriptions: SubscriptionManager
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var scheme
     @State private var calendarToastMessage: String? = nil
@@ -145,6 +152,14 @@ struct SettingsView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(signInMessage ?? "")
+            }
+            .alert("SchedAI Pro", isPresented: Binding(
+                get: { subscriptions.statusMessage != nil },
+                set: { if !$0 { subscriptions.clearStatusMessage() } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(subscriptions.statusMessage ?? "")
             }
             .overlay(alignment: .top) {
                 if let message = calendarToastMessage {
@@ -320,6 +335,8 @@ struct SettingsView: View {
             )
 
             switch destination {
+            case .pro:
+                proDetail
             case .account:
                 accountDetail
             case .appearance:
@@ -334,6 +351,73 @@ struct SettingsView: View {
                 privacyDetail
             case .support:
                 supportDetail
+            }
+        }
+    }
+
+    private var proDetail: some View {
+        VStack(spacing: 22) {
+            SettingsGroupCard(icon: "crown.fill", title: "SchedAI Pro", color: Color.brandBlue) {
+                SettingsInfoRow(
+                    icon: subscriptions.isPro ? "checkmark.seal.fill" : "sparkles",
+                    title: subscriptions.isPro ? "Pro Active" : "Free Plan",
+                    subtitle: subscriptions.proStatusText,
+                    color: subscriptions.isPro ? .green : Color.brandBlue
+                )
+
+                SettingsDivider()
+
+                SettingsInfoRow(
+                    icon: "sparkles.rectangle.stack",
+                    title: "Expanded Hosted AI",
+                    subtitle: "Use Improve after the daily free allowance when on-device intelligence needs help.",
+                    color: Color.brandBlue
+                )
+
+                SettingsDivider()
+
+                SettingsInfoRow(
+                    icon: "rectangle.slash",
+                    title: "No Banner Ads",
+                    subtitle: subscriptions.isPro ? "Banner ads are hidden across SchedAI." : "Upgrade to remove banner ads across the app.",
+                    color: .indigo
+                )
+
+                SettingsDivider()
+
+                if subscriptions.isPro {
+                    SettingsActionRow(
+                        icon: "creditcard",
+                        title: "Manage Subscription",
+                        subtitle: "Change or cancel through your Apple Account",
+                        color: Color.brandBlue
+                    ) {
+                        if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                            openURL(url)
+                        }
+                    }
+                } else {
+                    SettingsActionRow(
+                        icon: "crown.fill",
+                        title: "View Pro Options",
+                        subtitle: "See monthly and annual prices from the App Store",
+                        color: Color.brandBlue
+                    ) {
+                        subscriptions.presentPaywall(.settings)
+                    }
+                }
+
+                SettingsDivider()
+
+                SettingsActionRow(
+                    icon: "arrow.clockwise",
+                    title: subscriptions.isRestoring ? "Restoring Purchases" : "Restore Purchases",
+                    subtitle: "Restore a subscription purchased with this Apple Account",
+                    color: .gray
+                ) {
+                    guard !subscriptions.isRestoring else { return }
+                    Task { await subscriptions.restorePurchases() }
+                }
             }
         }
     }
@@ -656,6 +740,8 @@ struct SettingsView: View {
 
     private func subtitle(for destination: SettingsDestination) -> String {
         switch destination {
+        case .pro:
+            return subscriptions.isPro ? "Active - ads removed" : subscriptions.proStatusText
         case .account:
             return profileStatusText
         case .appearance:
