@@ -18,5 +18,8 @@ GoogleService-Info.plist
 # Local scratch project (contains secrets like SupabaseSecrets.xcconfig)
 ios/
 
-# Keep hosted API implementation local; do not publish it to GitHub.
+# Keep hosted API implementation and its local Node workspace private; do not publish them to GitHub.
 api/
+package.json
+package-lock.json
+node_modules/
