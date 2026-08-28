@@ -9,7 +9,7 @@ struct ContentView: View {
     @State private var selectedTab: Tab = .today
     @StateObject private var adMob = AdMobController()
 
-    // Google demo unit. Replace with SchedAI's banner unit before App Store release.
+    // Production banner unit. SchedAI Pro subscribers never request or render it.
     private let bannerAdUnitID = "ca-app-pub-1559067251456423/4837063087"
 
     private enum Tab: Hashable {
@@ -19,21 +19,23 @@ struct ContentView: View {
     }
 
     var body: some View {
-        TabView(selection: $selectedTab) {
-            TodayView()
-                .tag(Tab.today)
-                .tabItem { Label("Today", systemImage: "calendar.badge.clock") }
+        VStack(spacing: 0) {
+            TabView(selection: $selectedTab) {
+                TodayView()
+                    .tag(Tab.today)
+                    .tabItem { Label("Today", systemImage: "calendar.badge.clock") }
 
-            TasksView()
-                .tag(Tab.tasks)
-                .tabItem { Label("Tasks", systemImage: "checkmark.circle") }
+                TasksView()
+                    .tag(Tab.tasks)
+                    .tabItem { Label("Tasks", systemImage: "checkmark.circle") }
 
-            SettingsView()
-                .tag(Tab.settings)
-                .tabItem { Label("Settings", systemImage: "gearshape") }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+                SettingsView()
+                    .tag(Tab.settings)
+                    .tabItem { Label("Settings", systemImage: "gearshape") }
+            }
+
             if !subscriptions.isPro, adMob.canRequestAds {
+                Divider()
                 AdMobBannerView(adUnitID: bannerAdUnitID)
                     .background(Color(uiColor: .systemBackground))
                     .accessibilityLabel("Advertisement")
