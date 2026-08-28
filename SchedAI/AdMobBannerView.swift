@@ -33,14 +33,12 @@ struct AdMobBannerView: View {
     let adUnitID: String
 
     var body: some View {
-        GeometryReader { geometry in
-            BannerViewContainer(
-                adSize: largeAnchoredAdaptiveBanner(width: geometry.size.width),
-                adUnitID: adUnitID
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(height: 64)
+        BannerViewContainer(
+            adSize: AdSizeBanner,
+            adUnitID: adUnitID
+        )
+        .frame(width: 320, height: 50)
+        .frame(maxWidth: .infinity)
         .accessibilityLabel("Advertisement")
     }
 }
