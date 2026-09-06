@@ -165,10 +165,8 @@ enum NotificationManager {
 
             let content = UNMutableNotificationContent()
             let startTime = start.formatted(date: .omitted, time: .shortened)
-            let priorityText = "\(t.priority.displayName) Priority"
-            content.title = "Task: \(t.title)"
-            content.subtitle = "\(startTime) • \(priorityText)"
-            content.body = "Time: \(startTime) • Priority: \(t.priority.displayName)"
+            content.title = t.title
+            content.body = "Starts at \(startTime)" + (t.priority == .high ? " · High priority" : "")
             content.sound = .default
             content.interruptionLevel = .active
 
