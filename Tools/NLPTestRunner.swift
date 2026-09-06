@@ -94,7 +94,7 @@ struct NLPTestRunner {
                 input: "Remind me on Monday the fourth to enroll for Jen Ba 205 and for management 596",
                 expectedCount: 2,
                 expected: [
-                    .init(title: "Enroll for jen ba 205", minutes: nil, hasTime: false),
+                    .init(title: "Enroll for jen ba 205", minutes: nil, hasTime: true),
                     .init(title: "Enroll for management 596", minutes: nil, hasTime: false),
                 ]
             ),
