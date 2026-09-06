@@ -96,6 +96,7 @@ struct OfflineNLP {
         static let weekdayPattern = #"mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:rs(?:day)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?"#
         static let dayOfWeekRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+)?((?:next|this|coming)\s+)?("# + weekdayPattern + #")\b"#)
         static let nthWeekdayFromNowRegex = try! NSRegularExpression(pattern: #"(?i)\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+((?:"# + weekdayPattern + #")s?)\s+from\s+now\b"#)
+        static let calendarOffsetRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:in\s+(a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)\s+(days?|weeks?|months?|years?)|(a|an|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|\d+)\s+(days?|weeks?|months?|years?)\s+from\s+now)\b"#)
         static let relativeDayRegex = try! NSRegularExpression(pattern: #"(?i)\bin\s+(\d+)\s*(day|days|week|weeks)\b"#)
         static let relativeFromNowRegex = try! NSRegularExpression(pattern: #"(?i)\b(\d+)\s*(day|days|week|weeks)\s+from\s+now\b"#)
         static let bareDayOfMonthRegex = try! NSRegularExpression(pattern: #"(?i)\b(?:on\s+the\s+|the\s+)(\d{1,2})(?:st|nd|rd|th)?\b|\bon\s+(\d{1,2})(?:st|nd|rd|th)\b|\b(\d{1,2})(?:st|nd|rd|th)\b"#)
@@ -319,6 +320,10 @@ struct OfflineNLP {
             of: #"(?i)\b(?:i['’]?ll|i\s+will|i['’]?m|i\s+am)\s*$"#,
             options: .regularExpression
         ) != nil
+    }
+
+    static func hasRelativeCalendarOffset(_ text: String) -> Bool {
+        Cache.calendarOffsetRegex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil
     }
 
     static func hasExplicitDayReference(_ text: String, now: Date = Date()) -> Bool {
@@ -693,6 +698,11 @@ struct OfflineNLP {
             }
         }
 
+        if start == nil, let day = extractedTargetDay, isReminderRequest(text) {
+            start = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day)
+            explicitTime = true // Keep the proposed reminder time when the planner runs.
+        }
+
         if !hasExplicitDay, let prev = previousTaskStart, let s = start, s <= prev {
             start = calendar.date(byAdding: .day, value: 1, to: s)
         }
@@ -800,9 +810,12 @@ struct OfflineNLP {
 
     private static func extractStepTitle(from text: String) -> String {
         let normalized = normalizeInput(text)
-        let ns = normalized as NSString
+        let withoutOffset = Cache.calendarOffsetRegex.stringByReplacingMatches(
+            in: normalized, range: NSRange(normalized.startIndex..., in: normalized), withTemplate: " "
+        )
+        let ns = withoutOffset as NSString
         var stripped = StepRegex.rangeAndDurationCleanupRegex.stringByReplacingMatches(
-            in: normalized,
+            in: withoutOffset,
             range: NSRange(location: 0, length: ns.length),
             withTemplate: " "
         )
@@ -1876,6 +1889,13 @@ struct OfflineNLP {
                                    targetDay: calendar.startOfDay(for: pod.date))
         }
 
+        if let day = explicitTargetDay, isReminderRequest(text),
+           let reminder = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day) {
+            return TimeParseResult(date: reminder, cleaned: working,
+                                   confidence: .high, durationOverrideMinutes: nil,
+                                   isExplicit: true, targetDay: day)
+        }
+
         return TimeParseResult(date: nil,
                                cleaned: working.trimmingCharacters(in: .whitespacesAndNewlines),
                                confidence: .low,
@@ -1900,6 +1920,23 @@ struct OfflineNLP {
 
         func removeMatch(_ range: NSRange) {
             if let r = Range(range, in: working) { working.removeSubrange(r) }
+        }
+
+        let ns = working as NSString
+        if let match = Cache.calendarOffsetRegex.firstMatch(in: working, range: NSRange(location: 0, length: ns.length)) {
+            let group = match.range(at: 1).location == NSNotFound ? 3 : 1
+            let number = ns.substring(with: match.range(at: group)).lowercased()
+            let words = ["a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4,
+                         "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+                         "ten": 10, "eleven": 11, "twelve": 12]
+            let unit = ns.substring(with: match.range(at: group + 1)).lowercased()
+            let component: Calendar.Component = unit.hasPrefix("year") ? .year
+                : unit.hasPrefix("month") ? .month : unit.hasPrefix("week") ? .weekOfYear : .day
+            if let value = Int(number) ?? words[number], (1...1000).contains(value),
+               let date = calendar.date(byAdding: component, value: value, to: calendar.startOfDay(for: now)) {
+                removeMatch(match.range)
+                return BaseDayResult(baseDay: date, cleaned: working, hasExplicitDay: true)
+            }
         }
 
         func strictDate(year: Int, month: Int, day: Int) -> Date? {
@@ -2781,6 +2818,11 @@ struct OfflineNLP {
         }
 
         return nil
+    }
+
+    private static func isReminderRequest(_ context: String) -> Bool {
+        context.range(of: #"(?i)\b(?:remind\s+me|reminder|(?:don't|dont|do\s+not)\s+let\s+me\s+forget)\b"#,
+                      options: .regularExpression) != nil
     }
 
     private static func isReminderColonClockRequest(_ context: String) -> Bool {
