@@ -96,6 +96,7 @@ struct SettingsView: View {
     @EnvironmentObject private var subscriptions: SubscriptionManager
     @Environment(\.openURL) private var openURL
     @Environment(\.colorScheme) private var scheme
+    @Environment(\.scenePhase) private var scenePhase
     @State private var calendarToastMessage: String? = nil
     @State private var signInMessage: String? = nil
     @State private var presentedSheet: SettingsSheet? = nil
@@ -125,6 +126,10 @@ struct SettingsView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .onAppear { app.refreshCalendarConnectionStatus() }
+            .task { await subscriptions.refresh() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { Task { await subscriptions.refresh() } }
+            }
             .onChange(of: app.calendarSyncToast) { _, message in
                 guard let message else { return }
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -360,7 +365,7 @@ struct SettingsView: View {
             SettingsGroupCard(icon: "crown.fill", title: "SchedAI Pro", color: Color.brandBlue) {
                 SettingsInfoRow(
                     icon: subscriptions.isPro ? "checkmark.seal.fill" : "sparkles",
-                    title: subscriptions.isPro ? "Pro Active" : "Free Plan",
+                    title: subscriptions.isPro ? subscriptions.planName : "Free Plan",
                     subtitle: subscriptions.proStatusText,
                     color: subscriptions.isPro ? .green : Color.brandBlue
                 )
@@ -386,6 +391,15 @@ struct SettingsView: View {
                 SettingsDivider()
 
                 if subscriptions.isPro {
+                    if let price = subscriptions.planPrice {
+                        SettingsInfoRow(
+                            icon: "creditcard",
+                            title: price,
+                            subtitle: subscriptions.renewalText,
+                            color: .gray
+                        )
+                        SettingsDivider()
+                    }
                     SettingsActionRow(
                         icon: "creditcard",
                         title: "Manage Subscription",
@@ -531,7 +545,7 @@ struct SettingsView: View {
             SettingsInfoRow(
                 icon: "bell.and.waves.left.and.right",
                 title: "Reminder Behavior",
-                subtitle: "SchedAI schedules local alerts with the task, start time, and priority.",
+                subtitle: "Get a clear task reminder with its start time.",
                 color: .orange
             )
 
@@ -565,7 +579,7 @@ struct SettingsView: View {
                 SettingsInfoRow(
                     icon: "text.badge.checkmark",
                     title: "Alert Details",
-                    subtitle: "Alerts show the task name, start time, and priority.",
+                    subtitle: "Alerts lead with the task name. Only high priority is highlighted.",
                     color: .orange
                 )
             }
@@ -741,7 +755,7 @@ struct SettingsView: View {
     private func subtitle(for destination: SettingsDestination) -> String {
         switch destination {
         case .pro:
-            return subscriptions.isPro ? "Active - ads removed" : subscriptions.proStatusText
+            return subscriptions.proStatusText
         case .account:
             return profileStatusText
         case .appearance:
