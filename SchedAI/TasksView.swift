@@ -705,7 +705,7 @@ private struct ModernTaskRow: View {
     
     private func timeRange(_ start: Date, _ end: Date) -> String {
         let dayFormatter = DateFormatter()
-        dayFormatter.dateFormat = "EEE, MMM d"
+        dayFormatter.setLocalizedDateFormatFromTemplate("EEE MMM d yyyy")
         let timeFormatter = DateFormatter()
         timeFormatter.timeStyle = .short
         return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))–\(timeFormatter.string(from: end))"
