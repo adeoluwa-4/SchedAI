@@ -358,6 +358,7 @@ struct AIAddTasksSheet: View {
         let calendar = Calendar.current
         let selectedDay = calendar.startOfDay(for: app.planningDate)
         let now = Date()
+        if OfflineNLP.hasRelativeCalendarOffset(input) { return now }
         if calendar.isDate(selectedDay, inSameDayAs: now) {
             return now
         }
