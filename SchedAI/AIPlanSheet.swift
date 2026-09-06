@@ -659,6 +659,7 @@ struct AIPlanSheet: View {
         let calendar = Calendar.current
         let selectedDay = calendar.startOfDay(for: app.planningDate)
         let now = Date()
+        if OfflineNLP.hasRelativeCalendarOffset(transcript) { return now }
         if calendar.isDate(selectedDay, inSameDayAs: now) {
             return now
         }
@@ -866,7 +867,7 @@ struct AIPlanSheet: View {
 
     private func day(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "EEE, MMM d"
+        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d yyyy")
         return formatter.string(from: date)
     }
 }
