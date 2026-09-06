@@ -310,6 +310,7 @@ struct AIService {
 
         if items.count == fallback.count {
             let shouldPreserveExplicitSchedules = explicitClockTokenCount(in: input) > 0
+                || OfflineNLP.hasRelativeCalendarOffset(input)
 
             for index in items.indices {
                 let fallbackTask = fallback[index]
