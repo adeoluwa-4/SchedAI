@@ -80,6 +80,9 @@ final class SubscriptionManager: ObservableObject {
 
     @Published private(set) var products: [Product] = []
     @Published private(set) var isPro = false
+    @Published private(set) var activePlan: SchedAIProduct?
+    @Published private(set) var expirationDate: Date?
+    @Published private(set) var willAutoRenew: Bool?
     @Published private(set) var isLoading = false
     @Published private(set) var isRestoring = false
     @Published private(set) var statusMessage: String?
@@ -126,10 +129,33 @@ final class SubscriptionManager: ObservableObject {
 
     var proStatusText: String {
         if isPro {
-            return "SchedAI Pro is active"
+            return "\(planName) · \(renewalText)"
         }
         let remaining = remainingFreeHostedImprovements
         return "\(remaining) of \(Self.freeHostedAILimit) free AI improvements left today"
+    }
+
+    var planName: String {
+        switch activePlan {
+        case .monthly: return "Monthly plan"
+        case .annual: return "Annual plan"
+        case nil: return "Pro active"
+        }
+    }
+
+    var renewalText: String {
+        guard let expirationDate else { return "Active" }
+        let date = expirationDate.formatted(date: .abbreviated, time: .omitted)
+        switch willAutoRenew {
+        case true: return "Renews \(date)"
+        case false: return "Expires \(date)"
+        case nil: return "Active through \(date)"
+        }
+    }
+
+    var planPrice: String? {
+        guard let plan = activePlan, let product = products.first(where: { $0.id == plan.rawValue }) else { return nil }
+        return "\(product.displayPrice) / \(plan == .monthly ? "month" : "year")"
     }
 
     func start() async {
@@ -217,20 +243,38 @@ final class SubscriptionManager: ObservableObject {
 
     private func refreshEntitlements() async {
         var activeJWS: String?
+        var activeTransaction: Transaction?
 
         for await result in Transaction.currentEntitlements {
             guard case .verified(let transaction) = result else { continue }
             guard SchedAIProduct.isPro(transaction.productID) else { continue }
+            guard !transaction.isUpgraded else { continue }
             guard transaction.revocationDate == nil else { continue }
             if let expirationDate = transaction.expirationDate, expirationDate <= Date() { continue }
             activeJWS = result.jwsRepresentation
+            activeTransaction = transaction
             break
         }
 
         entitlementJWS = activeJWS
         isPro = activeJWS != nil
+        activePlan = activeTransaction.flatMap { SchedAIProduct(rawValue: $0.productID) }
+        expirationDate = activeTransaction?.expirationDate
+        willAutoRenew = nil
         if isPro {
             presentedPaywall = nil
+        }
+        if let transaction = activeTransaction,
+           let product = try? await Product.products(for: [transaction.productID]).first,
+           let statuses = try? await product.subscription?.status {
+            for status in statuses {
+                guard case .verified(let statusTransaction) = status.transaction,
+                      statusTransaction.id == transaction.id,
+                      case .verified(let renewal) = status.renewalInfo,
+                      activePlan?.rawValue == transaction.productID else { continue }
+                willAutoRenew = renewal.willAutoRenew
+                break
+            }
         }
     }
 
