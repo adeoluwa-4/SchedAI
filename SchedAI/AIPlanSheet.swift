@@ -21,6 +21,10 @@ struct AIPlanSheet: View {
     @State private var previewUsedAI = false
     @State private var isPlanning = false
     @State private var animateLoader = false
+    @State private var parseRequestID = UUID()
+    @State private var previewSource: TaskParseSource = .offline
+    @State private var previewReferenceTime = Date()
+    @State private var saveMessage: String?
     @State private var didAutoStartRecording = false
     @State private var showAIConsentSheet = false
 
@@ -42,6 +46,10 @@ struct AIPlanSheet: View {
                         inputCard
 
                         planInputActions
+
+                        Text("Preview tries on-device AI first. With your permission, hosted AI may process task text and use your allowance. Offline parsing remains available.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
                         if !parsedPreview.isEmpty {
                             previewCard
@@ -66,6 +74,7 @@ struct AIPlanSheet: View {
                 resetPreviewState()
             }
             .onChange(of: app.planningDate) { _, newValue in
+                resetPreviewState()
                 if previewBase.isEmpty {
                     previewDay = Calendar.current.startOfDay(for: newValue)
                 }
@@ -82,6 +91,7 @@ struct AIPlanSheet: View {
                 }
             }
             .onDisappear {
+                resetPreviewState()
                 speech.resetForFreshInput()
                 isPlanning = false
                 animateLoader = false
@@ -214,12 +224,12 @@ struct AIPlanSheet: View {
 
     private var confirmPlanButton: some View {
         Button(action: confirmPlan) {
-            Text("Confirm Plan")
+            Text("Save plan")
                 .font(.headline.weight(.semibold))
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(isPlanning)
+        .disabled(isPlanning || parsedPreview.isEmpty || parsedPreview.contains { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         .padding(.top, 2)
     }
 
@@ -279,6 +289,21 @@ struct AIPlanSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             previewCardHeader
 
+            Text("New tasks fit around your existing schedule. Existing task times will not move.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let saveMessage { Text(saveMessage).font(.callout) }
+            ForEach(Array(app.scheduleWarnings(for: parsedPreview).enumerated()), id: \.offset) { _, warning in
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            let unplannedCount = parsedPreview.filter { $0.scheduledStart == nil }.count
+            if unplannedCount > 0 {
+                Text("\(unplannedCount) task(s) have no available slot. They will be saved without a time; choose another date or shorten their duration.")
+                    .font(.caption)
+            }
+
             if let parseStatusMessage {
                 Text(parseStatusMessage)
                     .font(.caption)
@@ -297,7 +322,7 @@ struct AIPlanSheet: View {
                 .buttonStyle(.bordered)
                 .disabled(isPlanning)
 
-                Text("Tries Apple Intelligence on device first; hosted AI Improve is ready when needed.")
+                Text("Tries on-device AI first. Hosted AI requires permission and uses your allowance.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -329,7 +354,7 @@ struct AIPlanSheet: View {
     @ViewBuilder
     private var previewCardHeader: some View {
         let countText = "\(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s") detected"
-        let sourceText = previewUsedAI ? "AI improved" : "Offline"
+        let sourceText = previewSource.displayName
 
         if usesAccessibilityLayout {
             VStack(alignment: .leading, spacing: 8) {
@@ -375,6 +400,14 @@ struct AIPlanSheet: View {
 
             if expandedPreviewTaskIDs.contains(task.id) {
                 VStack(alignment: .leading, spacing: 8) {
+                    Button("Find available time") {
+                        if let suggestion = app.availableTime(for: parsedPreview[idx], among: parsedPreview) {
+                            parsedPreview[idx] = suggestion
+                            hasManualPreviewEdits = true
+                            saveMessage = "Suggested time selected. Review it before saving."
+                        } else { saveMessage = "No available time on this day. Choose another date or shorten the task." }
+                    }
+                    .buttonStyle(.bordered)
                     TextField("Task", text: previewTitleBinding(at: idx))
                         .textFieldStyle(.roundedBorder)
                         .textInputAutocapitalization(.sentences)
@@ -543,9 +576,14 @@ struct AIPlanSheet: View {
 
         isPlanning = true
         animateLoader = true
+        let requestID = UUID()
+        parseRequestID = requestID
+        let requestedDay = app.planningDate
         defer {
-            isPlanning = false
-            animateLoader = false
+            if parseRequestID == requestID {
+                isPlanning = false
+                animateLoader = false
+            }
         }
 
         let hasHostedAccess = subscriptions.canUseHostedAI
@@ -556,10 +594,13 @@ struct AIPlanSheet: View {
             allowsHostedAI: (allowsHostedAI ?? app.hostedAIConsent) && hasHostedAccess,
             entitlementJWS: subscriptions.entitlementJWS
         )
-        applyParseResult(result, for: text)
         if result.source == .ai {
             subscriptions.recordHostedAIUse()
         }
+        guard parseRequestID == requestID, transcript.trimmingCharacters(in: .whitespacesAndNewlines) == text,
+              app.planningDate == requestedDay else { return }
+        previewReferenceTime = Date()
+        applyParseResult(result, for: text)
 
         if promptForHostedFallback, result.source == .offline {
             if !app.hostedAIConsent {
@@ -571,10 +612,8 @@ struct AIPlanSheet: View {
     }
 
     private func requestAIImprove() {
-        app.hostedAIConsent = true
         Task {
             await improvePreviewWithAI(
-                allowsHostedAI: true,
                 promptForHostedFallback: true
             )
         }
@@ -608,44 +647,44 @@ struct AIPlanSheet: View {
         expandedPreviewTaskIDs.removeAll()
         hasManualPreviewEdits = false
         previewUsedAI = result.source.isAIEnhanced
+        previewSource = result.source
         if !subscriptions.isPro,
            !subscriptions.canUseHostedAI,
            result.source == .offline {
             parseStatusMessage = "Offline preview. You used today's free hosted AI improvements."
         } else {
-            parseStatusMessage = result.message ?? (previewUsedAI ? "AI improved this preview." : "Offline preview. No credits used.")
+            parseStatusMessage = result.source.usageDescription + (result.message.map { " " + $0 } ?? "")
         }
         parsedPreview = autoPlace(base, on: previewDay)
     }
 
     private func confirmPlan() {
-        guard !parsedPreview.isEmpty else { return }
-        isPlanning = true
-        animateLoader = true
-
-        Task {
-            await MainActor.run {
-                let targetDay = Calendar.current.startOfDay(for: previewDay)
-                let finalPreview = autoPlace(parsedPreview, on: targetDay)
-                let cleanedPreview = finalPreview.compactMap { task -> TaskItem? in
-                    var cleaned = task
-                    cleaned.title = cleaned.title.trimmingCharacters(in: .whitespacesAndNewlines)
-                    return cleaned.title.isEmpty ? nil : cleaned
-                }
-                app.addTasks(cleanedPreview)
-                let affectedDays = cleanedPreview.map { task in
-                    if let start = task.scheduledStart {
-                        return Calendar.current.startOfDay(for: start)
-                    }
-                    return Calendar.current.startOfDay(for: task.targetDay ?? targetDay)
-                }
-                app.planSpecificDays(affectedDays.isEmpty ? [targetDay] : affectedDays, focusDay: targetDay)
-                dismiss()
-            }
+        guard !isPlanning, !parsedPreview.isEmpty,
+              !parsedPreview.contains(where: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { return }
+        let now = Date()
+        if parsedPreview.contains(where: { !$0.isPinned && ($0.scheduledStart ?? .distantFuture) <= now }) {
+            previewReferenceTime = now
         }
+        let refreshed = autoPlace(parsedPreview, on: previewDay)
+        guard refreshed == parsedPreview else {
+            parsedPreview = refreshed
+            saveMessage = "The schedule was updated. Review the times, then tap Save plan again."
+            return
+        }
+        let saved = parsedPreview.map { task in
+            var task = task
+            task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return task
+        }
+        app.savePreviewedTasks(saved, focusDay: previewDay)
+        dismiss()
     }
 
     private func resetPreviewState() {
+        parseRequestID = UUID()
+        isPlanning = false
+        animateLoader = false
+        saveMessage = nil
         previewBase = []
         parsedPreview = []
         needsInlineDaySelector = false
@@ -667,33 +706,7 @@ struct AIPlanSheet: View {
     }
 
     private func autoPlace(_ tasks: [TaskItem], on day: Date) -> [TaskItem] {
-        var working = tasks
-        let cal = Calendar.current
-        let fallbackDay = cal.startOfDay(for: day)
-
-        for i in working.indices {
-            if let start = working[i].scheduledStart {
-                working[i].targetDay = cal.startOfDay(for: start)
-            } else if let target = working[i].targetDay {
-                working[i].targetDay = cal.startOfDay(for: target)
-            } else {
-                working[i].targetDay = fallbackDay
-            }
-        }
-
-        let planningDays = Array(Set(working.compactMap(\.targetDay))).sorted()
-        for planningDay in planningDays {
-            let externalBusy = CalendarManager.shared.busyIntervals(on: planningDay) ?? []
-            let window = app.schedulingWindow(for: planningDay)
-            _ = Scheduler.planToday(
-                tasks: &working,
-                workStart: window.start,
-                workEnd: window.end,
-                day: planningDay,
-                externalBusyIntervals: externalBusy
-            )
-        }
-        return working
+        app.previewNewTasks(tasks, fallbackDay: day, now: previewReferenceTime)
     }
 
     private func previewPriorityBinding(at index: Int) -> Binding<TaskPriority> {
