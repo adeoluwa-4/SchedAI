@@ -9,6 +9,46 @@ import Foundation
 import UserNotifications
 
 enum NotificationManager {
+    @MainActor private static var updateTask: Task<ScheduleResult, Never>?
+    @MainActor private static var updateGeneration = 0
+
+    /// Serialize queue replacements so an older asynchronous update cannot restore stale reminders.
+    @MainActor
+    static func replaceReminders(for tasks: [TaskItem], minutesBefore: Int) async -> ScheduleResult {
+        updateGeneration += 1
+        let generation = updateGeneration
+        let previous = updateTask
+        let next = Task { @MainActor in
+            _ = await previous?.value
+            let empty = ScheduleResult(queued: 0, skippedPast: 0, skippedLimit: 0, failed: 0, firstErrorMessage: nil)
+            guard generation == updateGeneration else { return empty }
+            let center = UNUserNotificationCenter.current()
+            // Do not clear delivered notifications when an unrelated task changes.
+            center.removeAllPendingNotificationRequests()
+            let plan = reminderPlan(for: tasks, minutesBefore: minutesBefore)
+            var queued = 0
+            var failed = 0
+            var firstError: String?
+            for request in plan.requests {
+                guard generation == updateGeneration else { break }
+                let error = await add(request, to: center)
+                if generation != updateGeneration {
+                    center.removePendingNotificationRequests(withIdentifiers: [request.identifier])
+                    break
+                }
+                if let error {
+                    failed += 1
+                    firstError = firstError ?? error.localizedDescription
+                } else { queued += 1 }
+            }
+            return ScheduleResult(queued: queued, skippedPast: plan.skippedPast, skippedLimit: plan.skippedLimit,
+                                  failed: failed, firstErrorMessage: firstError)
+        }
+        updateTask = next
+        let result = await next.value
+        if generation == updateGeneration { updateTask = nil }
+        return result
+    }
     private static let maximumScheduledReminders = 60
     private static let reminderIdentifierPrefix = "schedai.task."
 
@@ -63,7 +103,8 @@ enum NotificationManager {
     }
 
     /// Remove notifications (explicit args avoid ambiguous overloads).
-    static func clearAll(delivered: Bool, pending: Bool) {
+    @MainActor static func clearAll(delivered: Bool, pending: Bool) {
+        if pending { updateGeneration += 1 }
         let c = UNUserNotificationCenter.current()
         if delivered { c.removeAllDeliveredNotifications() }
         if pending { c.removeAllPendingNotificationRequests() }
@@ -132,14 +173,20 @@ enum NotificationManager {
         )
     }
 
+    static func reminderDate(start: Date, minutesBefore: Int, now: Date) -> Date? {
+        guard start > now else { return nil }
+        let desired = start.addingTimeInterval(-Double(max(0, minutesBefore)) * 60)
+        // The task is still upcoming even if its preferred lead time has passed.
+        return desired > now ? desired : start
+    }
+
     private static func reminderPlan(for tasks: [TaskItem], minutesBefore: Int) -> ReminderPlan {
         let now = Date()
         let candidates = tasks
             .compactMap { task -> (task: TaskItem, triggerDate: Date)? in
                 guard let start = task.scheduledStart else { return nil }
                 guard task.canAutoSchedule(on: start) else { return nil }
-                let triggerDate = start.addingTimeInterval(TimeInterval(-minutesBefore * 60))
-                guard triggerDate > now else { return nil }
+                guard let triggerDate = reminderDate(start: start, minutesBefore: minutesBefore, now: now) else { return nil }
                 return (task, triggerDate)
             }
             .sorted { $0.triggerDate < $1.triggerDate }
