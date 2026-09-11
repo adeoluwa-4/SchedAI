@@ -18,6 +18,22 @@ enum TaskParseSource: Equatable {
     case ai
     case offline
 
+    var displayName: String {
+        switch self {
+        case .onDeviceAI: return "On-device AI"
+        case .ai: return "Hosted AI"
+        case .offline: return "Offline"
+        }
+    }
+
+    var usageDescription: String {
+        switch self {
+        case .onDeviceAI: return "Processed on device. No hosted AI allowance used."
+        case .ai: return "Processed with hosted AI. Counts toward hosted AI usage."
+        case .offline: return "Processed offline. No hosted AI allowance used."
+        }
+    }
+
     var isAIEnhanced: Bool {
         self == .onDeviceAI || self == .ai
     }
