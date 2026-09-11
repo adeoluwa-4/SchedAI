@@ -15,6 +15,18 @@ struct TaskEditView: View {
     @State private var hasScheduledTime: Bool
     @State private var scheduledStart: Date
     @State private var scheduledEnd: Date
+    @State private var slotMessage: String?
+
+    private var scheduleDraft: TaskItem {
+        var draft = item
+        draft.title = title
+        draft.estimatedMinutes = estimatedMinutes
+        draft.isCompleted = isCompleted
+        draft.planState = planState
+        draft.scheduledStart = hasScheduledTime ? scheduledStart : nil
+        draft.scheduledEnd = hasScheduledTime ? scheduledEnd : nil
+        return draft
+    }
 
     init(task: TaskItem) {
         self.item = task
@@ -131,6 +143,20 @@ struct TaskEditView: View {
                 }
 
                 Section("What this means") {
+                    ForEach(Array(app.scheduleWarnings(for: [scheduleDraft]).enumerated()), id: \.offset) { _, warning in
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                    }
+                    Button("Find available time") {
+                        if let suggestion = app.availableTime(for: scheduleDraft),
+                           let start = suggestion.scheduledStart, let end = suggestion.scheduledEnd {
+                            hasScheduledTime = true
+                            scheduledStart = start
+                            scheduledEnd = end
+                            slotMessage = "Suggested time selected. Review it before saving."
+                        } else { slotMessage = "No available time on this day. Choose another date or shorten the task." }
+                    }
+                    if let slotMessage { Text(slotMessage).font(.footnote) }
                     Text(planState.subtitle)
                         .font(.footnote)
                         .foregroundStyle(.secondary)
