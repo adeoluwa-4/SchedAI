@@ -21,6 +21,8 @@ struct AIAddTasksSheet: View {
     @State private var previewUsedAI = false
     @State private var showAIConsentSheet: Bool = false
     @State private var didLoadInitialInput = false
+    @State private var parseRequestID = UUID()
+    @State private var previewSource: TaskParseSource = .offline
 
     init(
         initialInput: String = "",
@@ -72,6 +74,8 @@ struct AIAddTasksSheet: View {
             .onChange(of: input) { _, _ in
                 resetPreviewState()
             }
+            .onChange(of: app.planningDate) { _, _ in resetPreviewState() }
+            .onDisappear { resetPreviewState() }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Close") { dismiss() }
@@ -120,17 +124,17 @@ struct AIAddTasksSheet: View {
         Button {
             addAllAndDismiss()
         } label: {
-            Label("Confirm", systemImage: "checkmark.circle.fill")
+            Label("Add tasks", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(parsedPreview.isEmpty)
+        .disabled(isParsing || parsedPreview.isEmpty || parsedPreview.contains { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
     }
 
     private var statusText: some View {
-        Text(parseStatusMessage ?? "Preview stays on device. Improve with AI tries Apple Intelligence locally before hosted AI.")
+        Text(isParsing ? "Preparing preview…" : (parseStatusMessage ?? "Preview tries on-device AI first. With your permission, hosted AI may process task text and use your allowance. Offline parsing remains available."))
             .font(.caption)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -160,7 +164,7 @@ struct AIAddTasksSheet: View {
 
                 Spacer()
 
-                Text(previewUsedAI ? "AI improved" : "Offline")
+                Text(previewSource.displayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
@@ -180,15 +184,23 @@ struct AIAddTasksSheet: View {
                 .buttonStyle(.bordered)
                 .disabled(isParsing || input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
-                Text("Tries Apple Intelligence on device first; hosted AI Improve is ready when needed.")
+                Text("Tries on-device AI first. Hosted AI requires permission and uses your allowance.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
 
             VStack(spacing: 10) {
-                ForEach(parsedPreview) { task in
-                    QuickAddPreviewRow(task: task, timeFormatter: time)
+                ForEach($parsedPreview) { $task in
+                    QuickAddPreviewRow(task: $task, fallbackDay: app.planningDate, findTime: {
+                        app.availableTime(for: task, among: parsedPreview)
+                    })
                 }
+            }
+            .disabled(isParsing)
+            ForEach(Array(app.scheduleWarnings(for: parsedPreview).enumerated()), id: \.offset) { _, warning in
+                Label(warning, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -281,7 +293,10 @@ struct AIAddTasksSheet: View {
         guard !trimmed.isEmpty else { return }
 
         isParsing = true
-        defer { isParsing = false }
+        let requestID = UUID()
+        parseRequestID = requestID
+        let requestedDay = app.planningDate
+        defer { if parseRequestID == requestID { isParsing = false } }
 
         let hasHostedAccess = subscriptions.canUseHostedAI
         let result = await AIService.improveTasksWithAI(
@@ -291,11 +306,14 @@ struct AIAddTasksSheet: View {
             allowsHostedAI: (allowsHostedAI ?? app.hostedAIConsent) && hasHostedAccess,
             entitlementJWS: subscriptions.entitlementJWS
         )
-        parsedPreview = result.tasks
-        previewUsedAI = result.source.isAIEnhanced
         if result.source == .ai {
             subscriptions.recordHostedAIUse()
         }
+        guard parseRequestID == requestID, input.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed,
+              requestedDay == app.planningDate else { return }
+        parsedPreview = result.tasks
+        previewUsedAI = result.source.isAIEnhanced
+        previewSource = result.source
 
         let hostedAllowanceExhausted = !subscriptions.isPro
             && !hasHostedAccess
@@ -303,7 +321,7 @@ struct AIAddTasksSheet: View {
         if hostedAllowanceExhausted {
             parseStatusMessage = "Offline preview. You used today's free hosted AI improvements."
         } else {
-            parseStatusMessage = result.message ?? (result.source.isAIEnhanced ? "AI improved this preview." : "Offline preview. No credits used.")
+            parseStatusMessage = result.source.usageDescription + (result.message.map { " " + $0 } ?? "")
         }
 
         if promptForHostedFallback, result.source == .offline {
@@ -316,17 +334,16 @@ struct AIAddTasksSheet: View {
     }
 
     private func requestAIImprove() {
-        app.hostedAIConsent = true
         Task {
             await improvePreviewWithAI(
-                allowsHostedAI: true,
                 promptForHostedFallback: true
             )
         }
     }
 
     private func addAllAndDismiss() {
-        guard !parsedPreview.isEmpty else { return }
+        guard !isParsing, !parsedPreview.isEmpty,
+              !parsedPreview.contains(where: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { return }
 
         let calendar = Calendar.current
         let fallbackDay = calendar.startOfDay(for: app.planningDate)
@@ -349,6 +366,8 @@ struct AIAddTasksSheet: View {
     }
 
     private func resetPreviewState() {
+        parseRequestID = UUID()
+        isParsing = false
         parsedPreview = []
         parseStatusMessage = nil
         previewUsedAI = false
@@ -373,8 +392,24 @@ struct AIAddTasksSheet: View {
 }
 
 private struct QuickAddPreviewRow: View {
-    let task: TaskItem
-    let timeFormatter: (Date) -> String
+    @Binding var task: TaskItem
+    let fallbackDay: Date
+    let findTime: () -> TaskItem?
+    @State private var isEditing = false
+    @State private var slotMessage: String?
+
+    private var selectedDate: Date { task.scheduledStart ?? task.targetDay ?? fallbackDay }
+
+    private func setDate(_ date: Date) {
+        task.targetDay = Calendar.current.startOfDay(for: date)
+        if task.scheduledStart != nil {
+            task.scheduledStart = date
+            task.scheduledEnd = date.addingTimeInterval(Double(max(5, task.estimatedMinutes)) * 60)
+            task.isPinned = true
+            task.preferredStart = nil
+            task.preferredEnd = nil
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -392,6 +427,45 @@ private struct QuickAddPreviewRow: View {
                     metadata
                 }
             }
+            Button(isEditing ? "Done editing" : "Edit task") { isEditing.toggle() }
+                .buttonStyle(.bordered)
+            if isEditing {
+                Button("Find available time") {
+                    if let suggestion = findTime() {
+                        task = suggestion
+                        slotMessage = "Suggested time selected. Review it before adding."
+                    } else { slotMessage = "No available time on this day. Choose another date or shorten the task." }
+                }
+                .buttonStyle(.bordered)
+                if let slotMessage { Text(slotMessage).font(.caption) }
+                TextField("Task title", text: $task.title)
+                    .textFieldStyle(.roundedBorder)
+                DatePicker("Date", selection: Binding(get: { selectedDate }, set: { newDay in
+                    let components = Calendar.current.dateComponents([.hour, .minute], from: selectedDate)
+                    setDate(Calendar.current.date(bySettingHour: components.hour ?? 9, minute: components.minute ?? 0,
+                                                  second: 0, of: newDay) ?? newDay)
+                }), displayedComponents: .date)
+                Toggle("Set specific time", isOn: Binding(get: { task.scheduledStart != nil }, set: { enabled in
+                    if enabled {
+                        let start = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: selectedDate) ?? selectedDate
+                        task.scheduledStart = start
+                        setDate(start)
+                    } else {
+                        task.targetDay = Calendar.current.startOfDay(for: selectedDate)
+                        task.scheduledStart = nil
+                        task.scheduledEnd = nil
+                        task.isPinned = false
+                    }
+                }))
+                if task.scheduledStart != nil {
+                    DatePicker("Time", selection: Binding(get: { selectedDate }, set: setDate), displayedComponents: .hourAndMinute)
+                }
+                Stepper("Duration: \(task.estimatedMinutes) min", value: $task.estimatedMinutes, in: 5...480, step: 5)
+                    .onChange(of: task.estimatedMinutes) { _, _ in setDate(selectedDate) }
+                Picker("Priority", selection: $task.priority) {
+                    ForEach(TaskPriority.allCases, id: \.self) { priority in Text(priority.displayName).tag(priority) }
+                }
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -407,6 +481,8 @@ private struct QuickAddPreviewRow: View {
 
     @ViewBuilder
     private var metadata: some View {
+        Text(selectedDate.formatted(.dateTime.month(.abbreviated).day().year()))
+            .font(.subheadline.weight(.medium))
         Text("\(task.estimatedMinutes)m")
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -416,7 +492,11 @@ private struct QuickAddPreviewRow: View {
             .foregroundStyle(.secondary)
 
         if let start = task.scheduledStart, let end = task.scheduledEnd {
-            Text("\(timeFormatter(start))-\(timeFormatter(end))")
+            Text("\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        } else {
+            Text("No time set")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
