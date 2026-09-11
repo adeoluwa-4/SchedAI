@@ -531,7 +531,7 @@ struct AIPlanSheet: View {
         let text = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
-        applyParseResult(AIService.parseTasksOffline(from: text, now: planningReferenceDate), for: text)
+        await improvePreviewWithAI()
     }
 
     private func improvePreviewWithAI(
