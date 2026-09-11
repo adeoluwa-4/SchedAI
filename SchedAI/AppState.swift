@@ -18,6 +18,7 @@ final class AppState: ObservableObject {
     private var midnightTimer: Timer? = nil
     private var completionCleanupTimer: Timer? = nil
     private var isValidatingWorkWindow = false
+    private var reminderUpdateRevision = 0
     private let completedTaskRetention: TimeInterval = 24 * 60 * 60
     private let defaultDayStartHour = 8
     private let defaultDayEndHour = 22
@@ -374,23 +375,13 @@ final class AppState: ObservableObject {
     }
 
     private func enableRemindersUserDriven() {
-        let tasksSnapshot = tasks
-            .filter { task in
-                guard let start = task.scheduledStart else { return false }
-                return task.canAutoSchedule(on: start)
-            }
-
-        let lead = reminderLeadMinutes
-
         NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
             Task { @MainActor in
                 guard let self else { return }
 
                 switch status {
                 case .authorized:
-                    NotificationManager.clearAll(delivered: true, pending: true)
-                    let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: lead)
-                    self.handleReminderScheduleResult(result)
+                    self.rescheduleRemindersWithoutPrompt()
 
                 case .notDetermined:
                     NotificationManager.requestPermission { granted in
@@ -400,9 +391,7 @@ final class AppState: ObservableObject {
                                 self.reminderMessage = "Notifications were not enabled. You can turn reminders on later in Settings."
                                 return
                             }
-                            NotificationManager.clearAll(delivered: true, pending: true)
-                            let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: lead)
-                            self.handleReminderScheduleResult(result)
+                            self.rescheduleRemindersWithoutPrompt()
                         }
                     }
 
@@ -662,6 +651,71 @@ final class AppState: ObservableObject {
 
     // MARK: - Multi-day Planning
 
+    /// Plans only the drafts. Saved task times are obstacles, never silently moved.
+    func previewNewTasks(_ drafts: [TaskItem], fallbackDay: Date, now: Date = Date()) -> [TaskItem] {
+        var result = drafts
+        let cal = Calendar.current
+        for i in result.indices {
+            result[i].targetDay = cal.startOfDay(for: result[i].scheduledStart ?? result[i].targetDay ?? fallbackDay)
+        }
+        let savedBusy = Scheduler.occupiedIntervals(tasks, excluding: Set(drafts.map(\.id)))
+        for day in Set(result.compactMap(\.targetDay)).sorted() {
+            let window = schedulingWindow(for: day)
+            let external = CalendarManager.shared.busyIntervals(on: day) ?? []
+            _ = Scheduler.planToday(tasks: &result, workStart: window.start, workEnd: window.end,
+                                    day: day, now: now, externalBusyIntervals: savedBusy + external)
+        }
+        return result
+    }
+
+    func scheduleWarnings(for drafts: [TaskItem]) -> [String] {
+        var warnings: [String] = []
+        var calendarUnavailable = false
+        let draftIDs = Set(drafts.map(\.id))
+        let saved = tasks.filter { !draftIDs.contains($0.id) }
+        for task in drafts {
+            let day = task.scheduledStart ?? task.targetDay ?? planningDate
+            let external = CalendarManager.shared.busyIntervals(on: day)
+            if external == nil { calendarUnavailable = true }
+            let others = saved + drafts.filter { $0.id != task.id }
+            if Scheduler.overlaps(task, busy: Scheduler.occupiedIntervals(others) + (external ?? [])) {
+                warnings.append("\(task.title): overlaps another task or calendar event. Edit its time or choose a flexible time to find another slot.")
+            }
+        }
+        if calendarUnavailable {
+            warnings.insert("Calendar access is unavailable. Saved tasks are checked, but external calendar conflicts cannot be checked. Connect your calendar in Settings.", at: 0)
+        }
+        return warnings
+    }
+
+    func availableTime(for task: TaskItem, among drafts: [TaskItem] = []) -> TaskItem? {
+        var flexible = task
+        let day = Calendar.current.startOfDay(for: task.scheduledStart ?? task.targetDay ?? planningDate)
+        flexible.isPinned = false
+        flexible.scheduledStart = nil
+        flexible.scheduledEnd = nil
+        flexible.preferredStart = nil
+        flexible.preferredEnd = nil
+        flexible.targetDay = day
+        let others = tasks.filter { $0.id != task.id && !Set(drafts.map(\.id)).contains($0.id) }
+            + drafts.filter { $0.id != task.id }
+        var result = [flexible]
+        let window = schedulingWindow(for: day)
+        _ = Scheduler.planToday(tasks: &result, workStart: window.start, workEnd: window.end, day: day,
+                                externalBusyIntervals: Scheduler.occupiedIntervals(others) + (CalendarManager.shared.busyIntervals(on: day) ?? []))
+        guard result[0].scheduledStart != nil else { return nil }
+        result[0].isPinned = true // The user explicitly chose this suggested time.
+        return result[0]
+    }
+
+    func savePreviewedTasks(_ drafts: [TaskItem], focusDay: Date) {
+        planningDate = Calendar.current.startOfDay(for: focusDay)
+        addTasks(drafts)
+        lastPlanOverflow = drafts.filter { $0.scheduledStart == nil }.count
+        let days = drafts.map { $0.scheduledStart ?? $0.targetDay ?? focusDay }
+        calendarSyncIfEnabled(days: days, showSuccessMessage: false)
+    }
+
     func planDays(start: Date, count: Int) {
         guard count > 0 else { return }
 
@@ -800,6 +854,8 @@ final class AppState: ObservableObject {
     }
 
     private func rescheduleReminders() {
+        reminderUpdateRevision += 1
+        let revision = reminderUpdateRevision
         let tasksSnapshot = tasks
             .filter { task in
                 guard let start = task.scheduledStart else { return false }
@@ -811,6 +867,7 @@ final class AppState: ObservableObject {
         NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
             Task { @MainActor in
                 guard let self else { return }
+                guard self.remindersEnabled, self.reminderUpdateRevision == revision else { return }
                 guard status == .authorized else {
                     if status == .denied {
                         self.remindersEnabled = false
@@ -818,8 +875,8 @@ final class AppState: ObservableObject {
                     }
                     return
                 }
-                NotificationManager.clearAll(delivered: true, pending: true)
-                let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: lead)
+                let result = await NotificationManager.replaceReminders(for: tasksSnapshot, minutesBefore: lead)
+                guard self.remindersEnabled, self.reminderUpdateRevision == revision else { return }
                 self.handleReminderScheduleResult(result)
             }
         }
@@ -827,27 +884,7 @@ final class AppState: ObservableObject {
 
     private func rescheduleRemindersWithoutPrompt() {
         guard remindersEnabled else { return }
-        let tasksSnapshot = tasks
-            .filter { task in
-                guard let start = task.scheduledStart else { return false }
-                return task.canAutoSchedule(on: start)
-            }
-
-        NotificationManager.authorizationStatus { [weak self] (status: NotificationManager.AuthorizationState) in
-            Task { @MainActor in
-                guard let self else { return }
-                guard status == .authorized else {
-                    if status == .denied {
-                        self.remindersEnabled = false
-                        self.reminderMessage = "Notifications are disabled for SchedAI. Enable them in iOS Settings to use reminders."
-                    }
-                    return
-                }
-                NotificationManager.clearAll(delivered: true, pending: true)
-                let result = await NotificationManager.scheduleRemindersReportingFailures(for: tasksSnapshot, minutesBefore: self.reminderLeadMinutes)
-                self.handleReminderScheduleResult(result)
-            }
-        }
+        rescheduleReminders()
     }
 
     private func handleReminderScheduleResult(_ result: NotificationManager.ScheduleResult) {
