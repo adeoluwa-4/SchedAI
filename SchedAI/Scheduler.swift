@@ -1,6 +1,21 @@
 import Foundation
 
 struct Scheduler {
+    /// Occupied intervals from saved tasks, including tasks spanning midnight.
+    static func occupiedIntervals(_ tasks: [TaskItem], excluding ids: Set<UUID> = []) -> [DateInterval] {
+        tasks.compactMap { task in
+            guard !ids.contains(task.id), let start = task.scheduledStart,
+                  task.canAutoSchedule(on: start) else { return nil }
+            let end = task.scheduledEnd ?? start.addingTimeInterval(Double(max(5, task.estimatedMinutes)) * 60)
+            return end > start ? DateInterval(start: start, end: end) : nil
+        }
+    }
+
+    static func overlaps(_ task: TaskItem, busy: [DateInterval]) -> Bool {
+        guard let interval = occupiedIntervals([task]).first else { return false }
+        return busy.contains { $0.start < interval.end && $0.end > interval.start }
+    }
+
     static func planToday(
         tasks: inout [TaskItem],
         workStart: Date,
