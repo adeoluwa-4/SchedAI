@@ -24,6 +24,7 @@ struct AIPlanSheet: View {
     @State private var parseRequestID = UUID()
     @State private var previewSource: TaskParseSource = .offline
     @State private var previewReferenceTime = Date()
+    @State private var previewInput = ""
     @State private var saveMessage: String?
     @State private var didAutoStartRecording = false
     @State private var showAIConsentSheet = false
@@ -71,10 +72,19 @@ struct AIPlanSheet: View {
                 transcript = text
             }
             .onChange(of: transcript) { _, _ in
-                resetPreviewState()
+                // Speech recognition updates the transcript in small chunks. Keep the rendered
+                // preview alive until the user explicitly builds the next one; otherwise a row
+                // can outlive its array index during SwiftUI's update pass.
+                parseRequestID = UUID()
+                if !parsedPreview.isEmpty {
+                    saveMessage = "Your task text changed. Tap Preview to update the plan."
+                }
             }
             .onChange(of: app.planningDate) { _, newValue in
-                resetPreviewState()
+                parseRequestID = UUID()
+                if !parsedPreview.isEmpty {
+                    saveMessage = "The planning day changed. Tap Preview to update the plan."
+                }
                 if previewBase.isEmpty {
                     previewDay = Calendar.current.startOfDay(for: newValue)
                 }
@@ -229,7 +239,7 @@ struct AIPlanSheet: View {
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .disabled(isPlanning || parsedPreview.isEmpty || parsedPreview.contains { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
+        .disabled(isPlanning || parsedPreview.isEmpty || previewInput != normalizedTranscript || parsedPreview.contains { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty })
         .padding(.top, 2)
     }
 
@@ -336,8 +346,8 @@ struct AIPlanSheet: View {
                 .font(.caption.weight(.semibold))
             }
 
-            ForEach(Array(parsedPreview.indices), id: \.self) { idx in
-                previewTaskRow(index: idx)
+            ForEach(parsedPreview) { task in
+                previewTaskRow(task: task)
             }
         }
         .padding(12)
@@ -386,33 +396,34 @@ struct AIPlanSheet: View {
         }
     }
 
-    private func previewTaskRow(index idx: Int) -> some View {
-        let task = parsedPreview[idx]
+    private func previewTaskRow(task: TaskItem) -> some View {
+        let taskID = task.id
 
         return VStack(alignment: .leading, spacing: 6) {
             ViewThatFits(in: .horizontal) {
-                previewTaskRowHeader(task: task, index: idx)
+                previewTaskRowHeader(task: task)
                 VStack(alignment: .leading, spacing: 8) {
                     previewTaskText(task)
-                    previewEditButton(for: task, index: idx)
+                    previewEditButton(for: task)
                 }
             }
 
             if expandedPreviewTaskIDs.contains(task.id) {
                 VStack(alignment: .leading, spacing: 8) {
                     Button("Find available time") {
-                        if let suggestion = app.availableTime(for: parsedPreview[idx], among: parsedPreview) {
+                        if let idx = previewIndex(for: taskID),
+                           let suggestion = app.availableTime(for: parsedPreview[idx], among: parsedPreview) {
                             parsedPreview[idx] = suggestion
                             hasManualPreviewEdits = true
                             saveMessage = "Suggested time selected. Review it before saving."
                         } else { saveMessage = "No available time on this day. Choose another date or shorten the task." }
                     }
                     .buttonStyle(.bordered)
-                    TextField("Task", text: previewTitleBinding(at: idx))
+                    TextField("Task", text: previewTitleBinding(for: taskID, fallback: task.title))
                         .textFieldStyle(.roundedBorder)
                         .textInputAutocapitalization(.sentences)
 
-                    Picker("Priority", selection: previewPriorityBinding(at: idx)) {
+                    Picker("Priority", selection: previewPriorityBinding(for: taskID, fallback: task.priority)) {
                         ForEach(TaskPriority.allCases, id: \.self) { level in
                             Text(level.displayName).tag(level)
                         }
@@ -421,16 +432,16 @@ struct AIPlanSheet: View {
 
                     DatePicker(
                         "Day",
-                        selection: previewDayBinding(at: idx),
+                        selection: previewDayBinding(for: taskID, fallback: dayForPreviewTask(task)),
                         displayedComponents: [.date]
                     )
 
-                    Toggle("Set specific time", isOn: previewHasTimeBinding(at: idx))
+                    Toggle("Set specific time", isOn: previewHasTimeBinding(for: taskID, fallback: task.scheduledStart != nil))
 
-                    if parsedPreview[idx].scheduledStart != nil {
+                    if task.scheduledStart != nil {
                         DatePicker(
                             "Time",
-                            selection: previewTimeBinding(at: idx),
+                            selection: previewTimeBinding(for: taskID, fallback: task.scheduledStart ?? dayForPreviewTask(task)),
                             displayedComponents: [.hourAndMinute]
                         )
                     }
@@ -441,10 +452,10 @@ struct AIPlanSheet: View {
         .padding(.vertical, 4)
     }
 
-    private func previewTaskRowHeader(task: TaskItem, index idx: Int) -> some View {
+    private func previewTaskRowHeader(task: TaskItem) -> some View {
         HStack(alignment: .top, spacing: 10) {
             previewTaskText(task)
-            previewEditButton(for: task, index: idx)
+            previewEditButton(for: task)
         }
     }
 
@@ -462,7 +473,7 @@ struct AIPlanSheet: View {
         }
     }
 
-    private func previewEditButton(for task: TaskItem, index idx: Int) -> some View {
+    private func previewEditButton(for task: TaskItem) -> some View {
         Button(expandedPreviewTaskIDs.contains(task.id) ? "Done" : "Edit") {
             if expandedPreviewTaskIDs.contains(task.id) {
                 expandedPreviewTaskIDs.remove(task.id)
@@ -644,6 +655,7 @@ struct AIPlanSheet: View {
         previewDay = inferredDay ?? Calendar.current.startOfDay(for: app.planningDate)
 
         previewBase = base
+        previewInput = normalizedTranscript
         expandedPreviewTaskIDs.removeAll()
         hasManualPreviewEdits = false
         previewUsedAI = result.source.isAIEnhanced
@@ -692,6 +704,7 @@ struct AIPlanSheet: View {
         hasManualPreviewEdits = false
         parseStatusMessage = nil
         previewUsedAI = false
+        previewInput = ""
     }
 
     private var planningReferenceDate: Date {
@@ -709,30 +722,41 @@ struct AIPlanSheet: View {
         app.previewNewTasks(tasks, fallbackDay: day, now: previewReferenceTime)
     }
 
-    private func previewPriorityBinding(at index: Int) -> Binding<TaskPriority> {
+    private var normalizedTranscript: String {
+        transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func previewIndex(for id: UUID) -> Int? {
+        parsedPreview.firstIndex { $0.id == id }
+    }
+
+    private func previewPriorityBinding(for id: UUID, fallback: TaskPriority) -> Binding<TaskPriority> {
         Binding(
-            get: { parsedPreview[index].priority },
+            get: { previewIndex(for: id).map { parsedPreview[$0].priority } ?? fallback },
             set: { newValue in
+                guard let index = previewIndex(for: id) else { return }
                 parsedPreview[index].priority = newValue
                 hasManualPreviewEdits = true
             }
         )
     }
 
-    private func previewTitleBinding(at index: Int) -> Binding<String> {
+    private func previewTitleBinding(for id: UUID, fallback: String) -> Binding<String> {
         Binding(
-            get: { parsedPreview[index].title },
+            get: { previewIndex(for: id).map { parsedPreview[$0].title } ?? fallback },
             set: { newValue in
+                guard let index = previewIndex(for: id) else { return }
                 parsedPreview[index].title = newValue
                 hasManualPreviewEdits = true
             }
         )
     }
 
-    private func previewDayBinding(at index: Int) -> Binding<Date> {
+    private func previewDayBinding(for id: UUID, fallback: Date) -> Binding<Date> {
         Binding(
-            get: { dayForPreviewTask(parsedPreview[index]) },
+            get: { previewIndex(for: id).map { dayForPreviewTask(parsedPreview[$0]) } ?? fallback },
             set: { newValue in
+                guard let index = previewIndex(for: id) else { return }
                 let cal = Calendar.current
                 let selectedDay = cal.startOfDay(for: newValue)
                 parsedPreview[index].targetDay = selectedDay
@@ -764,10 +788,11 @@ struct AIPlanSheet: View {
         )
     }
 
-    private func previewHasTimeBinding(at index: Int) -> Binding<Bool> {
+    private func previewHasTimeBinding(for id: UUID, fallback: Bool) -> Binding<Bool> {
         Binding(
-            get: { parsedPreview[index].scheduledStart != nil },
+            get: { previewIndex(for: id).map { parsedPreview[$0].scheduledStart != nil } ?? fallback },
             set: { enabled in
+                guard let index = previewIndex(for: id) else { return }
                 let cal = Calendar.current
                 let day = dayForPreviewTask(parsedPreview[index])
 
@@ -795,13 +820,15 @@ struct AIPlanSheet: View {
         )
     }
 
-    private func previewTimeBinding(at index: Int) -> Binding<Date> {
+    private func previewTimeBinding(for id: UUID, fallback: Date) -> Binding<Date> {
         Binding(
             get: {
-                parsedPreview[index].scheduledStart
+                guard let index = previewIndex(for: id) else { return fallback }
+                return parsedPreview[index].scheduledStart
                     ?? combine(day: dayForPreviewTask(parsedPreview[index]), hour: 9, minute: 0)
             },
             set: { newTime in
+                guard let index = previewIndex(for: id) else { return }
                 let cal = Calendar.current
                 let day = dayForPreviewTask(parsedPreview[index])
                 let timeComps = cal.dateComponents([.hour, .minute], from: newTime)
