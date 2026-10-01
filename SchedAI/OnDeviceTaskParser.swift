@@ -27,6 +27,30 @@ enum OnDeviceTaskParser {
 
         return nil
     }
+
+    static func extractTasksWithPrivateCloudCompute(
+        from input: String,
+        now: Date,
+        planningDate: Date,
+        offlinePreview: [TaskDraft]
+    ) async -> [TaskDraft]? {
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        #if canImport(FoundationModels) && compiler(>=6.3)
+        if #available(iOS 27.0, macOS 27.0, *) {
+            return await FoundationModelsTaskParser.extractTasks(
+                from: trimmed,
+                now: now,
+                planningDate: planningDate,
+                offlinePreview: offlinePreview,
+                usePrivateCloudCompute: true
+            )
+        }
+        #endif
+
+        return nil
+    }
 }
 
 private struct OnDeviceTaskEnvelope: Codable {
@@ -61,8 +85,29 @@ private enum FoundationModelsTaskParser {
         from input: String,
         now: Date,
         planningDate: Date,
-        offlinePreview: [TaskDraft]
+        offlinePreview: [TaskDraft],
+        usePrivateCloudCompute: Bool = false
     ) async -> [TaskDraft]? {
+        #if compiler(>=6.3)
+        let session: LanguageModelSession
+        if usePrivateCloudCompute {
+            guard #available(iOS 27.0, macOS 27.0, *) else { return nil }
+            let model = PrivateCloudComputeLanguageModel()
+            guard case .available = model.availability else { return nil }
+            session = LanguageModelSession(model: model, instructions: instructions)
+        } else {
+            switch SystemLanguageModel.default.availability {
+            case .available:
+                break
+            case .unavailable(_):
+                return nil
+            @unknown default:
+                return nil
+            }
+            session = LanguageModelSession(instructions: instructions)
+        }
+        #else
+        guard !usePrivateCloudCompute else { return nil }
         switch SystemLanguageModel.default.availability {
         case .available:
             break
@@ -71,8 +116,8 @@ private enum FoundationModelsTaskParser {
         @unknown default:
             return nil
         }
-
         let session = LanguageModelSession(instructions: instructions)
+        #endif
 
         do {
             let response = try await session.respond(
