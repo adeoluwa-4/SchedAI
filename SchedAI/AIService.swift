@@ -15,12 +15,14 @@ struct TaskDraft: Codable, Equatable {
 
 enum TaskParseSource: Equatable {
     case onDeviceAI
+    case privateCloudCompute
     case ai
     case offline
 
     var displayName: String {
         switch self {
         case .onDeviceAI: return "On-device AI"
+        case .privateCloudCompute: return "Apple hosted AI"
         case .ai: return "Hosted AI"
         case .offline: return "Offline"
         }
@@ -29,13 +31,14 @@ enum TaskParseSource: Equatable {
     var usageDescription: String {
         switch self {
         case .onDeviceAI: return "Processed on device. No hosted AI allowance used."
+        case .privateCloudCompute: return "Processed with Apple hosted AI through Private Cloud Compute."
         case .ai: return "Processed with hosted AI. Counts toward hosted AI usage."
         case .offline: return "Processed offline. No hosted AI allowance used."
         }
     }
 
     var isAIEnhanced: Bool {
-        self == .onDeviceAI || self == .ai
+        self == .onDeviceAI || self == .privateCloudCompute || self == .ai
     }
 }
 
@@ -166,6 +169,30 @@ struct AIService {
                 )
             }
             rejectedOnDeviceAI = !onDevice.isEmpty
+        }
+
+        if allowsHostedAI,
+           let drafts = await OnDeviceTaskParser.extractTasksWithPrivateCloudCompute(
+               from: safeInput,
+               now: now,
+               planningDate: planningDate,
+               offlinePreview: offlineDrafts
+           ) {
+            let privateCloud = normalizedAIItems(
+                from: drafts,
+                fallback: offline,
+                input: safeInput,
+                now: now
+            )
+            if !privateCloud.isEmpty,
+               isReasonableAIResult(privateCloud, comparedTo: offline, input: safeInput, now: now) {
+                return TaskParseResult(
+                    tasks: privateCloud,
+                    source: .privateCloudCompute,
+                    message: "Improved with Apple hosted AI after on-device parsing."
+                )
+            }
+            rejectedHostedAI = !privateCloud.isEmpty
         }
 
         if allowsHostedAI, let endpoint = parseEndpoint {
