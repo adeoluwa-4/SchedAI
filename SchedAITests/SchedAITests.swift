@@ -80,6 +80,30 @@ struct SchedAITests {
         #expect(parts == ["study", "gym", "call mom"])
     }
 
+    @Test func offlineNlpPreservesQuickAddLineBreakTasks() async throws {
+        let now = fixedDate(2026, 8, 3, 10, 28)
+        let input = """
+        Apply for jobs at 6pm from zero2suedo
+        Complete tritech interview at 7pm
+        Email recruiter at 8pm
+        """
+        let tasks = OfflineNLP.parseSafely(input, now: now)
+
+        #expect(tasks.count == 3)
+        guard tasks.count == 3 else { return }
+        #expect(tasks.map(\.title) == [
+            "Apply for jobs from zero2suedo",
+            "Complete tritech interview",
+            "Email recruiter"
+        ])
+
+        let cal = Calendar.current
+        #expect(tasks[0].scheduledStart.map { cal.component(.hour, from: $0) } == 18)
+        #expect(tasks[1].scheduledStart.map { cal.component(.hour, from: $0) } == 19)
+        #expect(tasks[2].scheduledStart.map { cal.component(.hour, from: $0) } == 20)
+        #expect(tasks.allSatisfy { $0.isPinned })
+    }
+
     @Test func offlineNlpParsesVoicePlanWithAmPmCarry() async throws {
         let input = "I will wake up at 12 PM and do laundry at one for two hours play FIFA three till six then eat dinner at 7:30 and after that go to bed at midnight"
         let tasks = OfflineNLP.parseSafely(input)
