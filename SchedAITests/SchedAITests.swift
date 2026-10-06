@@ -42,6 +42,35 @@ struct SchedAITests {
         #expect(tasks[0].title == "Study")
     }
 
+    @Test func offlineNlpKeepsNestedAddPhraseAndExplicitClock() async throws {
+        let now = fixedDate(2026, 10, 6, 11, 23)
+        let tasks = OfflineNLP.parseSafely(
+            "Add an add a task button to the preview section on the app at 4:15",
+            now: now
+        )
+
+        #expect(tasks.count == 1)
+        guard let task = tasks.first else { return }
+        #expect(task.title == "Add a task button to the preview section on the app")
+        #expect(task.isPinned)
+        #expect(task.scheduledStart.map { Calendar.current.component(.hour, from: $0) } == 16)
+        #expect(task.scheduledStart.map { Calendar.current.component(.minute, from: $0) } == 15)
+    }
+
+    @Test func inboxTasksStayOutOfAutomaticScheduling() async throws {
+        let day = fixedDate(2026, 10, 6, 9, 0)
+        var task = TaskItem(title: "Buy groceries", isInbox: true)
+
+        #expect(!task.canAutoSchedule(on: day))
+        task.setSchedulingMode(.time, fallbackDay: day)
+        #expect(!task.isInbox)
+        #expect(task.scheduledStart != nil)
+        task.setSchedulingMode(.inbox, fallbackDay: day)
+        #expect(task.isInbox)
+        #expect(task.targetDay == nil)
+        #expect(task.scheduledStart == nil)
+    }
+
     @Test func offlineNlpParsesDenseDayPlan() async throws {
         let input = "eat breakfast at 9 study for 3 hours at 10 play fifa at 2 go for a 15 min walk at 5 do homework at 7 for 2 hrs bed by midnight"
         let tasks = OfflineNLP.parse(input)
@@ -723,6 +752,30 @@ struct SchedAITests {
         #expect(repaired[0].title == "Call Uncle Tony")
         #expect(repaired[0].scheduledStart == expectedStart)
         #expect(repaired[0].isPinned)
+    }
+
+    @Test func aiServiceRejectsPlaceholderTitlesAndMismatchedExplicitClock() async throws {
+        let now = fixedDate(2026, 10, 6, 11, 23)
+        let input = "Add an add a task button to the preview section on the app at 4:15"
+        let offline = OfflineNLP.parseSafely(input, now: now)
+        let malformedAI = [
+            TaskItem(
+                title: "Clean task title",
+                estimatedMinutes: 30,
+                priority: .medium,
+                isPinned: true,
+                targetDay: fixedDate(2026, 10, 6),
+                scheduledStart: fixedDate(2026, 10, 6, 23, 15),
+                scheduledEnd: fixedDate(2026, 10, 7, 0, 15)
+            )
+        ]
+
+        #expect(!AIService.isReasonableAIResultForTesting(
+            malformedAI,
+            comparedTo: offline,
+            input: input,
+            now: now
+        ))
     }
 
     @Test func hostedAIImproveDefaultsOnForFirstRun() async throws {
