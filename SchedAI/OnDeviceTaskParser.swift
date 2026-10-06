@@ -148,6 +148,8 @@ private enum FoundationModelsTaskParser {
     Treat OfflineNLP as the local teacher for task boundaries, explicit dates, explicit times, durations, preferred windows, and recurrence.
     Never invent tasks, people, dates, locations, or clock times.
     Preserve every explicit time anchor unless it is clearly impossible.
+    Every title must retain the distinctive words from its matching user task.
+    Never emit generic placeholder titles such as "Clean task title", "Task", "Untitled", or "New task".
     """
 
     private static func prompt(
@@ -178,7 +180,7 @@ private enum FoundationModelsTaskParser {
         {
           "tasks": [
             {
-              "title": "Clean task title",
+              "title": "Call Uncle Tony",
               "estimatedMinutes": 30,
               "priority": "high|medium|low",
               "targetDayISO8601": "yyyy-MM-dd or null",
@@ -198,6 +200,7 @@ private enum FoundationModelsTaskParser {
         - Use offlinePreview as the teacher parse for scheduling fields.
         - Copy targetDayISO8601, scheduledStartISO8601, scheduledEndISO8601, preferredStartISO8601, preferredEndISO8601, estimatedMinutes, and isPinned from the matching offlinePreview task when they match userInput.
         - Improve titles, grouping, durations, and AM/PM choices only when userInput clearly implies OfflineNLP missed or over-included text.
+        - Each title must be a concise version of the matching user task, not a generic label or a copied example title.
         - Preserve explicit timeAnchors in the returned tasks unless a conflict is clearly impossible.
         - Understand compact spoken clock times: 130 means 1:30, 945 means 9:45, and 1030 means 10:30.
         - Choose AM or PM from chronology, nowISO8601, planningDateISO8601, localTimingPreference, and nearby tasks.
