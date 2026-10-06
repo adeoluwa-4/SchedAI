@@ -529,6 +529,11 @@ struct AIService {
         now: Date,
         calendar: Calendar = .current
     ) -> Bool {
+        guard preservesTaskMeaning(aiItems, comparedTo: offlineItems) else { return false }
+        if explicitClockTokenCount(in: input) > 0,
+           !representsExplicitClockAnchors(aiItems, in: input, calendar: calendar) {
+            return false
+        }
         guard OfflineNLP.hasExplicitDayReference(input, now: now) || explicitClockTokenCount(in: input) > 0 else {
             return true
         }
@@ -570,6 +575,89 @@ struct AIService {
         }
 
         return true
+    }
+
+    private static func preservesTaskMeaning(
+        _ aiItems: [TaskItem],
+        comparedTo offlineItems: [TaskItem]
+    ) -> Bool {
+        let genericTitles: Set<String> = [
+            "clean task title", "task", "new task", "untitled", "todo", "to do"
+        ]
+
+        guard aiItems.allSatisfy({ !genericTitles.contains(normalizedTitle($0.title)) }) else {
+            return false
+        }
+
+        guard aiItems.count == offlineItems.count else { return true }
+        for index in aiItems.indices {
+            let sourceWords = meaningfulWords(in: offlineItems[index].title)
+            guard !sourceWords.isEmpty else { continue }
+            let returnedWords = meaningfulWords(in: aiItems[index].title)
+            guard !sourceWords.isDisjoint(with: returnedWords) else { return false }
+        }
+        return true
+    }
+
+    private static func normalizedTitle(_ title: String) -> String {
+        title
+            .lowercased()
+            .replacingOccurrences(of: #"[^a-z0-9]+"#, with: " ", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func meaningfulWords(in title: String) -> Set<String> {
+        let ignored: Set<String> = ["a", "an", "the", "to", "for", "and", "with", "on", "in", "at"]
+        return Set(
+            normalizedTitle(title)
+                .split(separator: " ")
+                .map(String.init)
+                .filter { $0.count > 2 && !ignored.contains($0) }
+        )
+    }
+
+    private static func representsExplicitClockAnchors(
+        _ items: [TaskItem],
+        in input: String,
+        calendar: Calendar
+    ) -> Bool {
+        let anchors = explicitClockAnchors(in: input)
+        guard !anchors.isEmpty else { return true }
+
+        let returnedDates = items.flatMap { item in
+            [item.scheduledStart, item.scheduledEnd, item.preferredStart, item.preferredEnd].compactMap { $0 }
+        }
+        return anchors.allSatisfy { anchor in
+            returnedDates.contains { date in
+                let components = calendar.dateComponents([.hour, .minute], from: date)
+                guard let hour = components.hour,
+                      components.minute == anchor.minute
+                else { return false }
+                if let isPM = anchor.isPM {
+                    let expectedHour = isPM
+                        ? anchor.hour + (anchor.hour == 12 ? 0 : 12)
+                        : (anchor.hour == 12 ? 0 : anchor.hour)
+                    return hour == expectedHour
+                }
+                return hour % 12 == anchor.hour % 12
+            }
+        }
+    }
+
+    private static func explicitClockAnchors(in input: String) -> [(hour: Int, minute: Int, isPM: Bool?)] {
+        let pattern = #"(?i)\b(?:at|by|around|about|near|until|till)\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let range = NSRange(location: 0, length: (input as NSString).length)
+        return regex.matches(in: input, range: range).compactMap { match in
+            guard let hourRange = Range(match.range(at: 1), in: input),
+                  let hour = Int(input[hourRange]),
+                  (1...12).contains(hour)
+            else { return nil }
+            let minute = Range(match.range(at: 2), in: input).flatMap { Int(input[$0]) } ?? 0
+            guard (0...59).contains(minute) else { return nil }
+            let meridiem = Range(match.range(at: 3), in: input).map { input[$0].lowercased() }
+            return (hour, minute, meridiem.map { $0 == "pm" })
+        }
     }
 
     private static func explicitClockTokenCount(in input: String) -> Int {
