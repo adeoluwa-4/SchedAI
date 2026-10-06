@@ -308,7 +308,7 @@ struct AIPlanSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            let unplannedCount = parsedPreview.filter { $0.scheduledStart == nil }.count
+            let unplannedCount = parsedPreview.filter { !$0.isInbox && $0.scheduledStart == nil }.count
             if unplannedCount > 0 {
                 Text("\(unplannedCount) task(s) have no available slot. They will be saved without a time; choose another date or shorten their duration.")
                     .font(.caption)
@@ -347,7 +347,9 @@ struct AIPlanSheet: View {
             }
 
             ForEach(parsedPreview) { task in
-                previewTaskRow(task: task)
+                SwipeToDeletePreviewRow(onDelete: { deletePreviewTask(task.id) }) {
+                    previewTaskRow(task: task)
+                }
             }
         }
         .padding(12)
@@ -378,6 +380,14 @@ struct AIPlanSheet: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Capsule().fill(.quaternary))
+
+                Button(action: addPreviewTask) {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.bordered)
+                .help("Add task")
+                .accessibilityLabel("Add task")
+                .disabled(isPlanning)
             }
         } else {
             HStack(alignment: .firstTextBaseline) {
@@ -385,6 +395,14 @@ struct AIPlanSheet: View {
                     .font(.headline.weight(.semibold))
 
                 Spacer()
+
+                Button(action: addPreviewTask) {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.bordered)
+                .help("Add task")
+                .accessibilityLabel("Add task")
+                .disabled(isPlanning)
 
                 Text(sourceText)
                     .font(.caption.weight(.semibold))
@@ -410,15 +428,17 @@ struct AIPlanSheet: View {
 
             if expandedPreviewTaskIDs.contains(task.id) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Button("Find available time") {
-                        if let idx = previewIndex(for: taskID),
-                           let suggestion = app.availableTime(for: parsedPreview[idx], among: parsedPreview) {
-                            parsedPreview[idx] = suggestion
-                            hasManualPreviewEdits = true
-                            saveMessage = "Suggested time selected. Review it before saving."
-                        } else { saveMessage = "No available time on this day. Choose another date or shorten the task." }
+                    if task.schedulingMode != .inbox {
+                        Button("Find available time") {
+                            if let idx = previewIndex(for: taskID),
+                               let suggestion = app.availableTime(for: parsedPreview[idx], among: parsedPreview) {
+                                parsedPreview[idx] = suggestion
+                                hasManualPreviewEdits = true
+                                saveMessage = "Suggested time selected. Review it before saving."
+                            } else { saveMessage = "No available time on this day. Choose another date or shorten the task." }
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .buttonStyle(.bordered)
                     TextField("Task", text: previewTitleBinding(for: taskID, fallback: task.title))
                         .textFieldStyle(.roundedBorder)
                         .textInputAutocapitalization(.sentences)
@@ -430,13 +450,24 @@ struct AIPlanSheet: View {
                     }
                     .pickerStyle(.segmented)
 
-                    DatePicker(
-                        "Day",
-                        selection: previewDayBinding(for: taskID, fallback: dayForPreviewTask(task)),
-                        displayedComponents: [.date]
-                    )
+                    Picker("Save as", selection: previewSchedulingModeBinding(for: taskID, fallback: task.schedulingMode)) {
+                        ForEach(TaskSchedulingMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
 
-                    Toggle("Set specific time", isOn: previewHasTimeBinding(for: taskID, fallback: task.scheduledStart != nil))
+                    if task.schedulingMode != .inbox {
+                        DatePicker(
+                            "Day",
+                            selection: previewDayBinding(for: taskID, fallback: dayForPreviewTask(task)),
+                            displayedComponents: [.date]
+                        )
+                    }
+
+                    if task.schedulingMode == .day {
+                        Toggle("Set specific time", isOn: previewHasTimeBinding(for: taskID, fallback: task.scheduledStart != nil))
+                    }
 
                     if task.scheduledStart != nil {
                         DatePicker(
@@ -637,17 +668,40 @@ struct AIPlanSheet: View {
         previewDay = Calendar.current.startOfDay(for: app.planningDate)
     }
 
+    private func addPreviewTask() {
+        let task = TaskItem(
+            title: "",
+            estimatedMinutes: 30,
+            priority: .medium,
+            isInbox: true
+        )
+        parsedPreview.append(task)
+        expandedPreviewTaskIDs.insert(task.id)
+        hasManualPreviewEdits = true
+        saveMessage = "Add the task details, then confirm your plan."
+    }
+
+    private func deletePreviewTask(_ id: UUID) {
+        withAnimation {
+            parsedPreview.removeAll { $0.id == id }
+            previewBase.removeAll { $0.id == id }
+            expandedPreviewTaskIDs.remove(id)
+        }
+        hasManualPreviewEdits = true
+        saveMessage = parsedPreview.isEmpty ? "All preview tasks were removed." : "Task removed from preview."
+    }
+
     private func applyParseResult(_ result: TaskParseResult, for text: String) {
         let items = result.tasks
 
         let base: [TaskItem]
         if items.isEmpty {
-            base = [TaskItem(title: text, estimatedMinutes: 30, priority: .medium)]
+            base = [TaskItem(title: text, estimatedMinutes: 30, priority: .medium, isInbox: true)]
         } else {
-            base = items
+            base = items.map(defaultInboxModeIfUntimed)
         }
 
-        let hasUntimed = base.contains { $0.scheduledStart == nil }
+        let hasUntimed = base.contains { !$0.isInbox && $0.scheduledStart == nil }
         let hasExplicitDay = OfflineNLP.hasExplicitDayReference(text)
         needsInlineDaySelector = hasUntimed && !hasExplicitDay
 
@@ -739,6 +793,27 @@ struct AIPlanSheet: View {
                 hasManualPreviewEdits = true
             }
         )
+    }
+
+    private func previewSchedulingModeBinding(for id: UUID, fallback: TaskSchedulingMode) -> Binding<TaskSchedulingMode> {
+        Binding(
+            get: { previewIndex(for: id).map { parsedPreview[$0].schedulingMode } ?? fallback },
+            set: { newValue in
+                guard let index = previewIndex(for: id) else { return }
+                parsedPreview[index].setSchedulingMode(newValue, fallbackDay: previewDay)
+                hasManualPreviewEdits = true
+            }
+        )
+    }
+
+    private func defaultInboxModeIfUntimed(_ task: TaskItem) -> TaskItem {
+        var task = task
+        if task.scheduledStart == nil,
+           task.targetDay == nil,
+           task.preferredStart == nil {
+            task.setSchedulingMode(.inbox, fallbackDay: previewDay)
+        }
+        return task
     }
 
     private func previewTitleBinding(for id: UUID, fallback: String) -> Binding<String> {
@@ -890,6 +965,9 @@ struct AIPlanSheet: View {
     }
 
     private func scheduleSummary(_ task: TaskItem) -> String {
+        if task.isInbox {
+            return "Inbox • No calendar event or reminder"
+        }
         if let start = task.scheduledStart, let end = task.scheduledEnd {
             return "\(day(start)) • \(time(start))-\(time(end))"
         }
@@ -909,5 +987,49 @@ struct AIPlanSheet: View {
         let formatter = DateFormatter()
         formatter.setLocalizedDateFormatFromTemplate("EEE MMM d yyyy")
         return formatter.string(from: date)
+    }
+}
+
+struct SwipeToDeletePreviewRow<Content: View>: View {
+    let onDelete: () -> Void
+    @ViewBuilder let content: () -> Content
+
+    @State private var horizontalOffset: CGFloat = 0
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            Button(role: .destructive, action: onDelete) {
+                Label("Delete", systemImage: "trash")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 88)
+                    .frame(maxHeight: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
+            .opacity(horizontalOffset < -1 ? 1 : 0)
+            .allowsHitTesting(horizontalOffset < -1)
+
+            content()
+                .contentShape(Rectangle())
+                .offset(x: horizontalOffset)
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            horizontalOffset = min(0, value.translation.width)
+                        }
+                        .onEnded { value in
+                            guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                            if value.translation.width < -88 {
+                                onDelete()
+                            }
+                            withAnimation(.easeOut(duration: 0.18)) {
+                                horizontalOffset = 0
+                            }
+                        }
+                )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .accessibilityHint("Swipe left to delete this task")
     }
 }
