@@ -79,6 +79,7 @@ private enum WidgetBridge {
         let priorityRaw: String?
         let estimatedMinutes: Int
         let isCompleted: Bool
+        let isInbox: Bool?
         let targetDay: Date?
         let scheduledStart: Date?
         let scheduledEnd: Date?
@@ -118,6 +119,7 @@ private extension WidgetBridge.SharedTask {
     }
 
     var startLine: String {
+        if isInbox == true { return "Inbox" }
         guard let start = scheduledStart else { return "Anytime" }
         if Calendar.current.isDate(start, inSameDayAs: Date()) {
             return start.widgetTime
@@ -126,11 +128,13 @@ private extension WidgetBridge.SharedTask {
     }
 
     var bracketStartLine: String {
+        if isInbox == true { return "[Inbox]" }
         guard let start = scheduledStart else { return "[Anytime]" }
         return "[\(start.widgetBracketTime)]"
     }
 
     func applies(to date: Date) -> Bool {
+        if isInbox == true { return true }
         let calendar = Calendar.current
         if let scheduledStart {
             return calendar.isDate(scheduledStart, inSameDayAs: date)
@@ -208,6 +212,9 @@ private struct WidgetSnapshot {
     }
 
     var planTitle: String {
+        if !planItems.isEmpty, planItems.allSatisfy({ $0.isInbox == true }) {
+            return "INBOX"
+        }
         switch planMode {
         case .scheduled: return "TODAY'S PLAN"
         case .unscheduled: return "TODAY'S PLAN"
@@ -250,7 +257,7 @@ private struct WidgetSnapshot {
         }
 
         let unscheduled = remaining
-            .filter { $0.scheduledStart == nil }
+            .filter { $0.isInbox != true && $0.scheduledStart == nil }
             .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
 
         let mode: PlanMode
@@ -260,14 +267,17 @@ private struct WidgetSnapshot {
             guard let end = task.resolvedEnd else { return true }
             return end > date
         }
-        let combined = upcomingScheduled + unscheduled
+        let inbox = remaining
+            .filter { $0.isInbox == true }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        let combined = upcomingScheduled + unscheduled + inbox
 
         if !upcomingScheduled.isEmpty {
             mode = .scheduled
             items = combined
-        } else if !unscheduled.isEmpty {
+        } else if !unscheduled.isEmpty || !inbox.isEmpty {
             mode = .unscheduled
-            items = unscheduled
+            items = unscheduled + inbox
         } else {
             mode = .empty
             items = []
