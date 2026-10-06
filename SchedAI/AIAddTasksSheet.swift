@@ -124,7 +124,7 @@ struct AIAddTasksSheet: View {
         Button {
             addAllAndDismiss()
         } label: {
-            Label("Add tasks", systemImage: "checkmark.circle.fill")
+            Label(parsedPreview.allSatisfy(\.isInbox) ? "Add to Inbox" : "Confirm", systemImage: "checkmark.circle.fill")
                 .font(.subheadline.weight(.semibold))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
@@ -164,6 +164,14 @@ struct AIAddTasksSheet: View {
 
                 Spacer()
 
+                Button(action: addPreviewTask) {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.bordered)
+                .help("Add task")
+                .accessibilityLabel("Add task")
+                .disabled(isParsing)
+
                 Text(previewSource.displayName)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
@@ -191,9 +199,14 @@ struct AIAddTasksSheet: View {
 
             VStack(spacing: 10) {
                 ForEach($parsedPreview) { $task in
-                    QuickAddPreviewRow(task: $task, fallbackDay: app.planningDate, findTime: {
-                        app.availableTime(for: task, among: parsedPreview)
-                    })
+                    SwipeToDeletePreviewRow(onDelete: { deletePreviewTask(task.id) }) {
+                        QuickAddPreviewRow(
+                            task: $task,
+                            fallbackDay: app.planningDate,
+                            findTime: { app.availableTime(for: task, among: parsedPreview) },
+                            startsEditing: task.title.isEmpty
+                        )
+                    }
                 }
             }
             .disabled(isParsing)
@@ -311,7 +324,7 @@ struct AIAddTasksSheet: View {
         }
         guard parseRequestID == requestID, input.trimmingCharacters(in: .whitespacesAndNewlines) == trimmed,
               requestedDay == app.planningDate else { return }
-        parsedPreview = result.tasks
+        parsedPreview = result.tasks.map(defaultInboxModeIfUntimed)
         previewUsedAI = result.source.isAIEnhanced
         previewSource = result.source
 
@@ -341,6 +354,20 @@ struct AIAddTasksSheet: View {
         }
     }
 
+    private func addPreviewTask() {
+        parsedPreview.append(
+            TaskItem(title: "", estimatedMinutes: 30, priority: .medium, isInbox: true)
+        )
+        parseStatusMessage = "Add the task details, then confirm."
+    }
+
+    private func deletePreviewTask(_ id: UUID) {
+        withAnimation {
+            parsedPreview.removeAll { $0.id == id }
+        }
+        parseStatusMessage = parsedPreview.isEmpty ? "All preview tasks were removed." : "Task removed from preview."
+    }
+
     private func addAllAndDismiss() {
         guard !isParsing, !parsedPreview.isEmpty,
               !parsedPreview.contains(where: { $0.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { return }
@@ -349,7 +376,9 @@ struct AIAddTasksSheet: View {
         let fallbackDay = calendar.startOfDay(for: app.planningDate)
         let tasksForPlanningDay = parsedPreview.map { task -> TaskItem in
             var task = task
-            if let start = task.scheduledStart {
+            if task.isInbox {
+                task.setSchedulingMode(.inbox)
+            } else if let start = task.scheduledStart {
                 task.targetDay = calendar.startOfDay(for: start)
             } else if let target = task.targetDay {
                 task.targetDay = calendar.startOfDay(for: target)
@@ -363,6 +392,16 @@ struct AIAddTasksSheet: View {
 
         onAddComplete()
         dismiss()
+    }
+
+    private func defaultInboxModeIfUntimed(_ task: TaskItem) -> TaskItem {
+        var task = task
+        if task.scheduledStart == nil,
+           task.targetDay == nil,
+           task.preferredStart == nil {
+            task.setSchedulingMode(.inbox)
+        }
+        return task
     }
 
     private func resetPreviewState() {
@@ -395,10 +434,31 @@ private struct QuickAddPreviewRow: View {
     @Binding var task: TaskItem
     let fallbackDay: Date
     let findTime: () -> TaskItem?
+    let startsEditing: Bool
     @State private var isEditing = false
     @State private var slotMessage: String?
 
+    init(
+        task: Binding<TaskItem>,
+        fallbackDay: Date,
+        findTime: @escaping () -> TaskItem?,
+        startsEditing: Bool = false
+    ) {
+        _task = task
+        self.fallbackDay = fallbackDay
+        self.findTime = findTime
+        self.startsEditing = startsEditing
+        _isEditing = State(initialValue: startsEditing)
+    }
+
     private var selectedDate: Date { task.scheduledStart ?? task.targetDay ?? fallbackDay }
+
+    private var schedulingMode: Binding<TaskSchedulingMode> {
+        Binding(
+            get: { task.schedulingMode },
+            set: { task.setSchedulingMode($0, fallbackDay: fallbackDay) }
+        )
+    }
 
     private func setDate(_ date: Date) {
         task.targetDay = Calendar.current.startOfDay(for: date)
@@ -430,22 +490,33 @@ private struct QuickAddPreviewRow: View {
             Button(isEditing ? "Done editing" : "Edit task") { isEditing.toggle() }
                 .buttonStyle(.bordered)
             if isEditing {
-                Button("Find available time") {
-                    if let suggestion = findTime() {
-                        task = suggestion
-                        slotMessage = "Suggested time selected. Review it before adding."
-                    } else { slotMessage = "No available time on this day. Choose another date or shorten the task." }
+                Picker("Save as", selection: schedulingMode) {
+                    ForEach(TaskSchedulingMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
                 }
-                .buttonStyle(.bordered)
+                .pickerStyle(.segmented)
+                if task.schedulingMode != .inbox {
+                    Button("Find available time") {
+                        if let suggestion = findTime() {
+                            task = suggestion
+                            slotMessage = "Suggested time selected. Review it before adding."
+                        } else { slotMessage = "No available time on this day. Choose another date or shorten the task." }
+                    }
+                    .buttonStyle(.bordered)
+                }
                 if let slotMessage { Text(slotMessage).font(.caption) }
                 TextField("Task title", text: $task.title)
                     .textFieldStyle(.roundedBorder)
-                DatePicker("Date", selection: Binding(get: { selectedDate }, set: { newDay in
+                if task.schedulingMode != .inbox {
+                    DatePicker("Date", selection: Binding(get: { selectedDate }, set: { newDay in
                     let components = Calendar.current.dateComponents([.hour, .minute], from: selectedDate)
                     setDate(Calendar.current.date(bySettingHour: components.hour ?? 9, minute: components.minute ?? 0,
                                                   second: 0, of: newDay) ?? newDay)
-                }), displayedComponents: .date)
-                Toggle("Set specific time", isOn: Binding(get: { task.scheduledStart != nil }, set: { enabled in
+                    }), displayedComponents: .date)
+                }
+                if task.schedulingMode == .day {
+                    Toggle("Set specific time", isOn: Binding(get: { task.scheduledStart != nil }, set: { enabled in
                     if enabled {
                         let start = Calendar.current.date(bySettingHour: 9, minute: 0, second: 0, of: selectedDate) ?? selectedDate
                         task.scheduledStart = start
@@ -456,7 +527,8 @@ private struct QuickAddPreviewRow: View {
                         task.scheduledEnd = nil
                         task.isPinned = false
                     }
-                }))
+                    }))
+                }
                 if task.scheduledStart != nil {
                     DatePicker("Time", selection: Binding(get: { selectedDate }, set: setDate), displayedComponents: .hourAndMinute)
                 }
@@ -481,24 +553,32 @@ private struct QuickAddPreviewRow: View {
 
     @ViewBuilder
     private var metadata: some View {
-        Text(selectedDate.formatted(.dateTime.month(.abbreviated).day().year()))
-            .font(.subheadline.weight(.medium))
-        Text("\(task.estimatedMinutes)m")
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
-        Text(task.priority.displayName)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-
-        if let start = task.scheduledStart, let end = task.scheduledEnd {
-            Text("\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))")
+        if task.isInbox {
+            Text("Inbox")
+                .font(.subheadline.weight(.medium))
+            Text("No calendar event or reminder")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         } else {
-            Text("No time set")
+            Text(selectedDate.formatted(.dateTime.month(.abbreviated).day().year()))
+                .font(.subheadline.weight(.medium))
+            Text("\(task.estimatedMinutes)m")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+
+            Text(task.priority.displayName)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+
+            if let start = task.scheduledStart, let end = task.scheduledEnd {
+                Text("\(start.formatted(date: .omitted, time: .shortened))–\(end.formatted(date: .omitted, time: .shortened))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No time set")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
