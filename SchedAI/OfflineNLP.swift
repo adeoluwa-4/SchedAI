@@ -2772,7 +2772,13 @@ struct OfflineNLP {
                 if var date = buildDate(on: baseDay, hour24: parts.hour24, minute: parts.minute) {
                     if !hasExplicitDay, date < now { date = cal.date(byAdding: .day, value: 1, to: date) ?? date }
                     removeRange(match.range)
-                    let confidence: TimeConfidence = isReminderColonClockRequest(context) ? .high : parts.confidence
+                    let hasExplicitClockMarker = context.range(
+                        of: #"(?i)\b(?:at|by|around|about|near|until|till)\s*\d{1,2}:\d{2}\b"#,
+                        options: .regularExpression
+                    ) != nil
+                    let confidence: TimeConfidence = (isReminderColonClockRequest(context) || hasExplicitClockMarker)
+                        ? .high
+                        : parts.confidence
                     return SingleTimeResult(date: date, cleaned: working, confidence: confidence)
                 }
             }
@@ -3243,7 +3249,7 @@ struct OfflineNLP {
         }
 
         // Remove common lead-ins (polite or planning phrases)
-        var leadingPatterns = [
+        let leadingPatterns = [
             #"(?i)^\s*(please|can you|could you|would you|lets|let's)\s+"#,
             #"(?i)^\s*(?:remind me|reminder)\s+(?:to|about|for)?\s*"#,
             #"(?i)^\s*(?:don't|dont|do not)\s+let\s+me\s+forget\s+(?:to|about|for)?\s*"#,
@@ -3257,9 +3263,8 @@ struct OfflineNLP {
             #"(?i)^\s*(?:(?:to|for|from|and|then|next|after|after that|also|between|in|on|at|by|around|about|near)\s+)+"#
         ]
         let commandPattern = preserveScheduleAction
-            ? #"(?i)^\s*(?:add|put|set up|set|create|book)\s+(?:a|an|the|my|this)?\s*"#
-            : #"(?i)^\s*(?:schedule|add|put|set up|set|create|book)\s+(?:a|an|the|my|this)?\s*"#
-        leadingPatterns.insert(commandPattern, at: 4)
+            ? #"(?i)^\s*(?:add|put|set up|set|create|book)\s+(?:an|the|my|this|a)?\s*"#
+            : #"(?i)^\s*(?:schedule|add|put|set up|set|create|book)\s+(?:an|the|my|this|a)?\s*"#
 
         for _ in 0..<4 {
             let before = t
@@ -3268,6 +3273,9 @@ struct OfflineNLP {
             }
             if t == before { break }
         }
+        // Strip one scheduling command only. A repeated word can be meaningful task text,
+        // such as "Add an add a task button" from a spoken product task.
+        t = t.replacingOccurrences(of: commandPattern, with: "", options: .regularExpression)
 
         let trailingPatterns = [
             #"(?i)\bby\b$"#,
