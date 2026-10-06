@@ -50,6 +50,7 @@ final class AppState: ObservableObject {
         let priorityRaw: String
         let estimatedMinutes: Int
         let isCompleted: Bool
+        let isInbox: Bool
         let targetDay: Date?
         let scheduledStart: Date?
         let scheduledEnd: Date?
@@ -430,6 +431,9 @@ final class AppState: ObservableObject {
             var task = normalizedCompletionState(original)
             task.title = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !task.title.isEmpty else { return nil }
+            if task.isInbox {
+                task.setSchedulingMode(.inbox)
+            }
             normalizeScheduleForPlanState(&task)
             if let start = task.scheduledStart {
                 task.targetDay = Calendar.current.startOfDay(for: start)
@@ -453,6 +457,9 @@ final class AppState: ObservableObject {
         guard let i = tasks.firstIndex(where: { $0.id == t.id }) else { return }
         let previous = tasks[i]
         var task = normalizedCompletionState(t)
+        if task.isInbox {
+            task.setSchedulingMode(.inbox)
+        }
         normalizeScheduleForPlanState(&task)
         if let start = task.scheduledStart {
             task.targetDay = Calendar.current.startOfDay(for: start)
@@ -656,10 +663,14 @@ final class AppState: ObservableObject {
         var result = drafts
         let cal = Calendar.current
         for i in result.indices {
+            if result[i].isInbox {
+                result[i].setSchedulingMode(.inbox, fallbackDay: fallbackDay, calendar: cal)
+                continue
+            }
             result[i].targetDay = cal.startOfDay(for: result[i].scheduledStart ?? result[i].targetDay ?? fallbackDay)
         }
         let savedBusy = Scheduler.occupiedIntervals(tasks, excluding: Set(drafts.map(\.id)))
-        for day in Set(result.compactMap(\.targetDay)).sorted() {
+        for day in Set(result.filter { !$0.isInbox }.compactMap(\.targetDay)).sorted() {
             let window = schedulingWindow(for: day)
             let external = CalendarManager.shared.busyIntervals(on: day) ?? []
             _ = Scheduler.planToday(tasks: &result, workStart: window.start, workEnd: window.end,
@@ -674,6 +685,7 @@ final class AppState: ObservableObject {
         let draftIDs = Set(drafts.map(\.id))
         let saved = tasks.filter { !draftIDs.contains($0.id) }
         for task in drafts {
+            guard !task.isInbox else { continue }
             let day = task.scheduledStart ?? task.targetDay ?? planningDate
             let external = CalendarManager.shared.busyIntervals(on: day)
             if external == nil { calendarUnavailable = true }
@@ -711,8 +723,8 @@ final class AppState: ObservableObject {
     func savePreviewedTasks(_ drafts: [TaskItem], focusDay: Date) {
         planningDate = Calendar.current.startOfDay(for: focusDay)
         addTasks(drafts)
-        lastPlanOverflow = drafts.filter { $0.scheduledStart == nil }.count
-        let days = drafts.map { $0.scheduledStart ?? $0.targetDay ?? focusDay }
+        lastPlanOverflow = drafts.filter { !$0.isInbox && $0.scheduledStart == nil }.count
+        let days = drafts.filter { !$0.isInbox }.map { $0.scheduledStart ?? $0.targetDay ?? focusDay }
         calendarSyncIfEnabled(days: days, showSuccessMessage: false)
     }
 
@@ -1151,6 +1163,7 @@ final class AppState: ObservableObject {
                 priorityRaw: task.priority.rawValue,
                 estimatedMinutes: task.estimatedMinutes,
                 isCompleted: task.isCompleted,
+                isInbox: task.isInbox,
                 targetDay: task.targetDay,
                 scheduledStart: task.scheduledStart,
                 scheduledEnd: task.scheduledEnd
