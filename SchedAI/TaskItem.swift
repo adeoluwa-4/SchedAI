@@ -116,6 +116,22 @@ enum UnfinishedTaskPolicy: String, CaseIterable, Codable, Hashable, Identifiable
     }
 }
 
+enum TaskSchedulingMode: String, CaseIterable, Hashable, Identifiable {
+    case inbox
+    case day
+    case time
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .inbox: return "Inbox"
+        case .day: return "Day"
+        case .time: return "Time"
+        }
+    }
+}
+
 struct TaskItem: Identifiable, Codable, Hashable {
     var id: UUID = UUID()
     var title: String
@@ -132,6 +148,10 @@ struct TaskItem: Identifiable, Codable, Hashable {
     /// If false, the scheduler is free to place this task anywhere in the work window.
     var isPinned: Bool = false
 
+    /// Inbox tasks stay visible in the app and widget without being scheduled,
+    /// synced to a calendar, or assigned a notification.
+    var isInbox: Bool = false
+
     /// Optional day assignment for tasks that should be planned on a specific date,
     /// even when no explicit clock time is provided.
     var targetDay: Date? = nil
@@ -147,7 +167,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
     }
 
     func canAutoSchedule(on day: Date = Date(), calendar: Calendar = .current) -> Bool {
-        guard !isCompleted else { return false }
+        guard !isCompleted, !isInbox else { return false }
 
         switch planState {
         case .ready, .later:
@@ -157,6 +177,42 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case .skippedToday:
             guard let skippedAt = planStateUpdatedAt else { return false }
             return !calendar.isDate(day, inSameDayAs: skippedAt)
+        }
+    }
+
+    var schedulingMode: TaskSchedulingMode {
+        if isInbox { return .inbox }
+        return scheduledStart == nil ? .day : .time
+    }
+
+    mutating func setSchedulingMode(_ mode: TaskSchedulingMode, fallbackDay: Date = Date(), calendar: Calendar = .current) {
+        switch mode {
+        case .inbox:
+            isInbox = true
+            isPinned = false
+            targetDay = nil
+            scheduledStart = nil
+            scheduledEnd = nil
+            preferredStart = nil
+            preferredEnd = nil
+        case .day:
+            isInbox = false
+            isPinned = false
+            targetDay = calendar.startOfDay(for: targetDay ?? fallbackDay)
+            scheduledStart = nil
+            scheduledEnd = nil
+            preferredStart = nil
+            preferredEnd = nil
+        case .time:
+            isInbox = false
+            let day = calendar.startOfDay(for: targetDay ?? fallbackDay)
+            let start = scheduledStart ?? calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day) ?? day
+            isPinned = true
+            targetDay = day
+            scheduledStart = start
+            scheduledEnd = calendar.date(byAdding: .minute, value: max(5, estimatedMinutes), to: start)
+            preferredStart = nil
+            preferredEnd = nil
         }
     }
 
@@ -192,6 +248,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         planState: TaskPlanState = .ready,
         planStateUpdatedAt: Date? = nil,
         isPinned: Bool = false,
+        isInbox: Bool = false,
         targetDay: Date? = nil,
         scheduledStart: Date? = nil,
         scheduledEnd: Date? = nil,
@@ -208,6 +265,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.planState = planState
         self.planStateUpdatedAt = planStateUpdatedAt
         self.isPinned = isPinned
+        self.isInbox = isInbox
         self.targetDay = targetDay
         self.scheduledStart = scheduledStart
         self.scheduledEnd = scheduledEnd
@@ -228,6 +286,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case planState
         case planStateUpdatedAt
         case isPinned
+        case isInbox
         case targetDay
         case scheduledStart
         case scheduledEnd
@@ -247,6 +306,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.planState = try container.decodeIfPresent(TaskPlanState.self, forKey: .planState) ?? .ready
         self.planStateUpdatedAt = try container.decodeIfPresent(Date.self, forKey: .planStateUpdatedAt)
         self.isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        self.isInbox = try container.decodeIfPresent(Bool.self, forKey: .isInbox) ?? false
         self.targetDay = try container.decodeIfPresent(Date.self, forKey: .targetDay)
         self.scheduledStart = try container.decodeIfPresent(Date.self, forKey: .scheduledStart)
         self.scheduledEnd = try container.decodeIfPresent(Date.self, forKey: .scheduledEnd)
@@ -266,6 +326,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         try container.encode(planState, forKey: .planState)
         try container.encodeIfPresent(planStateUpdatedAt, forKey: .planStateUpdatedAt)
         try container.encode(isPinned, forKey: .isPinned)
+        try container.encode(isInbox, forKey: .isInbox)
         try container.encodeIfPresent(targetDay, forKey: .targetDay)
         try container.encodeIfPresent(scheduledStart, forKey: .scheduledStart)
         try container.encodeIfPresent(scheduledEnd, forKey: .scheduledEnd)
