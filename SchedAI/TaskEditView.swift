@@ -12,6 +12,7 @@ struct TaskEditView: View {
     @State private var estimatedMinutes: Int
     @State private var planState: TaskPlanState
     @State private var isCompleted: Bool
+    @State private var isInbox: Bool
     @State private var hasScheduledTime: Bool
     @State private var scheduledStart: Date
     @State private var scheduledEnd: Date
@@ -23,6 +24,7 @@ struct TaskEditView: View {
         draft.estimatedMinutes = estimatedMinutes
         draft.isCompleted = isCompleted
         draft.planState = planState
+        draft.isInbox = isInbox
         draft.scheduledStart = hasScheduledTime ? scheduledStart : nil
         draft.scheduledEnd = hasScheduledTime ? scheduledEnd : nil
         return draft
@@ -37,6 +39,7 @@ struct TaskEditView: View {
         _estimatedMinutes = State(initialValue: task.estimatedMinutes)
         _planState = State(initialValue: task.planState)
         _isCompleted = State(initialValue: task.isCompleted)
+        _isInbox = State(initialValue: task.isInbox)
         _hasScheduledTime = State(initialValue: task.scheduledStart != nil)
         let start = task.scheduledStart ?? originalTargetDay ?? Date()
         _scheduledStart = State(initialValue: start)
@@ -81,6 +84,20 @@ struct TaskEditView: View {
                 }
 
                 Section("Schedule") {
+                    Toggle("Keep in Inbox", isOn: Binding(
+                        get: { isInbox },
+                        set: { enabled in
+                            isInbox = enabled
+                            if enabled { hasScheduledTime = false }
+                        }
+                    ))
+
+                    if isInbox {
+                        Text("Inbox tasks stay in SchedAI and the widget without a calendar event or reminder.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Toggle(
                         "Set specific time",
                         isOn: Binding(
@@ -99,9 +116,9 @@ struct TaskEditView: View {
                             }
                         )
                     )
-                    .disabled(isCompleted || !planStateAllowsSchedule)
+                    .disabled(isInbox || isCompleted || !planStateAllowsSchedule)
 
-                    if hasScheduledTime && planStateAllowsSchedule && !isCompleted {
+                    if !isInbox && hasScheduledTime && planStateAllowsSchedule && !isCompleted {
                         DatePicker(
                             "Start",
                             selection: Binding(
@@ -156,6 +173,7 @@ struct TaskEditView: View {
                             slotMessage = "Suggested time selected. Review it before saving."
                         } else { slotMessage = "No available time on this day. Choose another date or shorten the task." }
                     }
+                    .disabled(isInbox)
                     if let slotMessage { Text(slotMessage).font(.footnote) }
                     Text(planState.subtitle)
                         .font(.footnote)
@@ -208,7 +226,10 @@ struct TaskEditView: View {
             ? nil
             : (item.planState == updated.planState ? item.planStateUpdatedAt ?? Date() : Date())
 
-        if hasScheduledTime && planStateAllowsSchedule && !isCompleted {
+        if isInbox {
+            updated.estimatedMinutes = max(5, estimatedMinutes)
+            updated.setSchedulingMode(.inbox)
+        } else if hasScheduledTime && planStateAllowsSchedule && !isCompleted {
             let normalizedEnd = max(scheduledEnd, minimumEnd(for: scheduledStart))
             let duration = durationMinutes(start: scheduledStart, end: normalizedEnd)
             updated.estimatedMinutes = duration
