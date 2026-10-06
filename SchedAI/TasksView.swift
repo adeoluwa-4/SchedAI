@@ -13,11 +13,12 @@ struct TasksView: View {
     @State private var showQuickAddPreview: Bool = false
     
     private enum TaskFilter: String, CaseIterable {
-        case all, unscheduled, scheduled, later, blocked, skippedToday, high
+        case all, inbox, unscheduled, scheduled, later, blocked, skippedToday, high
         
         var label: String {
             switch self {
             case .all: return "All"
+            case .inbox: return "Inbox"
             case .unscheduled: return "Unscheduled"
             case .scheduled: return "Scheduled"
             case .later: return "Later"
@@ -30,6 +31,7 @@ struct TasksView: View {
         var icon: String {
             switch self {
             case .all: return "list.bullet"
+            case .inbox: return "tray.full"
             case .unscheduled: return "clock.badge.questionmark"
             case .scheduled: return "calendar.badge.clock"
             case .later: return "clock.arrow.circlepath"
@@ -60,8 +62,10 @@ struct TasksView: View {
         switch filter {
         case .all:
             return activeTasks
+        case .inbox:
+            return activeTasks.filter(\.isInbox)
         case .unscheduled:
-            return activeTasks.filter { $0.scheduledStart == nil || $0.scheduledEnd == nil }
+            return activeTasks.filter { !$0.isInbox && ($0.scheduledStart == nil || $0.scheduledEnd == nil) }
         case .scheduled:
             return activeTasks.filter { $0.scheduledStart != nil && $0.scheduledEnd != nil }
         case .later:
