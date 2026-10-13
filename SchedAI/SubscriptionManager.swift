@@ -3,6 +3,7 @@ import Foundation
 import StoreKit
 
 enum SchedAIProduct: String, CaseIterable, Sendable {
+    case weekly = "me.SchedAI.pro.weekly"
     case monthly = "me.SchedAI.pro.monthly"
     case annual = "me.SchedAI.pro.annual"
 
@@ -137,6 +138,7 @@ final class SubscriptionManager: ObservableObject {
 
     var planName: String {
         switch activePlan {
+        case .weekly: return "Weekly plan"
         case .monthly: return "Monthly plan"
         case .annual: return "Annual plan"
         case nil: return "Pro active"
@@ -155,7 +157,13 @@ final class SubscriptionManager: ObservableObject {
 
     var planPrice: String? {
         guard let plan = activePlan, let product = products.first(where: { $0.id == plan.rawValue }) else { return nil }
-        return "\(product.displayPrice) / \(plan == .monthly ? "month" : "year")"
+        let period: String
+        switch plan {
+        case .weekly: period = "week"
+        case .monthly: period = "month"
+        case .annual: period = "year"
+        }
+        return "\(product.displayPrice) / \(period)"
     }
 
     func start() async {
