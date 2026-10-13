@@ -44,6 +44,7 @@ struct MonetizationTests {
     func proProductIdentifiers() {
         #expect(SchedAIProduct.isPro("me.SchedAI.pro.monthly"))
         #expect(SchedAIProduct.isPro("me.SchedAI.pro.annual"))
+        #expect(SchedAIProduct.isPro("me.SchedAI.pro.weekly"))
         #expect(!SchedAIProduct.isPro("me.SchedAI.pro.fake"))
     }
 }
