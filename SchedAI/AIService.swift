@@ -22,7 +22,7 @@ enum TaskParseSource: Equatable {
     var displayName: String {
         switch self {
         case .onDeviceAI: return "On-device AI"
-        case .privateCloudCompute: return "Apple hosted AI"
+        case .privateCloudCompute: return "Apple Planner AI"
         case .ai: return "Hosted AI"
         case .offline: return "Offline"
         }
@@ -31,7 +31,7 @@ enum TaskParseSource: Equatable {
     var usageDescription: String {
         switch self {
         case .onDeviceAI: return "Processed on device. No hosted AI allowance used."
-        case .privateCloudCompute: return "Processed with Apple hosted AI through Private Cloud Compute."
+        case .privateCloudCompute: return "Planned with Apple Intelligence through Private Cloud Compute."
         case .ai: return "Processed with hosted AI. Counts toward hosted AI usage."
         case .offline: return "Processed offline. No hosted AI allowance used."
         }
@@ -118,6 +118,7 @@ struct AIService {
         from input: String,
         now: Date = Date(),
         planningDate: Date = Date(),
+        allowsPrivateCloudCompute: Bool = true,
         allowsHostedAI: Bool = false,
         entitlementJWS: String? = nil
     ) async -> TaskParseResult {
@@ -125,6 +126,7 @@ struct AIService {
             from: input,
             now: now,
             planningDate: planningDate,
+            allowsPrivateCloudCompute: allowsPrivateCloudCompute,
             allowsHostedAI: allowsHostedAI,
             entitlementJWS: entitlementJWS
         )
@@ -138,6 +140,7 @@ struct AIService {
         from input: String,
         now: Date = Date(),
         planningDate: Date = Date(),
+        allowsPrivateCloudCompute: Bool = true,
         allowsHostedAI: Bool = false,
         entitlementJWS: String? = nil
     ) async -> TaskParseResult {
@@ -145,6 +148,7 @@ struct AIService {
         let offline = fallbackTasks(from: safeInput, now: now)
         let offlineDrafts = drafts(from: offline)
         var rejectedOnDeviceAI = false
+        var rejectedPrivateCloudCompute = false
         var rejectedHostedAI = false
         var requiresPro = false
 
@@ -171,7 +175,9 @@ struct AIService {
             rejectedOnDeviceAI = !onDevice.isEmpty
         }
 
-        if allowsHostedAI,
+        // PCC is Apple's iOS 27 planning fallback. It is independent from the
+        // external hosted-AI subscription and only runs when Apple makes it available.
+        if allowsPrivateCloudCompute,
            let drafts = await OnDeviceTaskParser.extractTasksWithPrivateCloudCompute(
                from: safeInput,
                now: now,
@@ -189,10 +195,10 @@ struct AIService {
                 return TaskParseResult(
                     tasks: privateCloud,
                     source: .privateCloudCompute,
-                    message: "Improved with Apple hosted AI after on-device parsing."
+                    message: "Improved with Apple Planner AI after on-device parsing."
                 )
             }
-            rejectedHostedAI = !privateCloud.isEmpty
+            rejectedPrivateCloudCompute = !privateCloud.isEmpty
         }
 
         if allowsHostedAI, let endpoint = parseEndpoint {
@@ -226,16 +232,18 @@ struct AIService {
         let message: String
         if requiresPro {
             message = "Used the offline parser. Upgrade to Pro for more hosted AI improvements today."
-        } else if rejectedOnDeviceAI && rejectedHostedAI {
-            message = "AI changed explicit times. Used offline parser."
+        } else if rejectedOnDeviceAI && (rejectedPrivateCloudCompute || rejectedHostedAI) {
+            message = "Apple Intelligence changed explicit times. Used offline parser."
         } else if rejectedOnDeviceAI {
-            message = allowsHostedAI ? "Apple Intelligence changed explicit times. Tried hosted AI, then used offline parser." : "Apple Intelligence changed explicit times. Used offline parser."
+            message = allowsHostedAI ? "Apple Intelligence changed explicit times. Tried the Apple planner and hosted AI, then used offline parser." : "Apple Intelligence changed explicit times. Used offline parser."
+        } else if rejectedPrivateCloudCompute {
+            message = "Apple Planner AI changed explicit times. Used offline parser."
         } else if rejectedHostedAI {
             message = "AI changed explicit times. Used offline parser."
         } else if allowsHostedAI {
-            message = "Apple Intelligence and hosted AI unavailable. Used offline parser."
+            message = "Apple Intelligence, Apple Planner AI, and hosted AI are unavailable. Used offline parser."
         } else {
-            message = "Apple Intelligence is unavailable. Used offline parser."
+            message = allowsPrivateCloudCompute ? "Apple Intelligence and Apple Planner AI are unavailable. Used offline parser." : "Apple Intelligence is unavailable. Used offline parser."
         }
 
         return TaskParseResult(
