@@ -332,12 +332,14 @@ struct SettingsView: View {
     @ViewBuilder
     private func detailPage(for destination: SettingsDestination) -> some View {
         SettingsDetailPage(title: destination.title, background: settingsBackground) {
-            SettingsIntroCard(
-                icon: destination.icon,
-                title: destination.title,
-                description: destination.detailDescription,
-                color: destination.color
-            )
+            if destination != .pro {
+                SettingsIntroCard(
+                    icon: destination.icon,
+                    title: destination.title,
+                    description: destination.detailDescription,
+                    color: destination.color
+                )
+            }
 
             switch destination {
             case .pro:
@@ -361,17 +363,66 @@ struct SettingsView: View {
     }
 
     private var proDetail: some View {
-        VStack(spacing: 22) {
-            SettingsGroupCard(icon: "crown.fill", title: "SchedAI Pro", color: Color.brandBlue) {
-                SettingsInfoRow(
-                    icon: subscriptions.isPro ? "checkmark.seal.fill" : "sparkles",
-                    title: subscriptions.isPro ? subscriptions.planName : "Free Plan",
-                    subtitle: subscriptions.proStatusText,
-                    color: subscriptions.isPro ? .green : Color.brandBlue
-                )
+        VStack(spacing: 16) {
+            SettingsPanel {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 12) {
+                        SettingsSectionIcon(
+                            systemName: subscriptions.isPro ? "checkmark.seal.fill" : "crown.fill",
+                            color: subscriptions.isPro ? .green : Color.brandBlue
+                        )
 
-                SettingsDivider()
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(subscriptions.isPro ? subscriptions.planName : "Unlock SchedAI Pro")
+                                .font(.system(size: 20, weight: .bold, design: .rounded))
+                                .foregroundStyle(.primary)
 
+                            Text(subscriptions.proStatusText)
+                                .font(.system(size: 14, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+
+                        Spacer(minLength: 0)
+                    }
+
+                    if subscriptions.isPro, let price = subscriptions.planPrice {
+                        Text("\(price) \(subscriptions.renewalText)")
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button {
+                        if subscriptions.isPro {
+                            if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                                openURL(url)
+                            }
+                        } else {
+                            subscriptions.presentPaywall(.settings)
+                        }
+                    } label: {
+                        Label(
+                            subscriptions.isPro ? "Manage subscription" : "View plans",
+                            systemImage: subscriptions.isPro ? "creditcard" : "crown.fill"
+                        )
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandBlue)
+                    .accessibilityLabel(subscriptions.isPro ? "Manage SchedAI Pro subscription" : "View SchedAI Pro plans")
+
+                    if !subscriptions.isPro {
+                        Text("Compare weekly, monthly, and annual plans in the App Store.")
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(18)
+            }
+
+            SettingsGroupCard(icon: "checkmark.circle.fill", title: "Included with Pro", color: Color.brandBlue) {
                 SettingsInfoRow(
                     icon: "sparkles.rectangle.stack",
                     title: "Expanded Hosted AI",
@@ -387,42 +438,9 @@ struct SettingsView: View {
                     subtitle: subscriptions.isPro ? "Banner ads are hidden across SchedAI." : "Upgrade to remove banner ads across the app.",
                     color: .indigo
                 )
+            }
 
-                SettingsDivider()
-
-                if subscriptions.isPro {
-                    if let price = subscriptions.planPrice {
-                        SettingsInfoRow(
-                            icon: "creditcard",
-                            title: price,
-                            subtitle: subscriptions.renewalText,
-                            color: .gray
-                        )
-                        SettingsDivider()
-                    }
-                    SettingsActionRow(
-                        icon: "creditcard",
-                        title: "Manage Subscription",
-                        subtitle: "Change or cancel through your Apple Account",
-                        color: Color.brandBlue
-                    ) {
-                        if let url = URL(string: "https://apps.apple.com/account/subscriptions") {
-                            openURL(url)
-                        }
-                    }
-                } else {
-                    SettingsActionRow(
-                        icon: "crown.fill",
-                        title: "View Pro Options",
-                        subtitle: "See weekly, monthly, and annual prices from the App Store",
-                        color: Color.brandBlue
-                    ) {
-                        subscriptions.presentPaywall(.settings)
-                    }
-                }
-
-                SettingsDivider()
-
+            SettingsGroupCard(icon: "arrow.clockwise", title: "Purchase Help", color: .gray) {
                 SettingsActionRow(
                     icon: "arrow.clockwise",
                     title: subscriptions.isRestoring ? "Restoring Purchases" : "Restore Purchases",
