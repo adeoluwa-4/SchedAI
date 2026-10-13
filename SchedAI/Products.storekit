@@ -83,7 +83,7 @@
           ],
           "codeOffers" : [
           ],
-          "displayPrice" : "2.99",
+          "displayPrice" : "14.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "53434845444D4F4E",
@@ -106,7 +106,7 @@
           ],
           "codeOffers" : [
           ],
-          "displayPrice" : "19.99",
+          "displayPrice" : "99.99",
           "familyShareable" : false,
           "groupNumber" : 1,
           "internalID" : "5343484544594541",
@@ -121,6 +121,29 @@
           "productID" : "me.SchedAI.pro.annual",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "SchedAI Pro Annual",
+          "subscriptionGroupID" : "534348454450524F",
+          "type" : "RecurringSubscription"
+        },
+        {
+          "adHocOffers" : [
+          ],
+          "codeOffers" : [
+          ],
+          "displayPrice" : "3.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "5343484544414957",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Expanded hosted AI access and no banner ads, billed weekly.",
+              "displayName" : "SchedAI Pro Weekly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "me.SchedAI.pro.weekly",
+          "recurringSubscriptionPeriod" : "P1W",
+          "referenceName" : "SchedAI Pro Weekly",
           "subscriptionGroupID" : "534348454450524F",
           "type" : "RecurringSubscription"
         }
