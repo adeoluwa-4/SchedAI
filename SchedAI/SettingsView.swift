@@ -414,7 +414,7 @@ struct SettingsView: View {
                     SettingsActionRow(
                         icon: "crown.fill",
                         title: "View Pro Options",
-                        subtitle: "See monthly and annual prices from the App Store",
+                        subtitle: "See weekly, monthly, and annual prices from the App Store",
                         color: Color.brandBlue
                     ) {
                         subscriptions.presentPaywall(.settings)
