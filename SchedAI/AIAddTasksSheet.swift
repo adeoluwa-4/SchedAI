@@ -184,7 +184,7 @@ struct AIAddTasksSheet: View {
                 Button {
                     requestAIImprove()
                 } label: {
-                    Label(isParsing ? "Using AI" : "Improve with AI", systemImage: "sparkles")
+                    Label(isParsing ? "Refining…" : "Refine with AI", systemImage: "sparkles")
                         .font(.subheadline.weight(.semibold))
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
@@ -332,7 +332,7 @@ struct AIAddTasksSheet: View {
             && !hasHostedAccess
             && result.source == .offline
         if hostedAllowanceExhausted {
-            parseStatusMessage = "Offline preview. You used today's free hosted AI improvements."
+            parseStatusMessage = "You've used today's free cloud refinements. Your plan is ready as is."
         } else {
             parseStatusMessage = result.source.usageDescription + (result.message.map { " " + $0 } ?? "")
         }

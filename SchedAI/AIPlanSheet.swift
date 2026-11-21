@@ -22,6 +22,9 @@ struct AIPlanSheet: View {
     @State private var isPlanning = false
     @State private var animateLoader = false
     @State private var parseRequestID = UUID()
+    /// Number of parse requests still running. The loading overlay follows this,
+    /// not the latest request ID, so a superseded request can't leave it stuck.
+    @State private var parsesInFlight = 0
     @State private var previewSource: TaskParseSource = .offline
     @State private var previewReferenceTime = Date()
     @State private var previewInput = ""
@@ -48,9 +51,12 @@ struct AIPlanSheet: View {
 
                         planInputActions
 
-                        Text("Preview tries on-device AI first. With your permission, hosted AI may process task text and use your allowance. Offline parsing remains available.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        if parsedPreview.isEmpty {
+                            Label("Planned on your iPhone. Nothing leaves it unless you choose cloud refinement.", systemImage: "lock.fill")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
 
                         if !parsedPreview.isEmpty {
                             previewCard
@@ -135,7 +141,7 @@ struct AIPlanSheet: View {
 
                     Spacer(minLength: 12)
 
-                    Text("Plan")
+                    Text("Plan your day")
                         .font(.headline.weight(.semibold))
                         .lineLimit(1)
 
@@ -153,11 +159,6 @@ struct AIPlanSheet: View {
 
     private var inputCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Speak or type your tasks, then preview the plan.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
             ZStack(alignment: .topLeading) {
                 TextEditor(text: $transcript)
                     .font(.body)
@@ -169,7 +170,7 @@ struct AIPlanSheet: View {
                     )
 
                 if transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Say or type: 'finish essay 60m urgent, then gym 1h'")
+                    Text("Dump everything on your mind.\n\nfinish essay 60m urgent\ngym at 6 for 1h\ncall mom tonight")
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .padding(16)
@@ -177,18 +178,26 @@ struct AIPlanSheet: View {
                         .accessibilityHidden(true)
                 }
             }
-            .frame(height: usesAccessibilityLayout ? nil : (parsedPreview.isEmpty ? 210 : 72))
+            .frame(height: usesAccessibilityLayout ? nil : (parsedPreview.isEmpty ? 220 : 120))
+            .overlay(alignment: .bottomTrailing) {
+                if !usesAccessibilityLayout {
+                    compactMicButton
+                }
+            }
 
-            voiceControl
+            if usesAccessibilityLayout {
+                voiceControl
+            } else if speech.isRecording || speech.errorMessage != nil {
+                Label(speech.errorMessage ?? "Listening… tap stop when you're done.",
+                      systemImage: speech.errorMessage == nil ? "waveform" : "exclamationmark.triangle")
+                    .font(.footnote.weight(.medium))
+                    .foregroundStyle(speech.errorMessage == nil ? Color.red : Color.secondary)
+            }
         }
-        .padding(14)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.thinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
+                .fill(Color(uiColor: .secondarySystemBackground))
         )
     }
 
@@ -225,7 +234,7 @@ struct AIPlanSheet: View {
         Button {
             Task { await buildPreview() }
         } label: {
-            Label("Preview", systemImage: "wand.and.stars")
+            Label("Build plan", systemImage: "wand.and.stars")
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
@@ -280,6 +289,23 @@ struct AIPlanSheet: View {
         }
     }
 
+    /// Small mic in the corner of the text box: voice is one tap away without
+    /// taking a third of the screen before the keyboard.
+    private var compactMicButton: some View {
+        Button(action: toggleRecord) {
+            Image(systemName: speech.isRecording ? "stop.fill" : "mic.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(speech.isRecording ? Color.red : Color.accentColor))
+                .shadow(color: .black.opacity(0.15), radius: 6, y: 2)
+        }
+        .buttonStyle(.plain)
+        .padding(6)
+        .accessibilityLabel(speech.isRecording ? "Stop recording" : "Speak your tasks")
+        .disabled(isPlanning)
+    }
+
     private var micButton: some View {
         Button(action: toggleRecord) {
             ZStack {
@@ -299,8 +325,8 @@ struct AIPlanSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             previewCardHeader
 
-            Text("New tasks fit around your existing schedule. Existing task times will not move.")
-                .font(.caption)
+            Text("Fits around what's already planned. Nothing you scheduled moves.")
+                .font(.footnote)
                 .foregroundStyle(.secondary)
             if let saveMessage { Text(saveMessage).font(.callout) }
             ForEach(Array(app.scheduleWarnings(for: parsedPreview).enumerated()), id: \.offset) { _, warning in
@@ -310,8 +336,9 @@ struct AIPlanSheet: View {
             }
             let unplannedCount = parsedPreview.filter { !$0.isInbox && $0.scheduledStart == nil }.count
             if unplannedCount > 0 {
-                Text("\(unplannedCount) task(s) have no available slot. They will be saved without a time; choose another date or shorten their duration.")
-                    .font(.caption)
+                Label("\(unplannedCount) task\(unplannedCount == 1 ? "" : "s") won't fit today. They'll be saved without a time.", systemImage: "exclamationmark.circle")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
             }
 
             if let parseStatusMessage {
@@ -325,16 +352,12 @@ struct AIPlanSheet: View {
                 Button {
                     requestAIImprove()
                 } label: {
-                    Label("Improve with AI", systemImage: "sparkles")
+                    Label("Refine with AI", systemImage: "sparkles")
                         .frame(maxWidth: .infinity)
                 }
                 .font(.subheadline.weight(.semibold))
                 .buttonStyle(.bordered)
                 .disabled(isPlanning)
-
-                Text("Tries on-device AI first. Hosted AI requires permission and uses your allowance.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
 
             if needsInlineDaySelector {
@@ -352,20 +375,16 @@ struct AIPlanSheet: View {
                 }
             }
         }
-        .padding(12)
+        .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.thinMaterial)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(.quaternary, lineWidth: 1)
+                .fill(Color(uiColor: .secondarySystemBackground))
         )
     }
 
     @ViewBuilder
     private var previewCardHeader: some View {
-        let countText = "\(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s") detected"
+        let countText = "Your plan · \(parsedPreview.count) task\(parsedPreview.count == 1 ? "" : "s")"
         let sourceText = previewSource.displayName
 
         if usesAccessibilityLayout {
@@ -404,12 +423,12 @@ struct AIPlanSheet: View {
                 .accessibilityLabel("Add task")
                 .disabled(isPlanning)
 
-                Text(sourceText)
+                Label(sourceText, systemImage: previewSource.systemImage)
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.green)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
-                    .background(Capsule().fill(.quaternary))
+                    .background(Capsule().fill(Color.green.opacity(0.12)))
             }
         }
     }
@@ -563,6 +582,15 @@ struct AIPlanSheet: View {
         if autoStartRecording {
             await requestVoicePermissionAndStart()
         }
+
+        #if DEBUG
+        // Screenshot helper: launch with -SchedAIOpenPlan to see a filled-in preview.
+        if ProcessInfo.processInfo.arguments.contains("-SchedAIOpenPlan"), transcript.isEmpty {
+            transcript = "finish stats homework 45m urgent\ncall dad later today\nworkout at 9 for 45 minutes"
+            try? await Task.sleep(for: .milliseconds(300)) // let onChange(transcript) settle
+            await buildPreview()
+        }
+        #endif
     }
 
     private func maybeAutoStartRecording() {
@@ -618,11 +646,13 @@ struct AIPlanSheet: View {
 
         isPlanning = true
         animateLoader = true
+        parsesInFlight += 1
         let requestID = UUID()
         parseRequestID = requestID
         let requestedDay = app.planningDate
         defer {
-            if parseRequestID == requestID {
+            parsesInFlight = max(0, parsesInFlight - 1)
+            if parsesInFlight == 0 {
                 isPlanning = false
                 animateLoader = false
             }
@@ -717,7 +747,7 @@ struct AIPlanSheet: View {
         if !subscriptions.isPro,
            !subscriptions.canUseHostedAI,
            result.source == .offline {
-            parseStatusMessage = "Offline preview. You used today's free hosted AI improvements."
+            parseStatusMessage = "You've used today's free cloud refinements. Your plan is ready as is."
         } else {
             parseStatusMessage = result.source.usageDescription + (result.message.map { " " + $0 } ?? "")
         }
@@ -969,12 +999,12 @@ struct AIPlanSheet: View {
             return "Inbox • No calendar event or reminder"
         }
         if let start = task.scheduledStart, let end = task.scheduledEnd {
-            return "\(day(start)) • \(time(start))-\(time(end))"
+            return "\(day(start)) · \(time(start)) – \(time(end))"
         }
         if let target = task.targetDay {
-            return "\(day(target)) • Flexible"
+            return "\(day(target)) · Any time"
         }
-        return "Flexible"
+        return "Any time"
     }
 
     private func time(_ date: Date) -> String {
@@ -983,10 +1013,12 @@ struct AIPlanSheet: View {
         return formatter.string(from: date)
     }
 
+    /// "Today", "Tomorrow", or a short weekday + date. The year is never useful here.
     private func day(_ date: Date) -> String {
-        let formatter = DateFormatter()
-        formatter.setLocalizedDateFormatFromTemplate("EEE MMM d yyyy")
-        return formatter.string(from: date)
+        let calendar = Calendar.current
+        if calendar.isDateInToday(date) { return "Today" }
+        if calendar.isDateInTomorrow(date) { return "Tomorrow" }
+        return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
     }
 }
 

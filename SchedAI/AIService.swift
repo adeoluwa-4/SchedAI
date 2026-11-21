@@ -19,21 +19,31 @@ enum TaskParseSource: Equatable {
     case ai
     case offline
 
+    /// One short, user-facing answer to "where did my text go?".
+    /// Private-by-default is the product, so the label talks about privacy,
+    /// not about which model ran.
     var displayName: String {
         switch self {
-        case .onDeviceAI: return "On-device AI"
-        case .privateCloudCompute: return "Apple Planner AI"
-        case .ai: return "Hosted AI"
-        case .offline: return "Offline"
+        case .onDeviceAI, .offline: return "On your iPhone"
+        case .privateCloudCompute: return "Apple Private Cloud"
+        case .ai: return "SchedAI Cloud"
         }
     }
 
     var usageDescription: String {
         switch self {
-        case .onDeviceAI: return "Processed on device. No hosted AI allowance used."
-        case .privateCloudCompute: return "Planned with Apple Intelligence through Private Cloud Compute."
-        case .ai: return "Processed with hosted AI. Counts toward hosted AI usage."
-        case .offline: return "Processed offline. No hosted AI allowance used."
+        case .offline: return "Planned privately on your iPhone."
+        case .onDeviceAI: return "Refined privately on your iPhone."
+        case .privateCloudCompute: return "Refined with Apple's Private Cloud Compute."
+        case .ai: return "Refined with SchedAI Cloud."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .onDeviceAI, .offline: return "lock.iphone"
+        case .privateCloudCompute: return "lock.icloud"
+        case .ai: return "icloud"
         }
     }
 
@@ -169,7 +179,7 @@ struct AIService {
                 return TaskParseResult(
                     tasks: onDevice,
                     source: .onDeviceAI,
-                    message: "Improved on device with Apple Intelligence."
+                    message: nil
                 )
             }
             rejectedOnDeviceAI = !onDevice.isEmpty
@@ -195,7 +205,7 @@ struct AIService {
                 return TaskParseResult(
                     tasks: privateCloud,
                     source: .privateCloudCompute,
-                    message: "Improved with Apple Planner AI after on-device parsing."
+                    message: nil
                 )
             }
             rejectedPrivateCloudCompute = !privateCloud.isEmpty
@@ -229,21 +239,15 @@ struct AIService {
             }
         }
 
+        // Users don't need to know which engine declined. Tell them the one
+        // thing that matters: whether anything changed, and why not.
         let message: String
         if requiresPro {
-            message = "Used the offline parser. Upgrade to Pro for more hosted AI improvements today."
-        } else if rejectedOnDeviceAI && (rejectedPrivateCloudCompute || rejectedHostedAI) {
-            message = "Apple Intelligence changed explicit times. Used offline parser."
-        } else if rejectedOnDeviceAI {
-            message = allowsHostedAI ? "Apple Intelligence changed explicit times. Tried the Apple planner and hosted AI, then used offline parser." : "Apple Intelligence changed explicit times. Used offline parser."
-        } else if rejectedPrivateCloudCompute {
-            message = "Apple Planner AI changed explicit times. Used offline parser."
-        } else if rejectedHostedAI {
-            message = "AI changed explicit times. Used offline parser."
-        } else if allowsHostedAI {
-            message = "Apple Intelligence, Apple Planner AI, and hosted AI are unavailable. Used offline parser."
+            message = "Cloud refinement is part of Pro. Your plan is ready as is."
+        } else if rejectedOnDeviceAI || rejectedPrivateCloudCompute || rejectedHostedAI {
+            message = "Kept your plan so your exact times stay put."
         } else {
-            message = allowsPrivateCloudCompute ? "Apple Intelligence and Apple Planner AI are unavailable. Used offline parser." : "Apple Intelligence is unavailable. Used offline parser."
+            message = "Smarter refinement isn't available right now. Your plan is ready as is."
         }
 
         return TaskParseResult(
