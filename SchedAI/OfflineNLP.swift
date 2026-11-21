@@ -624,7 +624,9 @@ struct OfflineNLP {
                 ampm: ap,
                 context: working,
                 previousTaskStart: previousTaskStart,
-                globalContext: globalContext
+                globalContext: globalContext,
+                referenceDate: referenceDate,
+                baseDay: baseDay
             )
             start = buildDate(hour24: hour24, minute: m)
             explicitTime = true
@@ -636,7 +638,9 @@ struct OfflineNLP {
                 ampm: nil,
                 context: working,
                 previousTaskStart: previousTaskStart,
-                globalContext: globalContext
+                globalContext: globalContext,
+                referenceDate: referenceDate,
+                baseDay: baseDay
             )
             start = buildDate(hour24: hour24, minute: m)
             explicitTime = true
@@ -659,7 +663,9 @@ struct OfflineNLP {
                 ampm: ap,
                 context: working,
                 previousTaskStart: previousTaskStart,
-                globalContext: globalContext
+                globalContext: globalContext,
+                referenceDate: referenceDate,
+                baseDay: baseDay
             )
             start = buildDate(hour24: hour24, minute: m)
             explicitTime = true
@@ -673,7 +679,9 @@ struct OfflineNLP {
                 ampm: ap,
                 context: working,
                 previousTaskStart: previousTaskStart,
-                globalContext: globalContext
+                globalContext: globalContext,
+                referenceDate: referenceDate,
+                baseDay: baseDay
             )
             start = buildDate(hour24: hour24, minute: m)
             explicitTime = true
@@ -724,7 +732,9 @@ struct OfflineNLP {
         ampm: String?,
         context: String,
         previousTaskStart: Date?,
-        globalContext: String
+        globalContext: String,
+        referenceDate: Date? = nil,
+        baseDay: Date? = nil
     ) -> Int {
         guard (0...23).contains(rawHour) else { return 0 }
         if rawHour == 0 { return 0 }
@@ -803,6 +813,18 @@ struct OfflineNLP {
         ]
         if hour <= 8, likelyPmWords.contains(where: local.contains) {
             return hour + 12
+        }
+
+        // Nothing in the text says morning or evening. For a task today, a bare
+        // "at 9" typed at 7 PM means 9 PM, not a 9 AM that has already passed.
+        if let referenceDate, let baseDay, (1...11).contains(hour) {
+            let cal = Calendar.current
+            if cal.isDate(baseDay, inSameDayAs: referenceDate),
+               let morning = cal.date(bySettingHour: hour, minute: minute, second: 0, of: baseDay),
+               let evening = cal.date(bySettingHour: hour + 12, minute: minute, second: 0, of: baseDay),
+               morning < referenceDate, evening > referenceDate {
+                return hour + 12
+            }
         }
 
         return hour
