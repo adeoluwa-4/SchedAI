@@ -23,7 +23,8 @@ struct Scheduler {
         day: Date = Date(),
         now: Date = Date(),
         bufferMinutes: Int = 6,
-        externalBusyIntervals: [DateInterval] = []
+        externalBusyIntervals: [DateInterval] = [],
+        keepExistingSchedules: Bool = false
     ) -> Int {
 
         let cal = Calendar.current
@@ -65,11 +66,19 @@ struct Scheduler {
             ? max(rawStartOfWindow, futureStart)
             : rawStartOfWindow
 
-        // Keep pinned tasks. Clear any previously auto-scheduled tasks so re-planning can reshuffle.
+        /// A task the scheduler must not move: pinned by the user, or (when only
+        /// filling gaps) already placed on this day by an earlier pass.
+        func isAnchor(_ task: TaskItem) -> Bool {
+            guard let start = task.scheduledStart else { return false }
+            if task.isPinned { return true }
+            return keepExistingSchedules && cal.isDate(start, inSameDayAs: planningDay)
+        }
+
+        // Keep anchors. Clear any previously auto-scheduled tasks so re-planning can reshuffle.
         for i in tasks.indices {
             guard tasks[i].canAutoSchedule(on: planningDay, calendar: cal) else { continue }
             guard appliesToPlanningDay(tasks[i]) else { continue }
-            if tasks[i].isPinned {
+            if isAnchor(tasks[i]) {
                 if let s = tasks[i].scheduledStart {
                     tasks[i].targetDay = cal.startOfDay(for: s)
                     if tasks[i].scheduledEnd == nil {
@@ -86,7 +95,7 @@ struct Scheduler {
         var flexible: [TaskItem] = []
 
         for t in tasks where t.canAutoSchedule(on: planningDay, calendar: cal) && appliesToPlanningDay(t) {
-            if t.isPinned, let s = t.scheduledStart {
+            if isAnchor(t), let s = t.scheduledStart {
                 let e = t.scheduledEnd ?? s.addingTimeInterval(TimeInterval(max(5, t.estimatedMinutes) * 60))
                 pinned.append((t.id, s, e))
             } else {
@@ -151,19 +160,22 @@ struct Scheduler {
             }
         }
 
-        flexible.sort { a, b in
-            if a.priority != b.priority {
-                return a.priority.sortRank < b.priority.sortRank
-            }
-            return a.estimatedMinutes > b.estimatedMinutes
-        }
+        flexible.sort { placementOrder($0, $1, planningDay: planningDay, calendar: cal) }
 
         var overflow = 0
         for t in flexible {
             let preferredStart = t.preferredStart.map { max($0, startOfWindow) } ?? startOfWindow
+            // A deadline caps the slot: try the preferred window before the
+            // deadline, then anywhere before the deadline, then anywhere at all.
+            let deadlineCap = t.deadline
+            let preferredCap = [t.preferredEnd, deadlineCap].compactMap { $0 }.min()
             let slotStart = findSlot(
                 startingAt: preferredStart,
-                endingBy: t.preferredEnd,
+                endingBy: preferredCap,
+                durationMinutes: t.estimatedMinutes
+            ) ?? findSlot(
+                startingAt: startOfWindow,
+                endingBy: deadlineCap,
                 durationMinutes: t.estimatedMinutes
             ) ?? findSlot(
                 startingAt: preferredStart,
@@ -184,5 +196,31 @@ struct Scheduler {
         }
 
         return overflow
+    }
+
+    /// Order in which flexible tasks claim slots (earlier claims get earlier times).
+    /// 1. Tasks due within the next few days, nearest deadline first.
+    /// 2. Higher priority.
+    /// 3. Longer tasks, so big blocks get the uninterrupted morning time.
+    static func placementOrder(
+        _ a: TaskItem,
+        _ b: TaskItem,
+        planningDay: Date,
+        calendar: Calendar = .current
+    ) -> Bool {
+        let urgentHorizon = calendar.date(byAdding: .day, value: 3, to: planningDay) ?? planningDay
+        let aDue = a.deadline.flatMap { $0 <= urgentHorizon ? $0 : nil }
+        let bDue = b.deadline.flatMap { $0 <= urgentHorizon ? $0 : nil }
+
+        switch (aDue, bDue) {
+        case let (x?, y?) where x != y: return x < y
+        case (.some, nil): return true
+        case (nil, .some): return false
+        default: break
+        }
+        if a.priority != b.priority {
+            return a.priority.sortRank < b.priority.sortRank
+        }
+        return a.estimatedMinutes > b.estimatedMinutes
     }
 }

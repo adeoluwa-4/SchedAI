@@ -17,6 +17,8 @@ struct TaskEditView: View {
     @State private var scheduledStart: Date
     @State private var scheduledEnd: Date
     @State private var slotMessage: String?
+    @State private var hasDeadline: Bool
+    @State private var deadline: Date
 
     private var scheduleDraft: TaskItem {
         var draft = item
@@ -27,6 +29,7 @@ struct TaskEditView: View {
         draft.isInbox = isInbox
         draft.scheduledStart = hasScheduledTime ? scheduledStart : nil
         draft.scheduledEnd = hasScheduledTime ? scheduledEnd : nil
+        draft.deadline = hasDeadline ? deadline : nil
         return draft
     }
 
@@ -41,6 +44,10 @@ struct TaskEditView: View {
         _isCompleted = State(initialValue: task.isCompleted)
         _isInbox = State(initialValue: task.isInbox)
         _hasScheduledTime = State(initialValue: task.scheduledStart != nil)
+        _hasDeadline = State(initialValue: task.deadline != nil)
+        _deadline = State(initialValue: task.deadline
+            ?? Calendar.current.date(bySettingHour: 17, minute: 0, second: 0, of: Date())
+            ?? Date())
         let start = task.scheduledStart ?? originalTargetDay ?? Date()
         _scheduledStart = State(initialValue: start)
         _scheduledEnd = State(
@@ -159,6 +166,17 @@ struct TaskEditView: View {
                     }
                 }
 
+                Section {
+                    Toggle("Has a due date", isOn: $hasDeadline.animation())
+                    if hasDeadline {
+                        DatePicker("Due", selection: $deadline, displayedComponents: [.date, .hourAndMinute])
+                    }
+                } header: {
+                    Text("Deadline")
+                } footer: {
+                    Text("Tasks due soon are planned first and finished before their due time when possible.")
+                }
+
                 Section("What this means") {
                     ForEach(Array(app.scheduleWarnings(for: [scheduleDraft]).enumerated()), id: \.offset) { _, warning in
                         Label(warning, systemImage: "exclamationmark.triangle")
@@ -220,6 +238,7 @@ struct TaskEditView: View {
         var updated = item
         updated.title = trimmed
         updated.priority = priority
+        updated.deadline = hasDeadline ? deadline : nil
         updated.isCompleted = isCompleted
         updated.planState = isCompleted ? .ready : planState
         updated.planStateUpdatedAt = updated.planState == .ready

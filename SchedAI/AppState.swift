@@ -56,9 +56,15 @@ final class AppState: ObservableObject {
         let scheduledEnd: Date?
     }
 
+    /// Every mutation schedules one debounced save. Loops that touch many tasks
+    /// (planning, rollover, cleanup) therefore cost a single disk write and a
+    /// single widget reload instead of one per element.
     @Published var tasks: [TaskItem] = [] {
-        didSet { persist() }
+        didSet { schedulePersist() }
     }
+
+    private var pendingPersist: Task<Void, Never>?
+    private let persistDebounce: Duration = .milliseconds(300)
 
     @Published var lastPlanOverflow: Int = 0
 
@@ -215,6 +221,11 @@ final class AppState: ObservableObject {
         validateWorkWindow()
 
         _ = restore()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-SchedAIDemoData") {
+            tasks = Self.demoTasks(now: Date())
+        }
+        #endif
         pruneExpiredCompletedTasks(now: Date())
         scheduleCompletedTaskCleanup()
         persistWidgetData()
@@ -234,7 +245,17 @@ final class AppState: ObservableObject {
             name: UIApplication.willEnterForegroundNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appWillResignActive),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
         #endif
+    }
+
+    @objc private func appWillResignActive() {
+        flushPendingSave()
     }
 
     // MARK: - Work Window Validation
@@ -496,6 +517,8 @@ final class AppState: ObservableObject {
         NotificationManager.clearAll(delivered: true, pending: true)
 
         tasks = []
+        pendingPersist?.cancel()
+        pendingPersist = nil
         removePersistedTaskFiles()
         clearWidgetData()
 
@@ -626,28 +649,17 @@ final class AppState: ObservableObject {
         let externalBusy = CalendarManager.shared.busyIntervals(on: planningDate) ?? []
         let window = schedulingWindow(for: planningDate)
 
-        var tempPinned: [UUID] = []
-        for i in tasks.indices where tasks[i].canAutoSchedule(on: planningDate) {
-            if !tasks[i].isPinned, tasks[i].scheduledStart != nil {
-                tasks[i].isPinned = true
-                tempPinned.append(tasks[i].id)
-            }
-        }
-
+        var updated = tasks
         lastPlanOverflow = Scheduler.planToday(
-            tasks: &tasks,
+            tasks: &updated,
             workStart: window.start,
             workEnd: window.end,
             day: planningDate,
             now: Date(),
-            externalBusyIntervals: externalBusy
+            externalBusyIntervals: externalBusy,
+            keepExistingSchedules: true
         )
-
-        for id in tempPinned {
-            if let idx = tasks.firstIndex(where: { $0.id == id }) {
-                tasks[idx].isPinned = false
-            }
-        }
+        tasks = updated
 
         if remindersEnabled {
             rescheduleReminders()
@@ -941,7 +953,26 @@ final class AppState: ObservableObject {
         return options
     }
 
+    private func schedulePersist() {
+        pendingPersist?.cancel()
+        pendingPersist = Task { @MainActor [weak self, persistDebounce] in
+            try? await Task.sleep(for: persistDebounce)
+            guard !Task.isCancelled else { return }
+            self?.persist()
+        }
+    }
+
+    /// Writes any pending change immediately. Called when the app leaves the
+    /// foreground so a debounced save is never lost.
+    func flushPendingSave() {
+        guard pendingPersist != nil else { return }
+        pendingPersist?.cancel()
+        pendingPersist = nil
+        persist()
+    }
+
     private func persist() {
+        pendingPersist = nil
         do {
             let data = try JSONEncoder().encode(tasks)
             try data.write(to: writableSaveURL(), options: protectedWriteOptions)
@@ -1220,4 +1251,39 @@ final class AppState: ObservableObject {
             UserDefaults.standard.removeObject(forKey: key)
         }
     }
+
+    #if DEBUG
+    /// Realistic sample day for screenshots and manual testing.
+    /// Launch with `-SchedAIDemoData` (Debug builds only).
+    static func demoTasks(now: Date) -> [TaskItem] {
+        let cal = Calendar.current
+        let day = cal.startOfDay(for: now)
+        func at(_ minutesFromNow: Int) -> Date {
+            let rounded = cal.date(bySetting: .second, value: 0, of: now) ?? now
+            let base = cal.date(byAdding: .minute, value: -(cal.component(.minute, from: rounded) % 15), to: rounded) ?? rounded
+            return cal.date(byAdding: .minute, value: minutesFromNow, to: base) ?? base
+        }
+        func timed(_ title: String, _ offset: Int, _ minutes: Int, _ priority: TaskPriority = .medium,
+                   done: Bool = false, pinned: Bool = false, deadline: Date? = nil) -> TaskItem {
+            let start = at(offset)
+            return TaskItem(title: title, estimatedMinutes: minutes, priority: priority,
+                            isCompleted: done, completedAt: done ? now : nil, isPinned: pinned,
+                            targetDay: day, scheduledStart: start,
+                            scheduledEnd: cal.date(byAdding: .minute, value: minutes, to: start),
+                            deadline: deadline)
+        }
+        return [
+            timed("Morning run", -150, 30, .low, done: true),
+            timed("Reply to recruiter emails", -105, 30, done: true),
+            timed("Finish stats homework", -30, 60, .high, deadline: at(120)),
+            timed("Team standup", 45, 15, pinned: true),
+            timed("Prep pitch deck notes", 120, 45, .high),
+            timed("Gym", 300, 60, .low, pinned: true),
+            TaskItem(title: "Call Dad", estimatedMinutes: 20, priority: .medium, targetDay: day),
+            TaskItem(title: "Grocery run", estimatedMinutes: 40, priority: .low, targetDay: day),
+            TaskItem(title: "Scholarship form", estimatedMinutes: 30, priority: .medium, targetDay: day,
+                     deadline: cal.date(byAdding: .day, value: 1, to: day.addingTimeInterval(17 * 3600)))
+        ]
+    }
+    #endif
 }

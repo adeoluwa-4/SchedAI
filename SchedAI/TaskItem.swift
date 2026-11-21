@@ -161,6 +161,10 @@ struct TaskItem: Identifiable, Codable, Hashable {
     var preferredStart: Date? = nil
     var preferredEnd: Date? = nil
 
+    /// Optional hard due date. The scheduler places tasks with the nearest
+    /// deadline first and tries to finish them before it.
+    var deadline: Date? = nil
+
     func isMissed(now: Date = Date()) -> Bool {
         guard !isCompleted, let end = scheduledEnd else { return false }
         return end < now
@@ -253,7 +257,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         scheduledStart: Date? = nil,
         scheduledEnd: Date? = nil,
         preferredStart: Date? = nil,
-        preferredEnd: Date? = nil
+        preferredEnd: Date? = nil,
+        deadline: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -271,6 +276,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.scheduledEnd = scheduledEnd
         self.preferredStart = preferredStart
         self.preferredEnd = preferredEnd
+        self.deadline = deadline
     }
 
     // MARK: - Codable
@@ -292,6 +298,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case scheduledEnd
         case preferredStart
         case preferredEnd
+        case deadline
     }
 
     init(from decoder: Decoder) throws {
@@ -312,6 +319,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.scheduledEnd = try container.decodeIfPresent(Date.self, forKey: .scheduledEnd)
         self.preferredStart = try container.decodeIfPresent(Date.self, forKey: .preferredStart)
         self.preferredEnd = try container.decodeIfPresent(Date.self, forKey: .preferredEnd)
+        self.deadline = try container.decodeIfPresent(Date.self, forKey: .deadline)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -332,5 +340,6 @@ struct TaskItem: Identifiable, Codable, Hashable {
         try container.encodeIfPresent(scheduledEnd, forKey: .scheduledEnd)
         try container.encodeIfPresent(preferredStart, forKey: .preferredStart)
         try container.encodeIfPresent(preferredEnd, forKey: .preferredEnd)
+        try container.encodeIfPresent(deadline, forKey: .deadline)
     }
 }
