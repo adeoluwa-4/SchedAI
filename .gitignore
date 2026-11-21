@@ -23,3 +23,7 @@ api/
 package.json
 package-lock.json
 node_modules/
+
+# Per-user Xcode state (breakpoints, scheme order). Never shared.
+xcuserdata/
+*.xcuserstate
