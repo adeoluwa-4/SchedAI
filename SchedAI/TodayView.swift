@@ -3,152 +3,131 @@ import SwiftUI
 import UIKit
 #endif
 
-/// Modern, polished "Today" screen with glassmorphic cards and smooth animations
+/// The Today screen: one clear timeline for the day.
+///
+/// Layout, top to bottom:
+/// 1. Date, title and one summary line (tasks · planned time · done).
+/// 2. A single focus card: what you should be doing now, or what's next.
+/// 3. The timeline: every task once, with free gaps shown between them.
+/// 4. Tasks that are not placed yet, with one button to fit them in.
 struct TodayView: View {
     @EnvironmentObject private var app: AppState
-    @Environment(\.colorScheme) private var scheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     @State private var showAI = false
     @State private var showQuickAdd = false
     @State private var quickAddNavigationTitle = "Quick Add"
     @State private var autoStartOfflineNLPFromWidget = false
-    @State private var showOverflowBanner = false
-    @State private var overflowHideWorkItem: DispatchWorkItem? = nil
     @State private var showCalendar = false
     @State private var showWorkWindowPicker = false
     @State private var planMessage: String? = nil
     @State private var planMessageHideWorkItem: DispatchWorkItem? = nil
     @State private var taskPendingSkip: TaskItem? = nil
+    @State private var editingTask: TaskItem? = nil
 
-    private var planningDay: Date {
-        Calendar.current.startOfDay(for: app.planningDate)
+    // MARK: - Derived data
+
+    private let cal = Calendar.current
+
+    private var planningDay: Date { cal.startOfDay(for: app.planningDate) }
+
+    private var isPlanningToday: Bool { cal.isDate(planningDay, inSameDayAs: Date()) }
+
+    private func appliesToPlanningDay(_ task: TaskItem) -> Bool {
+        if let start = task.scheduledStart { return cal.isDate(start, inSameDayAs: planningDay) }
+        if let target = task.targetDay { return cal.isDate(target, inSameDayAs: planningDay) }
+        return true
     }
 
-    private var activeTaskCount: Int {
-        activeTasksForPlanningDay.count
+    /// Open tasks the scheduler may place on this day.
+    private var activeTasks: [TaskItem] {
+        app.tasks.filter { !$0.isCompleted && appliesToPlanningDay($0) && $0.canAutoSchedule(on: planningDay) }
     }
 
-    private var openTasksForPlanningDay: [TaskItem] {
+    private var completedTasks: [TaskItem] {
+        app.tasks.filter { $0.isCompleted && appliesToPlanningDay($0) }
+    }
+
+    /// Everything with a time today, open or done, in time order. Shown once.
+    private var timeline: [TaskItem] {
         app.tasks
-            .filter { !$0.isCompleted }
-            .filter { taskAppliesToPlanningDay($0) }
-    }
-
-    private var activeTasksForPlanningDay: [TaskItem] {
-        openTasksForPlanningDay.filter { $0.canAutoSchedule(on: planningDay) }
-    }
-
-    private var completedTasksForPlanningDay: [TaskItem] {
-        app.tasks
-            .filter { $0.isCompleted }
-            .filter { taskAppliesToPlanningDay($0) }
-    }
-
-    private var isPlanningToday: Bool {
-        Calendar.current.isDate(planningDay, inSameDayAs: Date())
-    }
-
-    private var scheduledToday: [TaskItem] {
-        let cal = Calendar.current
-        return app.tasks
-            .filter { $0.canAutoSchedule(on: planningDay) }
-            .filter { t in
-                guard let s = t.scheduledStart, t.scheduledEnd != nil else { return false }
-                return cal.isDate(s, inSameDayAs: planningDay)
+            .filter { task in
+                guard let start = task.scheduledStart, task.scheduledEnd != nil,
+                      cal.isDate(start, inSameDayAs: planningDay) else { return false }
+                return task.isCompleted || task.canAutoSchedule(on: planningDay)
             }
             .sorted { ($0.scheduledStart ?? .distantPast) < ($1.scheduledStart ?? .distantPast) }
     }
 
+    private var openTimeline: [TaskItem] { timeline.filter { !$0.isCompleted } }
+
+    private var unplacedTasks: [TaskItem] {
+        activeTasks
+            .filter { $0.scheduledStart == nil }
+            .sorted { Scheduler.placementOrder($0, $1, planningDay: planningDay) }
+    }
+
     private var missedPreviousTasks: [TaskItem] {
         guard isPlanningToday else { return [] }
-        let cal = Calendar.current
         return app.tasks
             .filter { $0.canAutoSchedule(on: planningDay) }
             .filter { task in
                 guard let end = task.scheduledEnd else { return false }
-                return end < planningDay && !cal.isDate(end, inSameDayAs: planningDay)
+                return end < planningDay
             }
             .sorted { ($0.scheduledEnd ?? .distantPast) < ($1.scheduledEnd ?? .distantPast) }
     }
 
-    private var workWindowBounds: (start: Date, end: Date) {
-        app.schedulingWindow(for: planningDay)
-    }
-
-    private var usesAccessibilityLayout: Bool {
-        dynamicTypeSize.isAccessibilitySize
-    }
-
-    private var scheduledInWorkWindow: [TaskItem] {
-        guard app.workWindowEnabled else { return scheduledToday }
-        let bounds = workWindowBounds
-        return scheduledToday.filter { t in
-            guard let s = t.scheduledStart else { return false }
-            return s >= bounds.start && s < bounds.end
+    private var plannedMinutes: Int {
+        openTimeline.reduce(0) { total, task in
+            guard let s = task.scheduledStart, let e = task.scheduledEnd else { return total }
+            return total + Int(e.timeIntervalSince(s) / 60)
         }
     }
 
-    private var scheduledOutsideWorkWindow: [TaskItem] {
-        guard app.workWindowEnabled else { return [] }
-        let bounds = workWindowBounds
-        return scheduledToday.filter { t in
-            guard let s = t.scheduledStart else { return false }
-            return s < bounds.start || s >= bounds.end
+    private var currentTask: TaskItem? {
+        guard isPlanningToday else { return nil }
+        let now = Date()
+        return openTimeline.first { task in
+            guard let s = task.scheduledStart, let e = task.scheduledEnd else { return false }
+            return s <= now && now < e
         }
     }
 
-    private var primarySchedule: [TaskItem] {
-        guard app.workWindowEnabled else { return scheduledToday }
-        return scheduledInWorkWindow.isEmpty ? scheduledToday : scheduledInWorkWindow
+    private var nextTask: TaskItem? {
+        let reference = isPlanningToday ? Date() : planningDay
+        return openTimeline.first { ($0.scheduledStart ?? .distantPast) > reference }
     }
+
+    private var workWindowEnd: Date? {
+        app.workWindowEnabled ? app.schedulingWindow(for: planningDay).end : nil
+    }
+
+    // MARK: - Body
 
     var body: some View {
-        ZStack {
-            // Modern gradient background
-            LinearGradient(
-                colors: scheme == .dark
-                    ? [Color.black, Color(white: 0.05)]
-                    : [Color(red: 0.96, green: 0.97, blue: 0.98), Color.white],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .ignoresSafeArea()
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                header
 
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 20) {
-                    
-                    // MARK: - Header
-                    headerSection
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-
-                    // MARK: - Main Content
-                    if scheduledToday.isEmpty && missedPreviousTasks.isEmpty {
-                        emptyStateView
-                            .padding(.horizontal, 20)
-                            .padding(.top, 20)
-                    } else {
-                        timelineContent
-                            .padding(.horizontal, 20)
-                    }
-
-                    // MARK: - Overflow Banner
-                    if showOverflowBanner && app.lastPlanOverflow > 0 {
-                        overflowBannerView
-                            .padding(.horizontal, 20)
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-
-                    // MARK: - Action Buttons
-                    actionButtons
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-
-                    Spacer(minLength: 132)
+                if !missedPreviousTasks.isEmpty {
+                    needsReviewSection
                 }
-                .padding(.top, 8)
+
+                if timeline.isEmpty && unplacedTasks.isEmpty {
+                    emptyState
+                } else {
+                    focusCard
+                    if !timeline.isEmpty { timelineSection }
+                    if !unplacedTasks.isEmpty { unplacedSection }
+                }
+
+                Spacer(minLength: 120)
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
         }
+        .background(Color(uiColor: .systemGroupedBackground).ignoresSafeArea())
         .sheet(isPresented: $showAI) {
             AIPlanSheet(autoStartRecording: autoStartOfflineNLPFromWidget)
                 .environmentObject(app)
@@ -164,9 +143,14 @@ struct TodayView: View {
             WorkWindowPicker(start: $app.workStart, end: $app.workEnd)
                 .presentationDetents([.medium])
         }
+        .sheet(item: $editingTask) { task in
+            TaskEditView(task: task).environmentObject(app)
+        }
         .onAppear {
-            updateOverflowBanner()
             handleWidgetVoiceRequestIfNeeded()
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-SchedAIOpenPlan") { showAI = true }
+            #endif
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
@@ -174,14 +158,11 @@ struct TodayView: View {
         }
         #endif
         .onChange(of: showAI) { _, newValue in
-            if !newValue {
-                autoStartOfflineNLPFromWidget = false
-            }
+            if !newValue { autoStartOfflineNLPFromWidget = false }
         }
         .onReceive(NotificationCenter.default.publisher(for: AppNotifications.widgetVoicePlannerRequested)) { _ in
-            openOfflineNLPSheet(autoStartRecording: true)
+            openPlanSheet(autoStartRecording: true)
         }
-        .onChange(of: app.lastPlanOverflow) { _, _ in updateOverflowBanner() }
         .alert("Calendar", isPresented: Binding(
             get: { app.calendarSyncMessage != nil },
             set: { if !$0 { app.calendarSyncMessage = nil } }
@@ -196,9 +177,7 @@ struct TodayView: View {
         )) {
             Button("Skip Today", role: .destructive) {
                 guard let task = taskPendingSkip else { return }
-                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                    app.skipTaskForToday(id: task.id, from: planningDay)
-                }
+                withAnimation(.snappy) { app.skipTaskForToday(id: task.id, from: planningDay) }
                 taskPendingSkip = nil
             }
             Button("Cancel", role: .cancel) {}
@@ -207,12 +186,318 @@ struct TodayView: View {
         }
         .overlay(alignment: .bottom) {
             if let planMessage {
-                planToast(planMessage)
+                toast(planMessage)
                     .padding(.bottom, 106)
-                    .padding(.horizontal, 20)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(planningDay.formatted(.dateTime.weekday(.wide).month(.wide).day()).uppercased())
+                .font(.footnote.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .tracking(0.6)
+
+            HStack(alignment: .center, spacing: 10) {
+                Text(isPlanningToday ? "Today" : planningDay.formatted(.dateTime.weekday(.wide)))
+                    .font(.system(.largeTitle, design: .rounded).weight(.bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+
+                Spacer(minLength: 8)
+
+                iconButton("calendar", label: "Open calendar") { showCalendar = true }
+                moreMenu
+                Button {
+                    Haptics.medium()
+                    openPlanSheet(autoStartRecording: false)
+                } label: {
+                    Label("Plan", systemImage: "plus")
+                        .font(.subheadline.weight(.semibold))
+                        .padding(.horizontal, 14)
+                        .frame(height: 40)
+                        .foregroundStyle(.white)
+                        .background(Capsule().fill(Color.accentColor))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Plan tasks")
+            }
+
+            if let summary = summaryLine {
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                ProgressView(value: progress)
+                    .tint(.green)
+                    .animation(.snappy, value: progress)
+            }
+        }
+    }
+
+    private var summaryLine: String? {
+        let open = activeTasks.count
+        let done = completedTasks.count
+        guard open + done > 0 else { return nil }
+        var parts = ["\(open) to do"]
+        if plannedMinutes > 0 { parts.append("\(Self.duration(plannedMinutes)) planned") }
+        parts.append("\(done) done")
+        return parts.joined(separator: " · ")
+    }
+
+    private var progress: Double {
+        let done = completedTasks.count
+        let total = done + activeTasks.count
+        return total == 0 ? 0 : Double(done) / Double(total)
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Button { replanDay() } label: { Label("Re-plan whole day", systemImage: "arrow.triangle.2.circlepath") }
+                .disabled(activeTasks.isEmpty)
+            Button { openQuickAdd(title: "Quick Add") } label: { Label("Quick add", systemImage: "plus") }
+            Button { showWorkWindowPicker = true } label: { Label("Work hours", systemImage: "clock") }
+        } label: {
+            circleIcon("ellipsis")
+        }
+        .accessibilityLabel("More")
+    }
+
+    private func iconButton(_ name: String, label: String, action: @escaping () -> Void) -> some View {
+        Button {
+            Haptics.light()
+            action()
+        } label: {
+            circleIcon(name)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+    }
+
+    private func circleIcon(_ name: String) -> some View {
+        Image(systemName: name)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(.primary)
+            .frame(width: 40, height: 40)
+            .background(Circle().fill(Color(uiColor: .secondarySystemGroupedBackground)))
+    }
+
+    // MARK: - Focus card (Now / Next)
+
+    @ViewBuilder
+    private var focusCard: some View {
+        if let task = currentTask {
+            FocusCard(
+                eyebrow: "NOW · \(Self.minutesLeft(until: task.scheduledEnd))",
+                title: task.title,
+                detail: Self.timeRange(task),
+                actionTitle: "Done",
+                action: { complete(task) }
+            )
+        } else if let task = nextTask {
+            FocusCard(
+                eyebrow: isPlanningToday ? "UP NEXT · \(Self.startsIn(task.scheduledStart))" : "FIRST UP",
+                title: task.title,
+                detail: Self.timeRange(task),
+                actionTitle: nil,
+                action: nil
+            )
+        } else if !openTimeline.isEmpty || !unplacedTasks.isEmpty {
+            FocusCard(
+                eyebrow: "NOTHING SCHEDULED RIGHT NOW",
+                title: unplacedTasks.isEmpty ? "You're clear for now" : "\(unplacedTasks.count) task\(unplacedTasks.count == 1 ? "" : "s") still need a time",
+                detail: unplacedTasks.isEmpty ? "Enjoy the gap." : "Tap below to fit them into your day.",
+                actionTitle: nil,
+                action: nil
+            )
+        } else {
+            FocusCard(
+                eyebrow: "ALL DONE",
+                title: "Everything for today is finished",
+                detail: "\(completedTasks.count) task\(completedTasks.count == 1 ? "" : "s") completed.",
+                actionTitle: nil,
+                action: nil
+            )
+        }
+    }
+
+    // MARK: - Timeline
+
+    private enum TimelineEntry: Identifiable {
+        case task(TaskItem)
+        case gap(start: Date, minutes: Int)
+        case afterHours
+
+        var id: String {
+            switch self {
+            case .task(let t): return t.id.uuidString
+            case .gap(let start, _): return "gap-\(start.timeIntervalSince1970)"
+            case .afterHours: return "after-hours"
+            }
+        }
+    }
+
+    /// Tasks in order, with free gaps of 30+ minutes and an "after work hours"
+    /// marker inserted between them.
+    private var timelineEntries: [TimelineEntry] {
+        var entries: [TimelineEntry] = []
+        var previousEnd: Date?
+        var insertedAfterHours = false
+        for task in timeline {
+            guard let start = task.scheduledStart else { continue }
+            if let end = workWindowEnd, !insertedAfterHours, start >= end, !entries.isEmpty {
+                entries.append(.afterHours)
+                insertedAfterHours = true
+            } else if let previousEnd, !task.isCompleted {
+                let gap = Int(start.timeIntervalSince(previousEnd) / 60)
+                if gap >= 30 { entries.append(.gap(start: previousEnd, minutes: gap)) }
+            }
+            entries.append(.task(task))
+            if let end = task.scheduledEnd { previousEnd = max(previousEnd ?? end, end) }
+        }
+        return entries
+    }
+
+    private var timelineSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Schedule")
+            VStack(spacing: 0) {
+                ForEach(timelineEntries) { entry in
+                    switch entry {
+                    case .task(let task):
+                        TimelineTaskRow(
+                            task: task,
+                            isNow: task.id == currentTask?.id,
+                            onToggle: { complete(task) },
+                            onOpen: { editingTask = task }
+                        )
+                        .contextMenu { rowMenu(for: task) }
+                    case .gap(let start, let minutes):
+                        TimelineGapRow(start: start, minutes: minutes)
+                    case .afterHours:
+                        TimelineDividerRow(title: "After work hours")
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func rowMenu(for task: TaskItem) -> some View {
+        Button { complete(task) } label: {
+            Label(task.isCompleted ? "Mark not done" : "Mark done", systemImage: "checkmark.circle")
+        }
+        if !task.isCompleted {
+            Button { withAnimation(.snappy) { app.rescheduleTaskForLater(id: task.id, from: planningDay) } } label: {
+                Label("Move later today", systemImage: "arrow.clockwise")
+            }
+            Button { taskPendingSkip = task } label: {
+                Label("Skip today", systemImage: "forward.end")
+            }
+        }
+        Button { editingTask = task } label: { Label("Edit", systemImage: "pencil") }
+    }
+
+    // MARK: - Unplaced
+
+    private var unplacedSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Not placed yet")
+            VStack(spacing: 0) {
+                ForEach(Array(unplacedTasks.enumerated()), id: \.element.id) { index, task in
+                    UnplacedRow(task: task, onOpen: { editingTask = task })
+                    if index < unplacedTasks.count - 1 {
+                        Divider().padding(.leading, 16)
+                    }
+                }
+            }
+            .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+
+            Button { fitUnplaced() } label: {
+                Label("Fit into my day", systemImage: "wand.and.stars")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: 14))
+        }
+    }
+
+    // MARK: - Needs review
+
+    private var needsReviewSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("From earlier · needs a decision")
+            ForEach(missedPreviousTasks) { task in
+                MissedTaskCard(
+                    task: task,
+                    onDone: { complete(task) },
+                    onReschedule: { withAnimation(.snappy) { app.rescheduleTaskForLater(id: task.id, from: planningDay) } },
+                    onSkip: { taskPendingSkip = task }
+                )
+            }
+        }
+    }
+
+    // MARK: - Empty state
+
+    private var emptyState: some View {
+        VStack(spacing: 18) {
+            Image(systemName: "text.badge.plus")
+                .font(.system(size: 40, weight: .semibold))
+                .foregroundStyle(Color.accentColor)
+                .padding(.top, 8)
+            VStack(spacing: 6) {
+                Text("What's on your plate?")
+                    .font(.title2.weight(.bold))
+                Text("Type or say everything at once. SchedAI turns it into a timed plan, privately on your iPhone.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            Button {
+                Haptics.medium()
+                openPlanSheet(autoStartRecording: false)
+            } label: {
+                Label("Plan my day", systemImage: "sparkles")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 50)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.roundedRectangle(radius: 14))
+            Button("Speak instead") {
+                Haptics.medium()
+                openPlanSheet(autoStartRecording: true)
+            }
+            .font(.subheadline.weight(.semibold))
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+    }
+
+    // MARK: - Pieces
+
+    private func sectionTitle(_ text: String) -> some View {
+        Text(text)
+            .font(.title3.weight(.bold))
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private func toast(_ message: String) -> some View {
+        Text(message)
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Capsule().fill(.regularMaterial))
+            .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
     }
 
     private var skipTaskMessage: String {
@@ -223,925 +508,288 @@ struct TodayView: View {
         return "This removes \"\(title)\" from today's plan, but keeps the task."
     }
 
-    // MARK: - Header Section
-    
-    private var headerSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top) {
-                    titleBlock
+    // MARK: - Actions
 
-                    Spacer()
-
-                    headerActions
-                }
-
-                VStack(alignment: .leading, spacing: 14) {
-                    titleBlock
-                    headerActions
-                }
-            }
-
-            // Stats Cards
-            HStack(spacing: 12) {
-                StatsCard(
-                    icon: "calendar.badge.clock",
-                    value: "\(scheduledToday.count)",
-                    label: "Scheduled",
-                    color: .blue
-                )
-                
-                StatsCard(
-                    icon: "list.bullet",
-                    value: "\(activeTaskCount)",
-                    label: "Remaining",
-                    color: .orange
-                )
-                
-                StatsCard(
-                    icon: "checkmark.circle.fill",
-                    value: "\(completedTasksForPlanningDay.count)",
-                    label: "Done",
-                    color: .green
-                )
-            }
-
-            // Progress Bar
-            let totalRemaining = activeTaskCount
-            let completedCount = completedTasksForPlanningDay.count
-            let denom = max(1, totalRemaining + completedCount)
-            let progress = Double(completedCount) / Double(denom)
-            
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    Text("Daily Progress")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.blue)
-                }
-                
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.secondary.opacity(0.15))
-                        
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(
-                                LinearGradient(
-                                    colors: [.blue, .cyan],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: geo.size.width * progress)
-                            .animation(.spring(response: 0.6, dampingFraction: 0.8), value: progress)
-                    }
-                }
-                .frame(height: 8)
-            }
-            .padding(.top, 4)
-        }
+    private func complete(_ task: TaskItem) {
+        Haptics.light()
+        withAnimation(.snappy) { app.toggleComplete(id: task.id) }
     }
 
-    private var titleBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(isPlanningToday ? "Today" : "Planner")
-                .font(.system(.largeTitle, design: .rounded).weight(.bold))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(formattedDate())
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundStyle(.secondary)
-        }
+    private func fitUnplaced() {
+        Haptics.medium()
+        withAnimation(.snappy) { app.planUnscheduledOnly(for: planningDay) }
+        reportPlanResult(success: "Added to your schedule.")
     }
 
-    private var headerActions: some View {
-        HStack(spacing: 12) {
-            ModernIconButton(icon: "calendar", accessibilityLabel: "Open calendar") {
-                Haptics.medium()
-                showCalendar.toggle()
-            }
-
-            ModernPrimaryButton(title: "Plan", icon: "sparkles", action: {
-                Haptics.medium()
-                openOfflineNLPSheet(autoStartRecording: false)
-            })
-        }
+    private func replanDay() {
+        guard !activeTasks.isEmpty else { return }
+        Haptics.medium()
+        withAnimation(.snappy) { app.planToday(for: planningDay) }
+        reportPlanResult(success: isPlanningToday ? "Today has been re-planned." : "Plan updated.")
     }
 
-    // MARK: - Empty State
-    
-    private var emptyStateView: some View {
-        VStack(spacing: 24) {
-            if activeTaskCount == 0 {
-                ModernCard {
-                    VStack(spacing: 20) {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [.blue.opacity(0.2), .cyan.opacity(0.2)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 80, height: 80)
-                            
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 36, weight: .semibold))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.blue, .cyan],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        }
-                        
-                        VStack(spacing: 8) {
-                            Text(openTasksForPlanningDay.isEmpty ? "Start Your Day" : "Nothing Ready")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                            
-                            Text(openTasksForPlanningDay.isEmpty ? "Add your first tasks and let AI schedule them perfectly" : "Blocked or skipped tasks are waiting in Tasks")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        
-                        HStack(spacing: 12) {
-                            Button {
-                                Haptics.medium()
-                                openOfflineNLPSheet(autoStartRecording: true)
-                            } label: {
-                                Label("Plan my Day", systemImage: "mic.fill")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(ModernPrimaryButtonStyle())
-                            
-                            Button {
-                                Haptics.medium()
-                                openQuickAddSheet(title: "Quick Add")
-                            } label: {
-                                Label("Quick Add", systemImage: "plus")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(ModernSecondaryButtonStyle())
-                        }
-                    }
-                    .padding(28)
-                }
-            } else {
-                ModernCard {
-                    VStack(spacing: 20) {
-                        ZStack {
-                            Circle()
-                                .fill(
-                                    LinearGradient(
-                                        colors: [.orange.opacity(0.2), .yellow.opacity(0.2)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .frame(width: 80, height: 80)
-                            
-                            Image(systemName: "calendar.badge.clock")
-                                .font(.system(size: 36, weight: .semibold))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.orange, .yellow],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                        }
-                        
-                        VStack(spacing: 8) {
-                            Text("\(activeTaskCount) Tasks Ready")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                            
-                            Text(app.workWindowEnabled ? "Schedule them into your work window" : "Schedule them into your day")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        
-                        HStack(spacing: 12) {
-                            Button {
-                                Haptics.medium()
-                                planCurrentDay()
-                            } label: {
-                                Label("Auto-Schedule", systemImage: "wand.and.stars")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(ModernPrimaryButtonStyle())
-                            
-                            Button {
-                                Haptics.medium()
-                                openQuickAddSheet(title: "Add More")
-                            } label: {
-                                Label("Add More", systemImage: "plus")
-                                    .font(.subheadline)
-                                    .fontWeight(.semibold)
-                                    .frame(maxWidth: .infinity)
-                            }
-                            .buttonStyle(ModernSecondaryButtonStyle())
-                        }
-                    }
-                    .padding(28)
-                }
-            }
-        }
-    }
-    
-    // MARK: - Timeline Content
-    
-    private var timelineContent: some View {
-        VStack(spacing: 16) {
-            if !missedPreviousTasks.isEmpty {
-                missedReviewSection
-            }
-
-            // Now/Next Cards
-            if let current = currentTask() {
-                NowTaskCard(task: current, onComplete: {
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        app.toggleComplete(id: current.id)
-                    }
-                })
-            } else if let nextStart = nextStartDate() {
-                FreeTimeCard(until: nextStart)
-            }
-            
-            let upcoming = nextTasks(limit: 3)
-            if !upcoming.isEmpty {
-                UpcomingTasksCard(tasks: upcoming)
-            }
-            
-            // Work Window Tasks
-            if !scheduledInWorkWindow.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Your Schedule")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    
-                    VStack(spacing: 12) {
-                        ForEach(scheduledInWorkWindow) { task in
-                            ModernTaskCard(task: task, onComplete: {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    app.toggleComplete(id: task.id)
-                                }
-                            }, onReschedule: {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    app.rescheduleTaskForLater(id: task.id, from: planningDay)
-                                }
-                            })
-                        }
-                    }
-                }
-            }
-            
-            // Outside Work Hours
-            if !scheduledOutsideWorkWindow.isEmpty {
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("After Hours")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    
-                    VStack(spacing: 12) {
-                        ForEach(scheduledOutsideWorkWindow) { task in
-                            ModernTaskCard(task: task, onComplete: {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    app.toggleComplete(id: task.id)
-                                }
-                            }, onReschedule: {
-                                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                    app.rescheduleTaskForLater(id: task.id, from: planningDay)
-                                }
-                            })
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private var missedReviewSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Needs Review")
-                .font(.headline)
-                .foregroundStyle(.secondary)
-
-            VStack(spacing: 12) {
-                ForEach(missedPreviousTasks) { task in
-                    MissedTaskCard(
-                        task: task,
-                        onDone: {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                app.toggleComplete(id: task.id)
-                            }
-                        },
-                        onReschedule: {
-                            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                                app.rescheduleTaskForLater(id: task.id, from: planningDay)
-                            }
-                        },
-                        onSkip: {
-                            taskPendingSkip = task
-                        }
-                    )
-                }
-            }
-        }
-    }
-    
-    // MARK: - Overflow Banner
-    
-    private var overflowBannerView: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
-            Text("\(app.lastPlanOverflow) task\(app.lastPlanOverflow == 1 ? "" : "s") didn't fit")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                )
-        )
-        .shadow(color: Color.orange.opacity(0.2), radius: 12, x: 0, y: 4)
-    }
-    
-    // MARK: - Action Buttons
-    
-    private var actionButtons: some View {
-        VStack(spacing: 12) {
-            if !scheduledToday.isEmpty {
-                Button {
-                    Haptics.medium()
-                    openQuickAddSheet()
-                } label: {
-                    Label("Add Tasks", systemImage: "plus.circle.fill")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(ModernSecondaryButtonStyle())
-            }
-            
-            if !scheduledToday.isEmpty && activeTaskCount > 0 {
-                Button {
-                    Haptics.medium()
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
-                        planCurrentDay()
-                    }
-                } label: {
-                    Label("Re-plan Day", systemImage: "arrow.clockwise")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(ModernSecondaryButtonStyle())
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func planToast(_ message: String) -> some View {
-        Text(message)
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.primary)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                    )
-            )
-    }
-    
-    // MARK: - Helpers
-
-    private func planCurrentDay() {
-        guard activeTaskCount > 0 else {
-            showPlanMessage("Add a task before planning.")
-            return
-        }
-
-        let hadScheduledTasks = !scheduledToday.isEmpty
-        app.planToday(for: planningDay)
-        updateOverflowBanner()
-
-        if app.lastPlanOverflow > 0 {
-            let suffix = app.lastPlanOverflow == 1 ? "" : "s"
-            showPlanMessage("\(app.lastPlanOverflow) task\(suffix) could not fit.")
-        } else {
-            showPlanMessage(hadScheduledTasks ? (isPlanningToday ? "Today has been replanned." : "Plan updated.") : (isPlanningToday ? "Today is planned." : "Plan created."))
-        }
-    }
-
-    private func showPlanMessage(_ message: String) {
-        planMessageHideWorkItem?.cancel()
-
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            planMessage = message
-        }
-
-        let work = DispatchWorkItem {
-            withAnimation(.easeOut(duration: 0.2)) {
-                planMessage = nil
-            }
-        }
-        planMessageHideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
-    }
-    
-    private func updateOverflowBanner() {
+    private func reportPlanResult(success: String) {
         let overflow = app.lastPlanOverflow
-        
-        overflowHideWorkItem?.cancel()
-        overflowHideWorkItem = nil
-        
-        guard overflow > 0 else {
-            withAnimation(.easeOut(duration: 0.2)) { showOverflowBanner = false }
-            return
+        if overflow > 0 {
+            showToast("\(overflow) task\(overflow == 1 ? "" : "s") didn't fit. Try shorter times or another day.")
+        } else {
+            showToast(success)
         }
-        
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-            showOverflowBanner = true
-        }
-        
-        let work = DispatchWorkItem {
-            withAnimation(.easeOut(duration: 0.25)) { showOverflowBanner = false }
-        }
-        overflowHideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 6, execute: work)
     }
 
-    private func openOfflineNLPSheet(autoStartRecording: Bool) {
+    private func showToast(_ message: String) {
+        planMessageHideWorkItem?.cancel()
+        withAnimation(.snappy) { planMessage = message }
+        let work = DispatchWorkItem { withAnimation(.easeOut(duration: 0.2)) { planMessage = nil } }
+        planMessageHideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.6, execute: work)
+    }
+
+    private func openPlanSheet(autoStartRecording: Bool) {
         autoStartOfflineNLPFromWidget = autoStartRecording
         showAI = true
     }
 
-    private func openQuickAddSheet(title: String = "Quick Add") {
+    private func openQuickAdd(title: String) {
         quickAddNavigationTitle = title
         showQuickAdd = true
     }
 
     private func handleWidgetVoiceRequestIfNeeded() {
         guard app.consumeWidgetVoiceRequest() else { return }
-        openOfflineNLPSheet(autoStartRecording: false)
-    }
-    
-    private func formattedDate() -> String {
-        let df = DateFormatter()
-        df.dateFormat = "EEEE, MMMM d"
-        return df.string(from: planningDay)
-    }
-    
-    private func currentTask() -> TaskItem? {
-        guard isPlanningToday else { return nil }
-        let now = Date()
-        return primarySchedule.first { task in
-            if let s = task.scheduledStart, let e = task.scheduledEnd {
-                return s <= now && now < e
-            }
-            return false
-        }
-    }
-    
-    private func nextTasks(limit: Int) -> [TaskItem] {
-        let reference = isPlanningToday ? Date() : planningDay
-        return Array(primarySchedule.filter { ($0.scheduledStart ?? .distantFuture) > reference }.prefix(limit))
-    }
-    
-    private func nextStartDate() -> Date? {
-        nextTasks(limit: 1).first?.scheduledStart
+        openPlanSheet(autoStartRecording: false)
     }
 
-    private func taskAppliesToPlanningDay(_ task: TaskItem) -> Bool {
-        let cal = Calendar.current
-        if let start = task.scheduledStart {
-            return cal.isDate(start, inSameDayAs: planningDay)
-        }
-        if let target = task.targetDay {
-            return cal.isDate(target, inSameDayAs: planningDay)
-        }
-        return true
+    // MARK: - Formatting
+
+    static func duration(_ minutes: Int) -> String {
+        let h = minutes / 60, m = minutes % 60
+        if h == 0 { return "\(m)m" }
+        return m == 0 ? "\(h)h" : "\(h)h \(m)m"
+    }
+
+    static func timeRange(_ task: TaskItem) -> String {
+        guard let s = task.scheduledStart, let e = task.scheduledEnd else { return "" }
+        return "\(s.formatted(date: .omitted, time: .shortened)) – \(e.formatted(date: .omitted, time: .shortened))"
+    }
+
+    static func minutesLeft(until end: Date?) -> String {
+        guard let end else { return "in progress" }
+        let minutes = max(1, Int(end.timeIntervalSinceNow / 60))
+        return "\(duration(minutes)) left"
+    }
+
+    static func startsIn(_ start: Date?) -> String {
+        guard let start else { return "" }
+        let minutes = Int(start.timeIntervalSinceNow / 60)
+        if minutes < 60 { return "in \(max(1, minutes)) min" }
+        return "at \(start.formatted(date: .omitted, time: .shortened))"
     }
 }
 
-// MARK: - Modern Components
+// MARK: - Components
 
-private struct ModernCard<Content: View>: View {
-    let content: Content
-    
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
-    }
-    
-    var body: some View {
-        content
-            .background(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 24, style: .continuous)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                    )
-            )
-            .shadow(color: Color.black.opacity(0.08), radius: 20, x: 0, y: 8)
-    }
-}
-
-private struct StatsCard: View {
-    let icon: String
-    let value: String
-    let label: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundStyle(color)
-            
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-            
-            Text(label)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 16)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color.white.opacity(0.15), lineWidth: 1)
-                )
-        )
-    }
-}
-
-private struct ModernIconButton: View {
-    let icon: String
-    let accessibilityLabel: String
-    let action: () -> Void
-    
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-                .background(
-                    Circle()
-                        .fill(.ultraThinMaterial)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.white.opacity(0.2), lineWidth: 1)
-                        )
-                )
-        }
-        .accessibilityLabel(accessibilityLabel)
-    }
-}
-
-private struct ModernPrimaryButton: View {
+private struct FocusCard: View {
+    let eyebrow: String
     let title: String
-    let icon: String
-    let action: () -> Void
-    
+    let detail: String
+    let actionTitle: String?
+    let action: (() -> Void)?
+
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
+        HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(eyebrow)
+                    .font(.caption.weight(.bold))
+                    .tracking(0.6)
+                    .foregroundStyle(.white.opacity(0.8))
                 Text(title)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                }
             }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .background(
-                LinearGradient(
-                    colors: [.blue, .cyan],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .clipShape(Capsule())
+            Spacer(minLength: 0)
+            if let actionTitle, let action {
+                Button(action: action) {
+                    Text(actionTitle)
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(Color.accentColor)
+                        .padding(.horizontal, 16)
+                        .frame(height: 38)
+                        .background(Capsule().fill(.white))
+                }
+                .buttonStyle(.plain)
+            }
         }
+        .padding(20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [Color.accentColor, Color.accentColor.opacity(0.78)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ))
+        )
+        .accessibilityElement(children: .combine)
     }
 }
 
-private struct ModernPrimaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.vertical, 14)
-            .background(
-                LinearGradient(
-                    colors: [.blue, .cyan],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-            )
-            .foregroundStyle(.white)
-            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
-    }
-}
+/// Time column, a rail with a dot, and the task card.
+private struct TimelineTaskRow: View {
+    let task: TaskItem
+    let isNow: Bool
+    let onToggle: () -> Void
+    let onOpen: () -> Void
 
-private struct ModernSecondaryButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.vertical, 14)
+    private var start: Date { task.scheduledStart ?? Date() }
+    private var minutes: Int {
+        guard let s = task.scheduledStart, let e = task.scheduledEnd else { return task.estimatedMinutes }
+        return Int(e.timeIntervalSince(s) / 60)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(start.formatted(date: .omitted, time: .shortened))
+                .font(.footnote.weight(.semibold).monospacedDigit())
+                .foregroundStyle(isNow ? Color.accentColor : .secondary)
+                .frame(width: 64, alignment: .trailing)
+                .padding(.top, 16)
+
+            VStack(spacing: 0) {
+                Circle()
+                    .fill(task.isCompleted ? Color.green : (isNow ? Color.accentColor : Color(uiColor: .tertiaryLabel)))
+                    .frame(width: 10, height: 10)
+                    .padding(.top, 20)
+                Rectangle()
+                    .fill(Color(uiColor: .separator))
+                    .frame(width: 2)
+            }
+            .frame(width: 10)
+
+            HStack(spacing: 12) {
+                Button(action: onToggle) {
+                    Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.title2)
+                        .foregroundStyle(task.isCompleted ? Color.green : Color(uiColor: .tertiaryLabel))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(task.isCompleted ? "Mark not done" : "Mark done")
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(task.title)
+                        .font(.body.weight(.semibold))
+                        .strikethrough(task.isCompleted)
+                        .foregroundStyle(task.isCompleted ? .secondary : .primary)
+                        .lineLimit(2)
+                    HStack(spacing: 8) {
+                        Text(TodayView.duration(minutes))
+                        if task.priority == .high && !task.isCompleted {
+                            Image(systemName: "flag.fill")
+                                .foregroundStyle(.red)
+                                .accessibilityLabel("Important")
+                        }
+                        if let due = task.deadline, !task.isCompleted {
+                            Label("Due \(due.formatted(date: .omitted, time: .shortened))", systemImage: "hourglass")
+                                .foregroundStyle(.orange)
+                        }
+                        if task.isMissed() {
+                            Text("Missed").foregroundStyle(.orange)
+                        }
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(.ultraThinMaterial)
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(isNow ? Color.accentColor : .clear, lineWidth: 2)
                     )
             )
-            .scaleEffect(configuration.isPressed ? 0.96 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
-    }
-}
-
-private struct NowTaskCard: View {
-    let task: TaskItem
-    let onComplete: () -> Void
-    
-    var body: some View {
-        ModernCard {
-            VStack(alignment: .leading, spacing: 16) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Now")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.blue)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(
-                                Capsule()
-                                    .fill(.blue.opacity(0.15))
-                            )
-                        
-                        Text(task.title)
-                            .font(.title3)
-                            .fontWeight(.bold)
-                            .lineLimit(2)
-                    }
-                    
-                    Spacer()
-                    
-                    Button(action: onComplete) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 32))
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [.green, .mint],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    }
-                }
-                
-                if let start = task.scheduledStart, let end = task.scheduledEnd {
-                    HStack(spacing: 16) {
-                        Label(timeRange(start, end), systemImage: "clock.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        
-                        Label("\(task.estimatedMinutes)m", systemImage: "timer")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-            .padding(20)
+            .opacity(task.isCompleted ? 0.6 : 1)
+            .contentShape(Rectangle())
+            .onTapGesture(perform: onOpen)
+            .padding(.bottom, 8)
         }
     }
-    
-    private func timeRange(_ start: Date, _ end: Date) -> String {
-        let dayFormatter = DateFormatter()
-        dayFormatter.dateFormat = "EEE, MMM d"
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))-\(timeFormatter.string(from: end))"
+}
+
+private struct TimelineGapRow: View {
+    let start: Date
+    let minutes: Int
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Color.clear.frame(width: 64, height: 1)
+            Rectangle()
+                .fill(Color(uiColor: .separator))
+                .frame(width: 2, height: 34)
+                .frame(width: 10)
+            Label("Free · \(TodayView.duration(minutes))", systemImage: "cup.and.saucer")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+        .accessibilityLabel("\(TodayView.duration(minutes)) free")
     }
 }
 
-private struct FreeTimeCard: View {
-    let until: Date
-    
+private struct TimelineDividerRow: View {
+    let title: String
+
     var body: some View {
-        ModernCard {
-            HStack(spacing: 16) {
-                ZStack {
-                    Circle()
-                        .fill(
-                            LinearGradient(
-                                colors: [.green.opacity(0.2), .mint.opacity(0.2)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
-                        )
-                        .frame(width: 50, height: 50)
-                    
-                    Image(systemName: "figure.walk")
-                        .font(.title3)
-                        .foregroundStyle(.green)
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Free Time")
-                        .font(.headline)
-                    Text("Until \(until.formatted(date: .omitted, time: .shortened))")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                
+        HStack(spacing: 10) {
+            Text(title.uppercased())
+                .font(.caption2.weight(.bold))
+                .tracking(0.6)
+                .foregroundStyle(.secondary)
+            Rectangle().fill(Color(uiColor: .separator)).frame(height: 1)
+        }
+        .padding(.vertical, 10)
+    }
+}
+
+private struct UnplacedRow: View {
+    let task: TaskItem
+    let onOpen: () -> Void
+
+    var body: some View {
+        Button(action: onOpen) {
+            HStack(spacing: 12) {
+                Circle()
+                    .fill(Color.priority(task.priority))
+                    .frame(width: 8, height: 8)
+                Text(task.title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
                 Spacer()
-            }
-            .padding(20)
-        }
-    }
-}
-
-private struct UpcomingTasksCard: View {
-    let tasks: [TaskItem]
-    
-    var body: some View {
-        ModernCard {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("Coming Up")
-                    .font(.headline)
-                
-                VStack(spacing: 12) {
-                    ForEach(tasks) { task in
-                        HStack(spacing: 12) {
-                            Circle()
-                                .fill(Color.blue.opacity(0.3))
-                                .frame(width: 8, height: 8)
-                            
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(task.title)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .lineLimit(1)
-                                
-                                if let start = task.scheduledStart {
-                                    Text(start.formatted(date: .abbreviated, time: .shortened))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                            
-                            Spacer()
-                        }
-                    }
+                if let due = task.deadline {
+                    Text("Due \(due.formatted(.dateTime.weekday(.abbreviated).hour().minute()))")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
+                Text(TodayView.duration(task.estimatedMinutes))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
             }
-            .padding(20)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
         }
-    }
-}
-
-private struct ModernTaskCard: View {
-    let task: TaskItem
-    let onComplete: () -> Void
-    let onReschedule: () -> Void
-
-    private var isMissed: Bool {
-        task.isMissed()
-    }
-    
-    var body: some View {
-        ModernCard {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 16) {
-                    Button(action: onComplete) {
-                        Image(systemName: task.isCompleted ? "checkmark.circle.fill" : "circle")
-                            .font(.title2)
-                            .foregroundStyle(task.isCompleted ? .green : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            Text(task.title)
-                                .font(.body)
-                                .fontWeight(.semibold)
-                                .strikethrough(task.isCompleted)
-                                .foregroundStyle(task.isCompleted ? .secondary : .primary)
-                                .lineLimit(2)
-
-                            if isMissed {
-                                Text("Missed")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.orange)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
-                                    .background(Capsule().fill(Color.orange.opacity(0.16)))
-                            }
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 6) {
-                            if let start = task.scheduledStart, let end = task.scheduledEnd {
-                                Label(timeRange(start, end), systemImage: "clock")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-
-                            HStack(spacing: 8) {
-                                Label("\(task.estimatedMinutes)m", systemImage: "timer")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-
-                                priorityBadge(task.priority)
-                                PlanStateBadge(state: task.displayPlanState(on: task.scheduledStart ?? Date()))
-                            }
-                        }
-                    }
-                    
-                    Spacer()
-                }
-
-                if isMissed {
-                    Button(action: onReschedule) {
-                        Label("Move Later Today", systemImage: "arrow.clockwise")
-                            .font(.caption.weight(.semibold))
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(ModernSecondaryButtonStyle())
-                }
-            }
-            .padding(16)
-        }
-    }
-    
-    private func timeRange(_ start: Date, _ end: Date) -> String {
-        let dayFormatter = DateFormatter()
-        dayFormatter.dateFormat = "EEE, MMM d"
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))–\(timeFormatter.string(from: end))"
-    }
-    
-    @ViewBuilder
-    private func priorityBadge(_ priority: TaskPriority) -> some View {
-        let config: (String, Color) = {
-            switch priority {
-            case .high: return ("High", .red)
-            case .medium: return ("Med", .orange)
-            case .low: return ("Low", .green)
-            }
-        }()
-        
-        Text(config.0)
-            .font(.caption2)
-            .fontWeight(.bold)
-            .foregroundStyle(config.1)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(
-                Capsule()
-                    .fill(config.1.opacity(0.15))
-            )
+        .buttonStyle(.plain)
     }
 }
 
@@ -1152,66 +800,29 @@ private struct MissedTaskCard: View {
     let onSkip: () -> Void
 
     var body: some View {
-        ModernCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "exclamationmark.circle.fill")
-                        .font(.title3)
-                        .foregroundStyle(.orange)
-                        .padding(.top, 2)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(task.title)
-                            .font(.body)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.primary)
-
-                        if let start = task.scheduledStart, let end = task.scheduledEnd {
-                            Label(timeRange(start, end), systemImage: "clock")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.orange)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(task.title).font(.body.weight(.semibold))
+                    if let start = task.scheduledStart {
+                        Text("Was planned \(start.formatted(.dateTime.weekday(.wide).hour().minute()))")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-
-                    Spacer()
-                }
-
-                HStack(spacing: 10) {
-                    Button("Done", action: onDone)
-                        .buttonStyle(MissedActionButtonStyle(color: .green))
-
-                    Button("Reschedule", action: onReschedule)
-                        .buttonStyle(MissedActionButtonStyle(color: .blue))
-
-                    Button("Skip Today", action: onSkip)
-                        .buttonStyle(MissedActionButtonStyle(color: .secondary))
                 }
             }
-            .padding(16)
+            HStack(spacing: 8) {
+                Button("Done", action: onDone).buttonStyle(.bordered).tint(.green)
+                Button("Do today", action: onReschedule).buttonStyle(.bordered).tint(.accentColor)
+                Button("Skip", action: onSkip).buttonStyle(.bordered).tint(.secondary)
+            }
+            .font(.subheadline.weight(.semibold))
+            .controlSize(.small)
         }
-    }
-
-    private func timeRange(_ start: Date, _ end: Date) -> String {
-        let dayFormatter = DateFormatter()
-        dayFormatter.dateFormat = "EEE, MMM d"
-        let timeFormatter = DateFormatter()
-        timeFormatter.timeStyle = .short
-        return "\(dayFormatter.string(from: start)) • \(timeFormatter.string(from: start))–\(timeFormatter.string(from: end))"
-    }
-}
-
-private struct MissedActionButtonStyle: ButtonStyle {
-    let color: Color
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(color)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(color.opacity(configuration.isPressed ? 0.2 : 0.12))
-            )
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color(uiColor: .secondarySystemGroupedBackground)))
     }
 }
