@@ -1,0 +1,5 @@
+# date kind
+2026-11-25 assignment
+2026-11-27 quiz
+2026-12-04 exam
+2026-12-15 final

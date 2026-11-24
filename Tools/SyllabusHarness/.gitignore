@@ -1,0 +1,3 @@
+syllabi/*
+!syllabi/example-chem101.*
+.build/
