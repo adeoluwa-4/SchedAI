@@ -64,6 +64,16 @@ final class AppState: ObservableObject {
     }
 
     private var pendingPersist: Task<Void, Never>?
+
+    /// Extra busy time the scheduler must plan around (class meetings from the
+    /// semester). Set once at launch; kept as a closure so AppState doesn't
+    /// need to know about the semester model.
+    var additionalBusyIntervals: ((Date) -> [DateInterval])?
+
+    /// Calendar events plus classes for a day: everything tasks must avoid.
+    func externalBusy(on day: Date) -> [DateInterval] {
+        (CalendarManager.shared.busyIntervals(on: day) ?? []) + (additionalBusyIntervals?(day) ?? [])
+    }
     private let persistDebounce: Duration = .milliseconds(300)
 
     @Published var lastPlanOverflow: Int = 0
@@ -221,11 +231,6 @@ final class AppState: ObservableObject {
         validateWorkWindow()
 
         _ = restore()
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-SchedAIDemoData") {
-            tasks = Self.demoTasks(now: Date())
-        }
-        #endif
         pruneExpiredCompletedTasks(now: Date())
         scheduleCompletedTaskCleanup()
         persistWidgetData()
@@ -646,7 +651,7 @@ final class AppState: ObservableObject {
     /// Existing scheduled tasks are treated as fixed anchors for this planning pass.
     func planUnscheduledOnly(for day: Date = Date()) {
         planningDate = Calendar.current.startOfDay(for: day)
-        let externalBusy = CalendarManager.shared.busyIntervals(on: planningDate) ?? []
+        let externalBusy = self.externalBusy(on: planningDate)
         let window = schedulingWindow(for: planningDate)
 
         var updated = tasks
@@ -684,7 +689,7 @@ final class AppState: ObservableObject {
         let savedBusy = Scheduler.occupiedIntervals(tasks, excluding: Set(drafts.map(\.id)))
         for day in Set(result.filter { !$0.isInbox }.compactMap(\.targetDay)).sorted() {
             let window = schedulingWindow(for: day)
-            let external = CalendarManager.shared.busyIntervals(on: day) ?? []
+            let external = externalBusy(on: day)
             _ = Scheduler.planToday(tasks: &result, workStart: window.start, workEnd: window.end,
                                     day: day, now: now, externalBusyIntervals: savedBusy + external)
         }
@@ -726,7 +731,7 @@ final class AppState: ObservableObject {
         var result = [flexible]
         let window = schedulingWindow(for: day)
         _ = Scheduler.planToday(tasks: &result, workStart: window.start, workEnd: window.end, day: day,
-                                externalBusyIntervals: Scheduler.occupiedIntervals(others) + (CalendarManager.shared.busyIntervals(on: day) ?? []))
+                                externalBusyIntervals: Scheduler.occupiedIntervals(others) + externalBusy(on: day))
         guard result[0].scheduledStart != nil else { return nil }
         result[0].isPinned = true // The user explicitly chose this suggested time.
         return result[0]
@@ -808,7 +813,7 @@ final class AppState: ObservableObject {
 
     private func planSchedule(for day: Date) -> Int {
         let targetDay = Calendar.current.startOfDay(for: day)
-        let externalBusy = CalendarManager.shared.busyIntervals(on: targetDay) ?? []
+        let externalBusy = self.externalBusy(on: targetDay)
         let window = schedulingWindow(for: targetDay)
         return Scheduler.planToday(
             tasks: &tasks,
@@ -1252,38 +1257,4 @@ final class AppState: ObservableObject {
         }
     }
 
-    #if DEBUG
-    /// Realistic sample day for screenshots and manual testing.
-    /// Launch with `-SchedAIDemoData` (Debug builds only).
-    static func demoTasks(now: Date) -> [TaskItem] {
-        let cal = Calendar.current
-        let day = cal.startOfDay(for: now)
-        func at(_ minutesFromNow: Int) -> Date {
-            let rounded = cal.date(bySetting: .second, value: 0, of: now) ?? now
-            let base = cal.date(byAdding: .minute, value: -(cal.component(.minute, from: rounded) % 15), to: rounded) ?? rounded
-            return cal.date(byAdding: .minute, value: minutesFromNow, to: base) ?? base
-        }
-        func timed(_ title: String, _ offset: Int, _ minutes: Int, _ priority: TaskPriority = .medium,
-                   done: Bool = false, pinned: Bool = false, deadline: Date? = nil) -> TaskItem {
-            let start = at(offset)
-            return TaskItem(title: title, estimatedMinutes: minutes, priority: priority,
-                            isCompleted: done, completedAt: done ? now : nil, isPinned: pinned,
-                            targetDay: day, scheduledStart: start,
-                            scheduledEnd: cal.date(byAdding: .minute, value: minutes, to: start),
-                            deadline: deadline)
-        }
-        return [
-            timed("Morning run", -150, 30, .low, done: true),
-            timed("Reply to recruiter emails", -105, 30, done: true),
-            timed("Finish stats homework", -30, 60, .high, deadline: at(120)),
-            timed("Team standup", 45, 15, pinned: true),
-            timed("Prep pitch deck notes", 120, 45, .high),
-            timed("Gym", 300, 60, .low, pinned: true),
-            TaskItem(title: "Call Dad", estimatedMinutes: 20, priority: .medium, targetDay: day),
-            TaskItem(title: "Grocery run", estimatedMinutes: 40, priority: .low, targetDay: day),
-            TaskItem(title: "Scholarship form", estimatedMinutes: 30, priority: .medium, targetDay: day,
-                     deadline: cal.date(byAdding: .day, value: 1, to: day.addingTimeInterval(17 * 3600)))
-        ]
-    }
-    #endif
 }

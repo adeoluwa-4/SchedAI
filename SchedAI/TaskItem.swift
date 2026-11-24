@@ -165,6 +165,14 @@ struct TaskItem: Identifiable, Codable, Hashable {
     /// deadline first and tries to finish them before it.
     var deadline: Date? = nil
 
+    /// Course this task belongs to, e.g. "CHEM 101". Set for study sessions.
+    var course: String? = nil
+
+    /// When set, this task is a study session generated for that course deadline.
+    var studyForDeadlineID: UUID? = nil
+
+    var isStudySession: Bool { studyForDeadlineID != nil }
+
     func isMissed(now: Date = Date()) -> Bool {
         guard !isCompleted, let end = scheduledEnd else { return false }
         return end < now
@@ -258,7 +266,9 @@ struct TaskItem: Identifiable, Codable, Hashable {
         scheduledEnd: Date? = nil,
         preferredStart: Date? = nil,
         preferredEnd: Date? = nil,
-        deadline: Date? = nil
+        deadline: Date? = nil,
+        course: String? = nil,
+        studyForDeadlineID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -277,6 +287,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.preferredStart = preferredStart
         self.preferredEnd = preferredEnd
         self.deadline = deadline
+        self.course = course
+        self.studyForDeadlineID = studyForDeadlineID
     }
 
     // MARK: - Codable
@@ -299,6 +311,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         case preferredStart
         case preferredEnd
         case deadline
+        case course
+        case studyForDeadlineID
     }
 
     init(from decoder: Decoder) throws {
@@ -320,6 +334,8 @@ struct TaskItem: Identifiable, Codable, Hashable {
         self.preferredStart = try container.decodeIfPresent(Date.self, forKey: .preferredStart)
         self.preferredEnd = try container.decodeIfPresent(Date.self, forKey: .preferredEnd)
         self.deadline = try container.decodeIfPresent(Date.self, forKey: .deadline)
+        self.course = try container.decodeIfPresent(String.self, forKey: .course)
+        self.studyForDeadlineID = try container.decodeIfPresent(UUID.self, forKey: .studyForDeadlineID)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -341,5 +357,7 @@ struct TaskItem: Identifiable, Codable, Hashable {
         try container.encodeIfPresent(preferredStart, forKey: .preferredStart)
         try container.encodeIfPresent(preferredEnd, forKey: .preferredEnd)
         try container.encodeIfPresent(deadline, forKey: .deadline)
+        try container.encodeIfPresent(course, forKey: .course)
+        try container.encodeIfPresent(studyForDeadlineID, forKey: .studyForDeadlineID)
     }
 }
