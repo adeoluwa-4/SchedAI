@@ -14,6 +14,7 @@ struct ContentView: View {
 
     private enum Tab: Hashable {
         case today
+        case semester
         case tasks
         case settings
     }
@@ -24,6 +25,10 @@ struct ContentView: View {
                 TodayView()
                     .tag(Tab.today)
                     .tabItem { Label("Today", systemImage: "calendar.badge.clock") }
+
+                SemesterView()
+                    .tag(Tab.semester)
+                    .tabItem { Label("Semester", systemImage: "graduationcap") }
 
                 TasksView()
                     .tag(Tab.tasks)
@@ -47,6 +52,9 @@ struct ContentView: View {
         }
         .onAppear {
             consumeWidgetVoiceRequestIfNeeded()
+            #if DEBUG
+            if DebugFixtures.value(after: "-SchedAITab") == "semester" { selectedTab = .semester }
+            #endif
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in

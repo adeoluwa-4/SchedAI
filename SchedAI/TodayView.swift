@@ -12,6 +12,7 @@ import UIKit
 /// 4. Tasks that are not placed yet, with one button to fit them in.
 struct TodayView: View {
     @EnvironmentObject private var app: AppState
+    @EnvironmentObject private var semester: SemesterStore
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var showAI = false
@@ -60,6 +61,11 @@ struct TodayView: View {
     }
 
     private var openTimeline: [TaskItem] { timeline.filter { !$0.isCompleted } }
+
+    /// Class meetings on the planning day, shown in the timeline as fixed blocks.
+    private var classesToday: [(meeting: ClassMeeting, interval: DateInterval)] {
+        semester.classes(on: planningDay)
+    }
 
     private var unplacedTasks: [TaskItem] {
         activeTasks
@@ -117,8 +123,9 @@ struct TodayView: View {
                 if timeline.isEmpty && unplacedTasks.isEmpty {
                     emptyState
                 } else {
+                    StudyCoachCard(onResult: showToast)
                     focusCard
-                    if !timeline.isEmpty { timelineSection }
+                    if !timeline.isEmpty || !classesToday.isEmpty { timelineSection }
                     if !unplacedTasks.isEmpty { unplacedSection }
                 }
 
@@ -328,12 +335,30 @@ struct TodayView: View {
 
     private enum TimelineEntry: Identifiable {
         case task(TaskItem)
+        case classMeeting(ClassMeeting, DateInterval)
         case gap(start: Date, minutes: Int)
         case afterHours
+
+        var start: Date? {
+            switch self {
+            case .task(let t): return t.scheduledStart
+            case .classMeeting(_, let i): return i.start
+            default: return nil
+            }
+        }
+
+        var end: Date? {
+            switch self {
+            case .task(let t): return t.scheduledEnd
+            case .classMeeting(_, let i): return i.end
+            default: return nil
+            }
+        }
 
         var id: String {
             switch self {
             case .task(let t): return t.id.uuidString
+            case .classMeeting(let m, let i): return "class-\(m.id)-\(i.start.timeIntervalSince1970)"
             case .gap(let start, _): return "gap-\(start.timeIntervalSince1970)"
             case .afterHours: return "after-hours"
             }
@@ -343,20 +368,26 @@ struct TodayView: View {
     /// Tasks in order, with free gaps of 30+ minutes and an "after work hours"
     /// marker inserted between them.
     private var timelineEntries: [TimelineEntry] {
+        let items: [TimelineEntry] = (timeline.map { .task($0) } + classesToday.map { .classMeeting($0.meeting, $0.interval) })
+            .sorted { ($0.start ?? .distantPast) < ($1.start ?? .distantPast) }
+
         var entries: [TimelineEntry] = []
         var previousEnd: Date?
         var insertedAfterHours = false
-        for task in timeline {
-            guard let start = task.scheduledStart else { continue }
+        for item in items {
+            guard let start = item.start else { continue }
+            let isDone: Bool = { if case .task(let t) = item { return t.isCompleted }; return false }()
             if let end = workWindowEnd, !insertedAfterHours, start >= end, !entries.isEmpty {
                 entries.append(.afterHours)
                 insertedAfterHours = true
-            } else if let previousEnd, !task.isCompleted {
-                let gap = Int(start.timeIntervalSince(previousEnd) / 60)
-                if gap >= 30 { entries.append(.gap(start: previousEnd, minutes: gap)) }
+            } else if let previousEnd, !isDone {
+                // Only show free time that is still ahead; a gap that ended an hour ago is noise.
+                let gapStart = isPlanningToday ? max(previousEnd, Date()) : previousEnd
+                let gap = Int(start.timeIntervalSince(gapStart) / 60)
+                if gap >= 30 { entries.append(.gap(start: gapStart, minutes: gap)) }
             }
-            entries.append(.task(task))
-            if let end = task.scheduledEnd { previousEnd = max(previousEnd ?? end, end) }
+            entries.append(item)
+            if let end = item.end { previousEnd = max(previousEnd ?? end, end) }
         }
         return entries
     }
@@ -375,6 +406,8 @@ struct TodayView: View {
                             onOpen: { editingTask = task }
                         )
                         .contextMenu { rowMenu(for: task) }
+                    case .classMeeting(let meeting, let interval):
+                        TimelineClassRow(meeting: meeting, interval: interval)
                     case .gap(let start, let minutes):
                         TimelineGapRow(start: start, minutes: minutes)
                     case .afterHours:
@@ -689,13 +722,18 @@ private struct TimelineTaskRow: View {
                         .foregroundStyle(task.isCompleted ? .secondary : .primary)
                         .lineLimit(2)
                     HStack(spacing: 8) {
+                        if let course = task.course {
+                            Text(course)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(CourseColor.color(for: course))
+                        }
                         Text(TodayView.duration(minutes))
                         if task.priority == .high && !task.isCompleted {
                             Image(systemName: "flag.fill")
                                 .foregroundStyle(.red)
                                 .accessibilityLabel("Important")
                         }
-                        if let due = task.deadline, !task.isCompleted {
+                        if let due = task.deadline, !task.isCompleted, !task.isStudySession {
                             Label("Due \(due.formatted(date: .omitted, time: .shortened))", systemImage: "hourglass")
                                 .foregroundStyle(.orange)
                         }
@@ -824,5 +862,49 @@ private struct MissedTaskCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color(uiColor: .secondarySystemGroupedBackground)))
+    }
+}
+
+/// A class meeting in the timeline: fixed, not checkable, course-colored.
+private struct TimelineClassRow: View {
+    let meeting: ClassMeeting
+    let interval: DateInterval
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(interval.start.formatted(date: .omitted, time: .shortened))
+                .font(.footnote.weight(.semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(width: 64, alignment: .trailing)
+                .padding(.top, 14)
+
+            VStack(spacing: 0) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(CourseColor.color(for: meeting.course))
+                    .frame(width: 10, height: 10)
+                    .padding(.top, 18)
+                Rectangle().fill(Color(uiColor: .separator)).frame(width: 2)
+            }
+            .frame(width: 10)
+
+            HStack(spacing: 12) {
+                Image(systemName: "building.columns.fill")
+                    .foregroundStyle(CourseColor.color(for: meeting.course))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(meeting.course).font(.body.weight(.semibold))
+                    Text("Class · until \(interval.end.formatted(date: .omitted, time: .shortened))")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(CourseColor.color(for: meeting.course).opacity(0.10))
+            )
+            .padding(.bottom, 8)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
